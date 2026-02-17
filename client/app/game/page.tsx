@@ -292,6 +292,9 @@ const INVESTMENT_OPPORTUNITIES: Investment[] = [
     icon: "🏠",
     riskLevel: "medium",
     volatility: 0.12, // 12% variation - rental can fluctuate
+    liquidity: "low",
+    exitCostPercent: 0.08, // 8% transaction costs
+    exitTimeMonths: 3, // Takes 2-4 months to sell
   },
   {
     id: 8,
