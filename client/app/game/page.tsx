@@ -595,7 +595,7 @@ function GamePageContent() {
       issueMonth: gameState.currentMonth,
       paymentDueMonth: gameState.currentMonth + paymentDueMonths,
       isDiscounted: false,
-      status: "pending",
+      status: "pending" as const,
     };
 
     setGameState((prev) => ({
@@ -622,7 +622,7 @@ function GamePageContent() {
                 isDiscounted: true,
                 discountedAmount,
                 discountRate,
-                status: "discounted",
+                status: "discounted" as const,
               }
             : inv
         ),
@@ -1274,7 +1274,7 @@ function GamePageContent() {
       const newTotalDebt = updatedLoans.reduce((sum, loan) => sum + loan.remainingBalance, 0);
 
       // Process invoices
-      const updatedInvoices = prev.invoices.map((invoice) => {
+      const updatedInvoices: Invoice[] = prev.invoices.map((invoice): Invoice => {
         if (invoice.status === "paid" || invoice.status === "discounted") {
           return invoice;
         }
@@ -1285,10 +1285,10 @@ function GamePageContent() {
             newMoney += invoice.amount;
             totalCashflowThisMonth += invoice.amount;
             totalIncomeThisMonth += invoice.amount;
-            return { ...invoice, status: "paid" };
+            return { ...invoice, status: "paid" as const };
           }
         } else if (newMonth > invoice.paymentDueMonth + 1) {
-          return { ...invoice, status: "overdue" };
+          return { ...invoice, status: "overdue" as const };
         }
 
         return invoice;
