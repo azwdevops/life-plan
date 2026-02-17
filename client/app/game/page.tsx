@@ -1038,7 +1038,10 @@ function GamePageContent() {
             }
           }
           return event;
-        }).filter((event) => !event.resolved || monthsSinceEvent < 3); // Keep resolved events for 3 months for history
+        }).filter((event) => {
+          const monthsSinceEvent = newMonth - event.month;
+          return !event.resolved || monthsSinceEvent < 3; // Keep resolved events for 3 months for history
+        });
 
         // Use old values if extension happened in the month we're advancing to (new values apply from next month)
         // If extension happened in previous month (newMonth - 1), use new values
