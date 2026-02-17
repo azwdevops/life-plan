@@ -40,10 +40,8 @@ export function Dialog({
   }, [isOpen, onClose]);
 
   // Handle click outside
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
+  const handleOverlayClick = () => {
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -51,30 +49,36 @@ export function Dialog({
   const sizeClasses = {
     sm: "max-w-md",
     md: "max-w-lg",
-    lg: "max-w-2xl",
-    xl: "max-w-5xl",
+    lg: "max-w-3xl",
+    xl: "max-w-6xl",
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "dialog-title" : undefined}
     >
+      {/* Overlay */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto"
+        onClick={handleOverlayClick}
+      />
+      
       {/* Dialog Content */}
       <div
         ref={dialogRef}
-        className={`relative z-10 w-full ${sizeClasses[size]} rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 pointer-events-auto`}
+        className={`relative z-10 w-full ${sizeClasses[size]} rounded-xl border-4 border-blue-500 bg-white dark:border-blue-400 dark:bg-zinc-900 pointer-events-auto`}
         onClick={(e) => e.stopPropagation()}
         style={{ 
           overflow: "visible",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.1)"
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(59, 130, 246, 0.3)"
         }}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+          <div className="flex items-center justify-between border-b-2 border-blue-500 bg-blue-50 px-6 py-4 dark:border-blue-400 dark:bg-blue-900/20">
             <h2
               id="dialog-title"
               className="text-xl font-semibold text-zinc-900 dark:text-zinc-100"
