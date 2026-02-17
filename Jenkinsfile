@@ -21,6 +21,10 @@ pipeline {
                         echo "📁 Moving to project directory"
                         cd ${repoPath}
 
+                        echo "🔄 Resetting local changes (package files are auto-generated)"
+                        git reset --hard HEAD
+                        git clean -fd
+
                         echo "⬇️ Pulling latest changes"
                         GIT_SSH_COMMAND="ssh -i ~/.ssh/truehost_to_github_connect -o IdentitiesOnly=yes" \
                           git pull github master
