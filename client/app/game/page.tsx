@@ -745,9 +745,16 @@ function GamePageContent() {
 
   const handleAddExpense = (expense: Omit<Expense, "id">) => {
     setGameState((prev) => {
+      // Ensure unique ID by checking existing IDs and incrementing if needed
+      let newId = Date.now();
+      const existingIds = new Set(prev.expenses.map((e) => e.id));
+      while (existingIds.has(newId)) {
+        newId += 1;
+      }
+      
       const newExpense: Expense = {
         ...expense,
-        id: Date.now(),
+        id: newId,
       };
       const totalExpenses = [...prev.expenses, newExpense]
         .filter((e) => e.isActive)
@@ -1570,6 +1577,20 @@ function GamePageContent() {
                 className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
               >
                 Reset Game
+              </button>
+              <button
+                onClick={() => {
+                  const savedGame = loadGame();
+                  if (savedGame) {
+                    setGameState(savedGame);
+                    alert("Game data refreshed from browser storage.", "Refresh Successful");
+                  } else {
+                    alert("No saved game data found in browser storage.", "No Data");
+                  }
+                }}
+                className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+              >
+                🔄 Refresh from Storage
               </button>
             </div>
           </div>

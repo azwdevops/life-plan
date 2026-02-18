@@ -120,10 +120,10 @@ export function ExpensesManager({
   const handleEditExpense = async (expense: Expense) => {
     const amountStr = await prompt(
       `Enter new monthly amount (current: KSh ${expense.amount.toLocaleString()}):`,
-      "Edit Expense",
-      expense.amount.toString()
+      expense.amount.toString(),
+      "Edit Expense"
     );
-    if (!amountStr) return;
+    if (!amountStr || amountStr.trim() === "") return;
 
     const amount = parseInt(amountStr.replace(/,/g, ""), 10);
     if (isNaN(amount) || amount <= 0) {
@@ -138,13 +138,12 @@ export function ExpensesManager({
     const expense = expenses.find((e) => e.id === id);
     if (!expense) return;
 
-    const confirmed = await prompt(
+    const confirmed = await confirm(
       `Are you sure you want to delete "${expense.name}"?`,
-      "Delete Expense",
-      "yes"
+      "Delete Expense"
     );
 
-    if (confirmed?.toLowerCase() === "yes" || confirmed?.toLowerCase() === "y") {
+    if (confirmed) {
       onDeleteExpense(id);
     }
   };
@@ -192,6 +191,7 @@ export function ExpensesManager({
     }
 
     // Add all generated expenses
+    // Note: handleAddExpense ensures unique IDs even if generated in same millisecond
     generatedExpenses.forEach((expense) => {
       onAddExpense(expense);
     });
