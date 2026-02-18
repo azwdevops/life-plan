@@ -21,7 +21,7 @@ export interface UnexpectedEvent {
 export interface Investment {
   id: number;
   name: string;
-  type: "land" | "flat" | "mmf" | "matatu" | "shop" | "sacco" | "consulting" | "invoice" | "fixed_deposit";
+  type: "land" | "flat" | "mmf" | "matatu" | "shop" | "sacco" | "consulting" | "invoice" | "fixed_deposit" | "stocks";
   description: string;
   initialCost: number;
   monthlyMaintenance: number;

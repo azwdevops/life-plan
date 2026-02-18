@@ -34,6 +34,34 @@ function formatMonthYear(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+// Utility function to calculate time elapsed from start date
+function calculateTimeElapsed(startDate: Date, currentMonth: number): string {
+  const currentDate = getDateFromMonth(startDate, currentMonth);
+  const diffTime = currentDate.getTime() - startDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const diffMonths = currentMonth;
+  const diffYears = Math.floor(diffMonths / 12);
+  const remainingMonths = diffMonths % 12;
+  const diffWeeks = Math.floor(diffDays / 7);
+  const remainingDays = diffDays % 7;
+
+  if (diffYears > 0) {
+    if (remainingMonths > 0) {
+      return `${diffYears} year${diffYears > 1 ? "s" : ""}, ${remainingMonths} month${remainingMonths > 1 ? "s" : ""}`;
+    }
+    return `${diffYears} year${diffYears > 1 ? "s" : ""}`;
+  } else if (diffMonths > 0) {
+    return `${diffMonths} month${diffMonths > 1 ? "s" : ""}`;
+  } else if (diffWeeks > 0) {
+    if (remainingDays > 0) {
+      return `${diffWeeks} week${diffWeeks > 1 ? "s" : ""}, ${remainingDays} day${remainingDays > 1 ? "s" : ""}`;
+    }
+    return `${diffWeeks} week${diffWeeks > 1 ? "s" : ""}`;
+  } else {
+    return `${diffDays} day${diffDays > 1 ? "s" : ""}`;
+  }
+}
+
 // Calculate diversification score (0-1) based on correlation groups
 function calculateDiversificationScore(portfolio: OwnedInvestment[]): number {
   if (portfolio.length === 0) return 0;
@@ -334,6 +362,82 @@ const INVESTMENT_OPPORTUNITIES: Investment[] = [
     exitCostPercent: 0.0,
     exitTimeMonths: 0,
     lockInMonths: 0,
+  },
+  {
+    id: 10,
+    name: "Stock Shares",
+    type: "stocks",
+    description: "Equity shares in listed companies - high volatility, potential for growth",
+    initialCost: 10000, // Minimum investment KSh 10,000 (can buy flexible amounts)
+    monthlyMaintenance: 0,
+    monthlyIncome: 0, // Dividends paid quarterly, so 0 monthly base
+    monthlyCashflow: 0, // Dividends paid quarterly
+    incomeDelayMonths: 0,
+    cashflowDelayMonths: 0,
+    icon: "📊",
+    riskLevel: "high",
+    volatility: 0.35, // 35% variation - stocks are highly volatile
+    liquidity: "high", // Stocks are highly liquid
+    exitCostPercent: 0.01, // 1% brokerage fees
+    exitTimeMonths: 0, // Can sell immediately
+    lockInMonths: 0, // No lock-in period
+    marketSensitivity: 0.9, // Stocks are highly sensitive to market conditions
+    incomeTaxRate: 0.15, // 15% tax on dividends
+    capitalGainsTaxRate: 0.05, // 5% capital gains tax on stock sales
+    correlationGroup: "equities", // Stock investments are correlated
+    isFlexibleAmount: true, // Can buy any amount of shares
+    minimumInvestment: 10000, // Minimum KSh 10,000
+  },
+  {
+    id: 11,
+    name: "Dividend Stock",
+    type: "stocks",
+    description: "Blue-chip stock with regular dividend payments",
+    initialCost: 50000, // Minimum investment KSh 50,000
+    monthlyMaintenance: 0,
+    monthlyIncome: 500, // ~1% monthly dividend yield (12% annually)
+    monthlyCashflow: 500, // Dividends paid monthly
+    incomeDelayMonths: 0,
+    cashflowDelayMonths: 0,
+    icon: "💹",
+    riskLevel: "medium",
+    volatility: 0.25, // 25% variation - dividend stocks are less volatile
+    liquidity: "high",
+    exitCostPercent: 0.01, // 1% brokerage fees
+    exitTimeMonths: 0,
+    lockInMonths: 0,
+    marketSensitivity: 0.8, // Still sensitive but less than growth stocks
+    incomeTaxRate: 0.15, // 15% tax on dividends
+    capitalGainsTaxRate: 0.05, // 5% capital gains tax
+    correlationGroup: "equities",
+    isFlexibleAmount: true,
+    minimumInvestment: 50000, // Minimum KSh 50,000
+  },
+  {
+    id: 12,
+    name: "Growth Stock",
+    type: "stocks",
+    description: "High-growth potential stock - no dividends, capital appreciation focus",
+    initialCost: 20000, // Minimum investment KSh 20,000
+    monthlyMaintenance: 0,
+    monthlyIncome: 0, // No dividends, growth only
+    monthlyCashflow: 0,
+    incomeDelayMonths: 0,
+    cashflowDelayMonths: 0,
+    icon: "🚀",
+    riskLevel: "high",
+    volatility: 0.45, // 45% variation - very high volatility
+    liquidity: "high",
+    exitCostPercent: 0.01,
+    exitTimeMonths: 0,
+    lockInMonths: 0,
+    isAppreciationOnly: true, // Appreciation only, no income
+    marketSensitivity: 0.95, // Extremely sensitive to market
+    incomeTaxRate: 0.0, // No income (no dividends)
+    capitalGainsTaxRate: 0.05, // 5% capital gains tax
+    correlationGroup: "equities",
+    isFlexibleAmount: true,
+    minimumInvestment: 20000, // Minimum KSh 20,000
   },
 ];
 
@@ -1217,18 +1321,108 @@ function GamePageContent() {
           cashOutBreakdown.push({ source: `${investment.name} (Maintenance)`, amount: maintenanceToApply });
         }
 
-        // Calculate current value with appreciation/depreciation
+        // Calculate current value with probability-based appreciation/depreciation
         let currentValue = owned.currentValue || owned.purchaseCost;
         if (monthsSincePurchase > 0) {
-          if (investment.appreciationRate && investment.appreciationRate > 0) {
-            // Appreciation compounds monthly
-            const monthlyAppreciation = investment.appreciationRate / 12;
-            currentValue = Math.round(owned.purchaseCost * Math.pow(1 + monthlyAppreciation, monthsSincePurchase));
+          // Asset category-based appreciation/depreciation rules
+          const assetCategory: string = investment.type;
+          
+          // MMF and Fixed Deposit: No change in value
+          if (assetCategory === "mmf" || assetCategory === "fixed_deposit") {
+            currentValue = owned.purchaseCost; // Principal remains the same
+          }
+          // SACCO: Slight chance of appreciation (50% chance, 2-4% annual)
+          else if (assetCategory === "sacco") {
+            if (Math.random() < 0.5) {
+              // 50% chance of appreciation
+              const annualAppreciation = 0.02 + Math.random() * 0.02; // 2-4% annual
+              const monthlyAppreciation = annualAppreciation / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 + monthlyAppreciation, monthsSincePurchase));
+            } else {
+              currentValue = owned.purchaseCost; // No change
+            }
+          }
+          // Land: High probability of appreciation (70% chance, 8-15% annual)
+          else if (assetCategory === "land") {
+            if (Math.random() < 0.7) {
+              // 70% chance of appreciation
+              const annualAppreciation = 0.08 + Math.random() * 0.07; // 8-15% annual
+              const monthlyAppreciation = annualAppreciation / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 + monthlyAppreciation, monthsSincePurchase));
+            } else {
+              // 30% chance of no change or slight depreciation
+              currentValue = Math.round(owned.purchaseCost * (0.95 + Math.random() * 0.05)); // 95-100% of original
+            }
+          }
+          // Flats/Shops: Moderate probability of appreciation (60% chance, 5-10% annual)
+          else if (assetCategory === "flat" || assetCategory === "shop") {
+            if (Math.random() < 0.6) {
+              // 60% chance of appreciation
+              const annualAppreciation = 0.05 + Math.random() * 0.05; // 5-10% annual
+              const monthlyAppreciation = annualAppreciation / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 + monthlyAppreciation, monthsSincePurchase));
+            } else if (Math.random() < 0.3) {
+              // 30% chance of no change
+              currentValue = owned.purchaseCost;
+            } else {
+              // 10% chance of slight depreciation
+              const annualDepreciation = 0.02 + Math.random() * 0.03; // 2-5% annual
+              const monthlyDepreciation = annualDepreciation / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 - monthlyDepreciation, monthsSincePurchase));
+              currentValue = Math.max(owned.purchaseCost * 0.8, currentValue); // Can't drop below 80% of purchase
+            }
+          }
+          // Matatu (vehicles): High probability of depreciation (80% chance, 15-25% annual)
+          else if (assetCategory === "matatu") {
+            if (Math.random() < 0.8) {
+              // 80% chance of depreciation
+              const annualDepreciation = 0.15 + Math.random() * 0.10; // 15-25% annual
+              const monthlyDepreciation = annualDepreciation / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 - monthlyDepreciation, monthsSincePurchase));
+              currentValue = Math.max(owned.purchaseCost * 0.3, currentValue); // Can't drop below 30% of purchase (scrap value)
+            } else {
+              // 20% chance of no change (well-maintained)
+              currentValue = Math.round(owned.purchaseCost * (0.95 + Math.random() * 0.05)); // 95-100% of original
+            }
+          }
+          // Stocks: High volatility - can appreciate or depreciate significantly
+          else if (assetCategory === "stocks") {
+            // Stocks can go up or down significantly each month
+            // 50% chance of appreciation, 40% chance of depreciation, 10% chance of no change
+            const stockChange = Math.random();
+            if (stockChange < 0.5) {
+              // 50% chance of appreciation (can be significant)
+              const monthlyAppreciation = -0.10 + Math.random() * 0.15; // -10% to +5% monthly (can compound to large gains)
+              currentValue = Math.round((owned.currentValue || owned.purchaseCost) * (1 + monthlyAppreciation));
+              currentValue = Math.max(owned.purchaseCost * 0.1, currentValue); // Can't drop below 10% of purchase (worst case)
+            } else if (stockChange < 0.9) {
+              // 40% chance of depreciation (can be significant)
+              const monthlyDepreciation = 0.05 + Math.random() * 0.15; // 5-20% monthly depreciation
+              currentValue = Math.round((owned.currentValue || owned.purchaseCost) * (1 - monthlyDepreciation));
+              currentValue = Math.max(owned.purchaseCost * 0.1, currentValue); // Can't drop below 10% of purchase
+            } else {
+              // 10% chance of no change
+              currentValue = owned.currentValue || owned.purchaseCost;
+            }
+          }
+          // Fallback: Use investment's defined rates if available (for backward compatibility)
+          else if (investment.appreciationRate && investment.appreciationRate > 0) {
+            // Apply with 60% probability
+            if (Math.random() < 0.6) {
+              const monthlyAppreciation = investment.appreciationRate / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 + monthlyAppreciation, monthsSincePurchase));
+            } else {
+              currentValue = owned.purchaseCost;
+            }
           } else if (investment.depreciationRate && investment.depreciationRate > 0) {
-            // Depreciation compounds monthly
-            const monthlyDepreciation = investment.depreciationRate / 12;
-            currentValue = Math.round(owned.purchaseCost * Math.pow(1 - monthlyDepreciation, monthsSincePurchase));
-            currentValue = Math.max(0, currentValue); // Can't go below 0
+            // Apply with 80% probability
+            if (Math.random() < 0.8) {
+              const monthlyDepreciation = investment.depreciationRate / 12;
+              currentValue = Math.round(owned.purchaseCost * Math.pow(1 - monthlyDepreciation, monthsSincePurchase));
+              currentValue = Math.max(0, currentValue);
+            } else {
+              currentValue = owned.purchaseCost;
+            }
           }
         }
 
@@ -1551,8 +1745,8 @@ function GamePageContent() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto w-full max-w-[98%] px-2 py-3 md:px-3 md:py-4 lg:px-4 lg:py-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
                 Investment Game
@@ -1566,14 +1760,19 @@ function GamePageContent() {
                 <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 sm:mr-2">
                   Start Date:
                 </label>
-                <DatePicker
-                  selected={gameState.startDate}
-                  onChange={handleStartDateChange}
-                  dateFormat="MMMM yyyy"
-                  showMonthYearPicker
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 sm:w-48"
-                  popperPlacement="bottom-start"
-                />
+                <div className="flex items-center gap-2">
+                  <DatePicker
+                    selected={gameState.startDate}
+                    onChange={handleStartDateChange}
+                    dateFormat="MMMM yyyy"
+                    showMonthYearPicker
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 sm:w-48"
+                    popperPlacement="bottom-start"
+                  />
+                  <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                    ({calculateTimeElapsed(gameState.startDate, gameState.currentMonth)} elapsed)
+                  </span>
+                </div>
               </div>
               <button
                 onClick={handleReset}
@@ -1599,7 +1798,7 @@ function GamePageContent() {
           </div>
 
           {/* Current Date Display */}
-          <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-zinc-600 dark:text-zinc-400">Current Date</div>
@@ -1610,6 +1809,14 @@ function GamePageContent() {
                   Month {gameState.currentMonth} from start
                 </div>
               </div>
+              {!gameState.gameOver && (
+                <button
+                  onClick={handleAdvanceMonth}
+                  className="rounded-lg bg-green-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+                >
+                  Advance to {formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1))}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1623,7 +1830,7 @@ function GamePageContent() {
 
           {/* Expenses, Borrowing, and Investment Generator in flex layout */}
           {!gameState.gameOver && (
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row">
               <div className="flex-1">
                 <ExpensesManager
                   expenses={gameState.expenses}
@@ -1651,29 +1858,60 @@ function GamePageContent() {
             </div>
           )}
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Left Column - Investment Opportunities */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            {/* Left Column - Portfolio and Investment Opportunities */}
             <div className="lg:col-span-2">
+              {/* Portfolio Display - Moved before Investment Opportunities */}
+              <PortfolioDisplay
+                portfolio={gameState.portfolio}
+                currentMonth={gameState.currentMonth}
+                startDate={gameState.startDate}
+                onEarlyCashflow={handleEarlyCashflow}
+                onSellInvestment={handleSellInvestment}
+                onExtendInvestment={handleExtendInvestment}
+              />
 
-              <div className="mb-6">
-                <div className="mb-4 flex items-center justify-between">
+              {/* Consulting Services Section */}
+              <div className="mb-4 rounded-xl border-2 border-purple-300 bg-purple-50 p-4 shadow-sm dark:border-purple-700 dark:bg-purple-900/20">
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="text-3xl">💼</span>
+                  <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+                    Consulting Services
+                  </h2>
+                </div>
+                <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+                  Provide consulting services and manage invoices
+                </p>
+                <InvoiceManager
+                  invoices={gameState.invoices}
+                  currentMonth={gameState.currentMonth}
+                  startDate={gameState.startDate}
+                  onCreateInvoice={handleCreateInvoice}
+                  onDiscountInvoice={handleDiscountInvoice}
+                />
+              </div>
+
+              <div className="mb-4">
+                <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
                     Investment Opportunities
                   </h2>
                   <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {availableOpportunities.length} available
+                    {availableOpportunities.filter(opp => opp.type !== "consulting").length} available
                   </span>
                 </div>
-                {availableOpportunities.length > 0 ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {availableOpportunities.map((opportunity) => (
-                      <InvestmentOpportunityCard
-                        key={opportunity.id}
-                        investment={opportunity}
-                        availableMoney={gameState.currentMoney}
-                        onPurchase={(customAmount) => handlePurchase(opportunity, customAmount)}
-                      />
-                    ))}
+                {availableOpportunities.filter(opp => opp.type !== "consulting").length > 0 ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {availableOpportunities
+                      .filter(opp => opp.type !== "consulting")
+                      .map((opportunity) => (
+                        <InvestmentOpportunityCard
+                          key={opportunity.id}
+                          investment={opportunity}
+                          availableMoney={gameState.currentMoney}
+                          onPurchase={(customAmount) => handlePurchase(opportunity, customAmount)}
+                        />
+                      ))}
                   </div>
                 ) : (
                   <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
@@ -1683,25 +1921,6 @@ function GamePageContent() {
                   </div>
                 )}
               </div>
-
-              {/* Invoice Manager */}
-              <InvoiceManager
-                invoices={gameState.invoices}
-                currentMonth={gameState.currentMonth}
-                startDate={gameState.startDate}
-                onCreateInvoice={handleCreateInvoice}
-                onDiscountInvoice={handleDiscountInvoice}
-              />
-
-              {/* Portfolio Display */}
-              <PortfolioDisplay
-                portfolio={gameState.portfolio}
-                currentMonth={gameState.currentMonth}
-                startDate={gameState.startDate}
-                onEarlyCashflow={handleEarlyCashflow}
-                onSellInvestment={handleSellInvestment}
-                onExtendInvestment={handleExtendInvestment}
-              />
 
               <LoanManager
                 loans={gameState.loans}
@@ -1719,7 +1938,6 @@ function GamePageContent() {
                 startDate={gameState.startDate}
                 loans={gameState.loans}
                 expenses={gameState.expenses}
-                onAdvanceMonth={handleAdvanceMonth}
               />
             </div>
           </div>

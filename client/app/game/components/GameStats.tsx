@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { GameState, MarketCondition } from "../types";
+import type { GameState } from "../types";
 import { CashFlowBreakdown } from "./CashFlowBreakdown";
 
 function formatMonthYear(date: Date): string {
@@ -12,13 +12,6 @@ interface GameStatsProps {
   gameState: GameState;
   currentDate: Date;
 }
-
-const marketConditionLabels: Record<MarketCondition, { label: string; color: string; emoji: string }> = {
-  boom: { label: "Boom", color: "text-green-600 dark:text-green-400", emoji: "📈" },
-  normal: { label: "Normal", color: "text-blue-600 dark:text-blue-400", emoji: "➡️" },
-  recession: { label: "Recession", color: "text-amber-600 dark:text-amber-400", emoji: "📉" },
-  depression: { label: "Depression", color: "text-red-600 dark:text-red-400", emoji: "🔻" },
-};
 
 export function GameStats({ gameState }: GameStatsProps) {
   const totalPortfolioValue = gameState.portfolio.reduce(
@@ -87,29 +80,6 @@ export function GameStats({ gameState }: GameStatsProps) {
 
   return (
     <div className="mb-8">
-      {/* Market Condition Display */}
-      <div className="mb-4">
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Market Condition:</span>
-            {gameState.marketCondition && marketConditionLabels[gameState.marketCondition] ? (
-              <span className={`text-sm font-bold ${marketConditionLabels[gameState.marketCondition].color}`}>
-                {marketConditionLabels[gameState.marketCondition].emoji} {marketConditionLabels[gameState.marketCondition].label}
-              </span>
-            ) : (
-              <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                ➡️ Normal
-              </span>
-            )}
-          </div>
-          {gameState.marketCondition && gameState.marketCondition !== "normal" && (
-            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Returns are {gameState.marketCondition === "boom" ? "boosted" : "reduced"} by market conditions
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Cash Flow Breakdown */}
       <div className="mb-6">
         {(() => {

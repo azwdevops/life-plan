@@ -20,8 +20,6 @@ interface CashflowTimelineProps {
   startDate: Date;
   loans: Loan[];
   expenses: Expense[];
-  onAdvanceMonth: () => void;
-  disabled?: boolean;
 }
 
 export function CashflowTimeline({
@@ -31,11 +29,8 @@ export function CashflowTimeline({
   startDate,
   loans,
   expenses,
-  onAdvanceMonth,
-  disabled = false,
 }: CashflowTimelineProps) {
   const currentDate = getDateFromMonth(startDate, currentMonth);
-  const nextMonthDate = getDateFromMonth(startDate, currentMonth + 1);
   // Calculate cashflow events for the next 12 months
   const upcomingCashflow = useMemo(() => {
     const events: CashflowEvent[] = [];
@@ -213,24 +208,12 @@ export function CashflowTimeline({
         </div>
       </div>
 
-      <button
-        onClick={disabled ? undefined : onAdvanceMonth}
-        disabled={disabled}
-        className={`mb-6 w-full rounded-lg px-4 py-3 font-semibold text-white transition-colors ${
-          disabled
-            ? "cursor-not-allowed bg-zinc-400 dark:bg-zinc-600"
-            : "bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
-        }`}
-      >
-        Advance to {formatMonthYear(nextMonthDate)}
-      </button>
-
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Upcoming Events
         </h3>
         {upcomingCashflow.length > 0 ? (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="space-y-3 max-h-[600px] overflow-y-auto">
             {upcomingCashflow.map((event, index) => (
               <div
                 key={index}

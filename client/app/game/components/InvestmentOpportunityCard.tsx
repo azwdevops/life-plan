@@ -41,7 +41,7 @@ export function InvestmentOpportunityCard({
   const annualROI = monthlyROI * 12;
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex h-full flex-col rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
           <span className="text-3xl">{investment.icon}</span>
@@ -56,55 +56,73 @@ export function InvestmentOpportunityCard({
         </div>
       </div>
 
-      <div className="mb-4 space-y-2">
-        {investment.initialCost > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-zinc-600 dark:text-zinc-400">
-              {investment.isFlexibleAmount ? "Minimum Investment:" : "Initial Cost:"}
-            </span>
-            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-              KSh {investment.initialCost.toLocaleString()}
-              {investment.isFlexibleAmount && (
-                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
-                  (Flexible amount)
-                </span>
-              )}
-            </span>
-          </div>
-        )}
-
-        {/* Cashflow In */}
-        {cashflowIn > 0 ? (
-          <>
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-600 dark:text-zinc-400">Cashflow In:</span>
-              <span className="font-semibold text-green-600 dark:text-green-400">
-                +KSh {cashflowIn.toLocaleString()}
-              </span>
-            </div>
-            {investment.cashflowDelayMonths > 0 && (
-              <div className="text-xs text-green-600 dark:text-green-400">
-                Cash received after {investment.cashflowDelayMonths} month{investment.cashflowDelayMonths > 1 ? "s" : ""}
+      <div className="mb-4 flex flex-1 flex-col space-y-2">
+        {/* Key Metrics Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {investment.initialCost > 0 && (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+              <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                {investment.isFlexibleAmount ? "Min Investment" : "Initial Cost"}
               </div>
-            )}
-          </>
-        ) : !investment.isAppreciationOnly && investment.type !== "consulting" ? (
-          <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-            No cashflow in
-          </div>
-        ) : null}
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                KSh {investment.initialCost.toLocaleString()}
+              </div>
+              {investment.isFlexibleAmount && (
+                <div className="mt-0.5 text-xs text-blue-600 dark:text-blue-400">
+                  Flexible
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Cashflow Out */}
-        {cashflowOut > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-zinc-600 dark:text-zinc-400">Cashflow Out:</span>
-            <span className="font-semibold text-red-600 dark:text-red-400">
-              -KSh {cashflowOut.toLocaleString()}
-            </span>
-          </div>
-        )}
+          {/* Cashflow In */}
+          {cashflowIn > 0 ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-2 dark:border-green-800 dark:bg-green-900/20">
+              <div className="text-xs text-green-700 dark:text-green-300">Cashflow In</div>
+              <div className="text-sm font-semibold text-green-600 dark:text-green-400">
+                +KSh {cashflowIn.toLocaleString()}
+              </div>
+              {investment.cashflowDelayMonths > 0 && (
+                <div className="mt-0.5 text-xs text-green-600 dark:text-green-400">
+                  After {investment.cashflowDelayMonths}m
+                </div>
+              )}
+            </div>
+          ) : !investment.isAppreciationOnly && investment.type !== "consulting" ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
+              <div className="text-xs text-amber-700 dark:text-amber-300">Cashflow In</div>
+              <div className="text-xs text-amber-800 dark:text-amber-300">None</div>
+            </div>
+          ) : null}
 
-        {/* Net Cashflow */}
+          {/* Cashflow Out */}
+          {cashflowOut > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-2 dark:border-red-800 dark:bg-red-900/20">
+              <div className="text-xs text-red-700 dark:text-red-300">Cashflow Out</div>
+              <div className="text-sm font-semibold text-red-600 dark:text-red-400">
+                -KSh {cashflowOut.toLocaleString()}
+              </div>
+            </div>
+          )}
+
+          {/* Risk Level */}
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div className="text-xs text-zinc-600 dark:text-zinc-400">Risk Level</div>
+            <div className={`text-sm font-semibold ${
+              investment.riskLevel === "low"
+                ? "text-green-600 dark:text-green-400"
+                : investment.riskLevel === "medium"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-red-600 dark:text-red-400"
+            }`}>
+              {investment.riskLevel === "low" && "🟢 Low"}
+              {investment.riskLevel === "medium" && "🟡 Medium"}
+              {investment.riskLevel === "high" && "🔴 High"}
+            </div>
+          </div>
+        </div>
+
+        {/* Net Cashflow - Prominent Display */}
         <div className={`rounded-lg border-2 p-3 ${
           netCashflow >= 0
             ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20"
@@ -129,102 +147,91 @@ export function InvestmentOpportunityCard({
           )}
         </div>
 
-        {investment.earlyCashflowDiscount?.available && (
-          <div className="rounded-lg bg-green-50 p-2 text-xs text-green-800 dark:bg-green-900/20 dark:text-green-300">
-            💰 Early cash option: Get KSh {investment.earlyCashflowDiscount.immediateCashflow.toLocaleString()} now 
-            ({(investment.earlyCashflowDiscount.discountRate * 100).toFixed(0)}% discount)
-          </div>
-        )}
+        {/* Additional Info Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {investment.earlyCashflowDiscount?.available && (
+            <div className="col-span-2 rounded-lg bg-green-50 p-2 text-xs text-green-800 dark:bg-green-900/20 dark:text-green-300">
+              💰 Early cash: KSh {investment.earlyCashflowDiscount.immediateCashflow.toLocaleString()} 
+              ({(investment.earlyCashflowDiscount.discountRate * 100).toFixed(0)}% off)
+            </div>
+          )}
 
-        {investment.isAppreciationOnly && (
-          <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-            Appreciation only - no monthly cashflow
-          </div>
-        )}
+          {investment.isAppreciationOnly && (
+            <div className="col-span-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              📈 Appreciation only
+            </div>
+          )}
 
-        {/* Risk Level Indicator */}
-        <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
-          <span className="text-xs text-zinc-600 dark:text-zinc-400">Risk Level:</span>
-          <span className={`text-xs font-semibold ${
-            investment.riskLevel === "low"
-              ? "text-green-600 dark:text-green-400"
-              : investment.riskLevel === "medium"
-              ? "text-amber-600 dark:text-amber-400"
-              : "text-red-600 dark:text-red-400"
-          }`}>
-            {investment.riskLevel === "low" && "🟢 Low"}
-            {investment.riskLevel === "medium" && "🟡 Medium"}
-            {investment.riskLevel === "high" && "🔴 High"}
-          </span>
+          {/* Tax Information - Compact */}
+          {investment.incomeTaxRate !== undefined && investment.incomeTaxRate > 0 && !investment.isTaxExempt && cashflowIn > 0 && (
+            <div className="rounded-lg bg-purple-50 p-2 text-xs text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
+              💰 Tax: {(investment.incomeTaxRate * 100).toFixed(0)}%
+            </div>
+          )}
+          {investment.isTaxExempt && (
+            <div className="rounded-lg bg-green-50 p-2 text-xs text-green-800 dark:bg-green-900/20 dark:text-green-300">
+              ✅ Tax-exempt
+            </div>
+          )}
+          {investment.capitalGainsTaxRate !== undefined && investment.capitalGainsTaxRate > 0 && !investment.isTaxExempt && (
+            <div className="rounded-lg bg-purple-50 p-2 text-xs text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
+              💰 CGT: {(investment.capitalGainsTaxRate * 100).toFixed(0)}%
+            </div>
+          )}
+
+          {/* Volatility Warning */}
+          {investment.volatility > 0.15 && cashflowIn > 0 && (
+            <div className="rounded-lg bg-red-50 p-2 text-xs text-red-800 dark:bg-red-900/20 dark:text-red-300">
+              ⚠️ Volatility: ±{(investment.volatility * 100).toFixed(0)}%
+            </div>
+          )}
         </div>
 
-        {/* Tax Information */}
-        {investment.incomeTaxRate !== undefined && investment.incomeTaxRate > 0 && !investment.isTaxExempt && cashflowIn > 0 && (
-          <div className="rounded-lg bg-purple-50 p-2 text-xs text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
-            💰 Tax: {(investment.incomeTaxRate * 100).toFixed(0)}% on cashflow (reduces cash in)
-          </div>
-        )}
-        {investment.isTaxExempt && (
-          <div className="rounded-lg bg-green-50 p-2 text-xs text-green-800 dark:bg-green-900/20 dark:text-green-300">
-            ✅ Tax-exempt investment
-          </div>
-        )}
-        {investment.capitalGainsTaxRate !== undefined && investment.capitalGainsTaxRate > 0 && !investment.isTaxExempt && (
-          <div className="rounded-lg bg-purple-50 p-2 text-xs text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
-            💰 Capital Gains Tax: {(investment.capitalGainsTaxRate * 100).toFixed(0)}% on sale
-          </div>
-        )}
-
-        {/* Volatility Warning */}
-        {investment.volatility > 0.15 && cashflowIn > 0 && (
-          <div className="rounded-lg bg-red-50 p-2 text-xs text-red-800 dark:bg-red-900/20 dark:text-red-300">
-            ⚠️ High volatility: Cashflow can vary by ±{(investment.volatility * 100).toFixed(0)}% monthly
-          </div>
-        )}
-
-        {/* ROI Display - Visual */}
+        {/* ROI Display - Compact Grid */}
         {netCashflow > 0 && investment.initialCost > 0 && (
-          <div className="mt-3 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Monthly ROI:</span>
-              <span className={`text-sm font-bold ${
-                monthlyROI >= 2
-                  ? "text-green-600 dark:text-green-400"
-                  : monthlyROI >= 1
-                  ? "text-blue-600 dark:text-blue-400"
-                  : monthlyROI >= 0.5
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-red-600 dark:text-red-400"
-              }`}>
-                {monthlyROI.toFixed(2)}%
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Annual ROI:</span>
-              <span className={`text-sm font-bold ${
-                annualROI >= 24
-                  ? "text-green-600 dark:text-green-400"
-                  : annualROI >= 12
-                  ? "text-blue-600 dark:text-blue-400"
-                  : annualROI >= 6
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-red-600 dark:text-red-400"
-              }`}>
-                {annualROI.toFixed(1)}%
-              </span>
-            </div>
-            {roiMonths && (
-              <div className="flex items-center justify-between border-t border-zinc-200 pt-2 dark:border-zinc-700">
-                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Break Even:</span>
-                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                  {roiMonths} month{roiMonths > 1 ? "s" : ""}
-                </span>
+          <div className="mt-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Monthly ROI</div>
+                <div className={`text-sm font-bold ${
+                  monthlyROI >= 2
+                    ? "text-green-600 dark:text-green-400"
+                    : monthlyROI >= 1
+                    ? "text-blue-600 dark:text-blue-400"
+                    : monthlyROI >= 0.5
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-red-600 dark:text-red-400"
+                }`}>
+                  {monthlyROI.toFixed(2)}%
+                </div>
               </div>
-            )}
+              <div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Annual ROI</div>
+                <div className={`text-sm font-bold ${
+                  annualROI >= 24
+                    ? "text-green-600 dark:text-green-400"
+                    : annualROI >= 12
+                    ? "text-blue-600 dark:text-blue-400"
+                    : annualROI >= 6
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-red-600 dark:text-red-400"
+                }`}>
+                  {annualROI.toFixed(1)}%
+                </div>
+              </div>
+              {roiMonths && (
+                <div>
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Break Even</div>
+                  <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {roiMonths}m
+                  </div>
+                </div>
+              )}
+            </div>
             {/* Visual ROI Bar */}
             <div className="mt-2">
               <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-zinc-500 dark:text-zinc-400">ROI Performance</span>
+                <span className="text-zinc-500 dark:text-zinc-400">Performance</span>
                 <span className="text-zinc-500 dark:text-zinc-400">
                   {annualROI >= 24 ? "Excellent" : annualROI >= 12 ? "Good" : annualROI >= 6 ? "Fair" : "Low"}
                 </span>
@@ -241,7 +248,7 @@ export function InvestmentOpportunityCard({
                       : "bg-gradient-to-r from-red-500 to-red-600"
                   }`}
                   style={{
-                    width: `${Math.min(100, (annualROI / 30) * 100)}%`, // Scale to 30% max for visual
+                    width: `${Math.min(100, (annualROI / 30) * 100)}%`,
                   }}
                 />
               </div>
@@ -294,38 +301,36 @@ export function InvestmentOpportunityCard({
         </div>
       )}
 
-      <button
-        onClick={() => {
-          if (investment.isFlexibleAmount && showCustomInput && customAmount) {
-            const amount = parseInt(customAmount.replace(/,/g, ""), 10);
-            if (!isNaN(amount) && amount >= (investment.minimumInvestment || investment.initialCost)) {
-              onPurchase(amount);
-              setShowCustomInput(false);
-              setCustomAmount("");
+      {investment.type !== "consulting" && (
+        <button
+          onClick={() => {
+            if (investment.isFlexibleAmount && showCustomInput && customAmount) {
+              const amount = parseInt(customAmount.replace(/,/g, ""), 10);
+              if (!isNaN(amount) && amount >= (investment.minimumInvestment || investment.initialCost)) {
+                onPurchase(amount);
+                setShowCustomInput(false);
+                setCustomAmount("");
+              } else {
+                alert(`Please enter a valid amount (minimum KSh ${(investment.minimumInvestment || investment.initialCost).toLocaleString()})`);
+              }
             } else {
-              alert(`Please enter a valid amount (minimum KSh ${(investment.minimumInvestment || investment.initialCost).toLocaleString()})`);
+              onPurchase();
             }
-          } else {
-            onPurchase();
-          }
-        }}
-        disabled={!canAfford && (!investment.isFlexibleAmount || !showCustomInput || !customAmount)}
-        className={`w-full rounded-lg px-4 py-2 font-semibold transition-colors ${
-          canAfford || (investment.isFlexibleAmount && showCustomInput && customAmount && parseInt(customAmount.replace(/,/g, ""), 10) <= availableMoney)
-            ? investment.type === "consulting"
-              ? "bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
-              : "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-            : "cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
-        }`}
-      >
-        {investment.type === "consulting" 
-          ? "Start Consulting" 
-          : investment.isFlexibleAmount && showCustomInput && customAmount
-          ? `Invest KSh ${parseInt(customAmount.replace(/,/g, ""), 10).toLocaleString()}`
-          : canAfford 
-          ? `Purchase for KSh ${investment.initialCost.toLocaleString()}`
-          : `Need KSh ${(investment.initialCost - availableMoney).toLocaleString()} more`}
-      </button>
+          }}
+          disabled={!canAfford && (!investment.isFlexibleAmount || !showCustomInput || !customAmount)}
+          className={`w-full rounded-lg px-4 py-2 font-semibold transition-colors ${
+            canAfford || (investment.isFlexibleAmount && showCustomInput && customAmount && parseInt(customAmount.replace(/,/g, ""), 10) <= availableMoney)
+              ? "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              : "cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
+          }`}
+        >
+          {investment.isFlexibleAmount && showCustomInput && customAmount
+            ? `Invest KSh ${parseInt(customAmount.replace(/,/g, ""), 10).toLocaleString()}`
+            : canAfford 
+            ? `Purchase for KSh ${investment.initialCost.toLocaleString()}`
+            : `Need KSh ${(investment.initialCost - availableMoney).toLocaleString()} more`}
+        </button>
+      )}
     </div>
   );
 }

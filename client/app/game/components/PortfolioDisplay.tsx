@@ -30,7 +30,7 @@ export function PortfolioDisplay({
   onSellInvestment,
   onExtendInvestment,
 }: PortfolioDisplayProps) {
-  const { prompt, alert } = useDialogs();
+  const { prompt, alert, confirm } = useDialogs();
   if (portfolio.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
@@ -290,9 +290,48 @@ export function PortfolioDisplay({
                     </div>
                   )}
 
-                {/* Extend Investment Button */}
-                {investment.isExtendable && (
-                  <div className="col-span-2">
+                {/* Action Buttons */}
+                <div className="col-span-2 flex flex-col gap-2 sm:flex-row">
+                  {owned.isSelling ? (
+                    <div className="flex-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-center text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                      <p className="font-semibold">Sale in Progress</p>
+                      <p className="text-xs">
+                        {investment.exitTimeMonths - (currentMonth - (owned.saleInitiatedMonth || currentMonth))} month(s) remaining
+                      </p>
+                      {investment.exitTimeMonths - (currentMonth - (owned.saleInitiatedMonth || currentMonth)) <= 0 && (
+                        <button
+                          onClick={() => onSellInvestment(owned.id)}
+                          className="mt-2 w-full rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+                        >
+                          Complete Sale
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        const salePrice = owned.currentValue || owned.purchaseCost;
+                        const exitCost = Math.round(salePrice * investment.exitCostPercent);
+                        const proceeds = salePrice - exitCost;
+                        
+                        const confirmed = await confirm(
+                          `Are you sure you want to sell "${investment.name}"?\n\n` +
+                          `Current value: KSh ${salePrice.toLocaleString()}\n` +
+                          `Estimated proceeds: KSh ${proceeds.toLocaleString()}\n` +
+                          `(After exit costs: KSh ${exitCost.toLocaleString()})\n\n` +
+                          `This will initiate a sale process that takes ${investment.exitTimeMonths} month(s) to complete.`,
+                          "Sell Investment"
+                        );
+                        if (confirmed) {
+                          onSellInvestment(owned.id);
+                        }
+                      }}
+                      className="w-full rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600"
+                    >
+                      💰 Sell
+                    </button>
+                  )}
+                  {investment.isExtendable && (
                     <button
                       onClick={async () => {
                         const minTopUp = investment.minimumTopUp || 1000;
@@ -312,12 +351,12 @@ export function PortfolioDisplay({
                           }
                         }
                       }}
-                      className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                      className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
                     >
-                      💰 Extend Investment (Min: KSh {(investment.minimumTopUp || 1000).toLocaleString()})
+                      📈 Extend
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           );

@@ -49,11 +49,11 @@ export function InvoiceManager({
   const paidInvoices = invoices.filter((inv) => inv.status === "paid");
 
   return (
-    <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Invoices
-        </h2>
+        </h3>
         <button
           onClick={() => setShowCreateDialog(true)}
           className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"

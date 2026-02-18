@@ -172,6 +172,29 @@ const INVESTMENT_TYPES = [
     riskLevel: "medium" as const,
     volatility: 0.12, // 12% variation
   },
+  // Stocks
+  { 
+    type: "stocks", 
+    name: "Stock Shares", 
+    icon: "📊", 
+    minCost: 10000, 
+    maxCost: 500000,
+    annualROI: 0.0, // No guaranteed ROI (capital appreciation only)
+    maintenanceRate: 0,
+    riskLevel: "high" as const,
+    volatility: 0.35, // 35% variation - high volatility
+  },
+  { 
+    type: "stocks", 
+    name: "Dividend Stock", 
+    icon: "💹", 
+    minCost: 50000, 
+    maxCost: 2000000,
+    annualROI: 0.12, // 12% annual dividend yield (1% monthly)
+    maintenanceRate: 0,
+    riskLevel: "medium" as const,
+    volatility: 0.25, // 25% variation
+  },
 ] as const;
 
 const LOCATIONS = [
@@ -301,6 +324,19 @@ function generateRandomInvestment(
     // Financial investments: dividends/interest paid quarterly or annually
     incomeDelayMonths = Math.random() > 0.5 ? Math.floor(Math.random() * 3) : 0; // 0-2 months
     cashflowDelayMonths = incomeDelayMonths;
+  } else if (template.type === "stocks") {
+    // Stocks: dividends may be paid monthly, quarterly, or not at all (growth stocks)
+    if (Math.random() > 0.5) {
+      // 50% chance of dividend-paying stock
+      incomeDelayMonths = Math.random() > 0.7 ? Math.floor(Math.random() * 2) : 0; // 0-1 months
+      cashflowDelayMonths = incomeDelayMonths;
+    } else {
+      // 50% chance of growth stock (no dividends)
+      monthlyIncome = 0;
+      monthlyCashflow = 0;
+      incomeDelayMonths = 0;
+      cashflowDelayMonths = 0;
+    }
   } else if ((template as any).type === "fixed_deposit") {
     // Fixed deposit: interest paid at maturity (12 months)
     incomeDelayMonths = 12;
@@ -359,6 +395,8 @@ function generateRandomInvestment(
         ? 0.20 // 20% on business income
         : template.type === "mmf"
         ? 0.15 // 15% withholding tax
+        : template.type === "stocks"
+        ? 0.15 // 15% tax on dividends
         : undefined,
     capitalGainsTaxRate:
       template.type === "sacco"
@@ -369,6 +407,8 @@ function generateRandomInvestment(
         ? 0.05 // 5% on property
         : template.type === "matatu"
         ? 0.0 // No capital gains (depreciating)
+        : template.type === "stocks"
+        ? 0.05 // 5% capital gains tax on stocks
         : 0.0,
     isTaxExempt: template.type === "sacco",
     // Correlation groups for diversification
@@ -379,6 +419,8 @@ function generateRandomInvestment(
         ? "vehicles"
         : template.type === "mmf" || template.type === "sacco"
         ? "financial"
+        : template.type === "stocks"
+        ? "equities"
         : "other",
     // Appreciation/Depreciation rates
     appreciationRate:
@@ -394,18 +436,32 @@ function generateRandomInvestment(
     // Extension properties
     isExtendable:
       template.type === "mmf" || template.type === "sacco" || 
-      template.type === "flat" || template.type === "shop" || template.type === "land"
+      template.type === "flat" || template.type === "shop" || template.type === "land" || template.type === "stocks"
         ? true
         : false,
     minimumTopUp:
       template.type === "mmf" || template.type === "sacco"
         ? 1000 // KSh 1,000 minimum for financial products
+        : template.type === "stocks"
+        ? 5000 // KSh 5,000 minimum for stocks
         : template.type === "land"
         ? 50000 // KSh 50,000 minimum for land
         : template.type === "flat"
         ? 100000 // KSh 100,000 minimum for residential
         : template.type === "shop"
         ? 200000 // KSh 200,000 minimum for commercial
+        : undefined,
+    isFlexibleAmount:
+      template.type === "mmf" || template.type === "sacco" || template.type === "stocks"
+        ? true
+        : false,
+    minimumInvestment:
+      template.type === "mmf"
+        ? 5000 // KSh 5,000 minimum for MMF
+        : template.type === "sacco"
+        ? 5000 // KSh 5,000 minimum for SACCO
+        : template.type === "stocks"
+        ? 10000 // KSh 10,000 minimum for stocks
         : undefined,
     earlyCashflowDiscount,
   } as Investment;
