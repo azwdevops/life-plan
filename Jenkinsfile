@@ -21,10 +21,6 @@ pipeline {
                         echo "📁 Moving to project directory"
                         cd ${repoPath}
 
-                        echo "🔄 Resetting local changes (package files are auto-generated)"
-                        git reset --hard HEAD
-                        git clean -fd
-
                         echo "⬇️ Pulling latest changes"
                         GIT_SSH_COMMAND="ssh -i ~/.ssh/truehost_to_github_connect -o IdentitiesOnly=yes" \
                           git pull github master
@@ -36,12 +32,7 @@ pipeline {
                         export NVM_DIR="\$HOME/.nvm"
                         [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
 
-                        echo "📋 Switching to Node 20 (required for Next.js 16.1.6)"
-                        if ! nvm use 20 2>/dev/null; then
-                            echo "⚠️  Node 20 not installed, installing..."
-                            nvm install 20
-                            nvm use 20
-                        fi
+                        nvm use 24
 
                         echo "🔍 Node versions"
                         node -v
