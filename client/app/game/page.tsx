@@ -1521,6 +1521,8 @@ function GamePageContent() {
         monthlyCashOut: 0,
         monthlyCashInBreakdown: [],
         monthlyCashOutBreakdown: [],
+        previousMonthCashIn: 0,
+        previousMonthCashOut: 0,
       });
       setGeneratedInvestments([]);
     }

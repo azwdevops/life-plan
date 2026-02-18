@@ -13,7 +13,7 @@ pipeline {
 
                     sh """
                         ssh -i /var/lib/jenkins/.ssh/jenkins_to_truehost_server \
-                        -o StrictHostKeyChecking=no ${remoteUser}@${remoteHost} << 'EOF'
+                        -o StrictHostKeyChecking=no ${remoteUser}@${remoteHost} bash -l << 'EOF'
 
                         set -e
 
@@ -28,24 +28,35 @@ pipeline {
                         echo "📦 Frontend setup"
                         cd client
 
-                        echo "🔧 Loading NVM from user profile"
-                        # Source user's shell profile to get NVM properly initialized
-                        [ -s "\$HOME/.bashrc" ] && source "\$HOME/.bashrc" || true
-                        [ -s "\$HOME/.bash_profile" ] && source "\$HOME/.bash_profile" || true
-                        
-                        # Also try direct NVM loading as fallback
+                        echo "🔧 Loading NVM"
+                        # NVM should be loaded from bash -l, but ensure it's available
                         export NVM_DIR="\$HOME/.nvm"
                         [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" || {
-                            echo "❌ Failed to load NVM"
-                            exit 1
+                            echo "⚠️  Direct NVM load failed, trying profile..."
+                            [ -s "\$HOME/.bashrc" ] && source "\$HOME/.bashrc" || true
+                            [ -s "\$HOME/.profile" ] && source "\$HOME/.profile" || true
+                            [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" || {
+                                echo "❌ Failed to load NVM"
+                                exit 1
+                            }
                         }
 
+                        echo "📋 Checking available Node versions"
+                        nvm list
+
                         echo "✅ Using Node 24"
-                        nvm use 24
+                        if ! nvm use 24; then
+                            echo "❌ Failed to use Node 24"
+                            echo "Available versions:"
+                            nvm list
+                            exit 1
+                        fi
 
                         echo "🔍 Node versions"
                         node -v
                         npm -v
+                        echo "Node path: \$(which node)"
+                        echo "NPM path: \$(which npm)"
 
                         npm install
                         npm run build
