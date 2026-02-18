@@ -44,12 +44,15 @@ pipeline {
                         echo "📋 Checking available Node versions"
                         nvm list
 
-                        echo "✅ Using Node 24"
-                        if ! nvm use 24; then
-                            echo "❌ Failed to use Node 24"
-                            echo "Available versions:"
-                            nvm list
-                            exit 1
+                        echo "✅ Using Node 24.13.0"
+                        if ! nvm use 24.13.0; then
+                            echo "❌ Failed to use Node 24.13.0, trying default..."
+                            if ! nvm use default; then
+                                echo "❌ Failed to use default Node version"
+                                echo "Available versions:"
+                                nvm list
+                                exit 1
+                            fi
                         fi
 
                         echo "🔍 Node versions"
