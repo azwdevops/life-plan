@@ -36,7 +36,12 @@ pipeline {
                         export NVM_DIR="\$HOME/.nvm"
                         [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
 
-                        nvm use 24
+                        echo "📋 Checking Node version"
+                        if ! nvm use 24 2>/dev/null; then
+                            echo "⚠️  Node 24 not installed, installing..."
+                            nvm install 24
+                            nvm use 24
+                        fi
 
                         echo "🔍 Node versions"
                         node -v
