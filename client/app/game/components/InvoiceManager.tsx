@@ -52,7 +52,7 @@ export function InvoiceManager({
     <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          Invoices & Consulting
+          Invoices
         </h2>
         <button
           onClick={() => setShowCreateDialog(true)}
@@ -127,7 +127,7 @@ export function InvoiceManager({
 
       {invoices.length === 0 ? (
         <div className="py-8 text-center text-sm text-zinc-600 dark:text-zinc-400">
-          No invoices yet. Create an invoice to start earning from consulting.
+          No invoices yet. Create an invoice to track cashflow.
         </div>
       ) : (
         <div className="space-y-4">
@@ -136,24 +136,24 @@ export function InvoiceManager({
               <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                 Pending Invoices
               </h3>
-              <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
                 {pendingInvoices.map((invoice) => {
                   const monthsUntilDue = invoice.paymentDueMonth - currentMonth;
                   return (
                     <div
                       key={invoice.id}
-                      className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
+                      className="flex-1 min-w-[280px] rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
                     >
-                      <div className="mb-2 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold text-zinc-900 dark:text-zinc-100">
                             {invoice.invoiceNumber}
                           </div>
-                          <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                          <div className="truncate text-xs text-zinc-600 dark:text-zinc-400">
                             {invoice.clientName}
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right whitespace-nowrap">
                           <div className="font-bold text-zinc-900 dark:text-zinc-100">
                             KSh {invoice.amount.toLocaleString()}
                           </div>
@@ -165,17 +165,15 @@ export function InvoiceManager({
                       <div className="flex gap-2">
                         <button
                           onClick={() => onDiscountInvoice(invoice.id, 0.10)}
-                          className="flex-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                          className="flex-1 rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
                         >
-                          Discount (10%) - Get KSh{" "}
-                          {Math.round(invoice.amount * 0.9).toLocaleString()} now
+                          10% - KSh {Math.round(invoice.amount * 0.9).toLocaleString()}
                         </button>
                         <button
                           onClick={() => onDiscountInvoice(invoice.id, 0.15)}
-                          className="flex-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+                          className="flex-1 rounded-lg bg-green-600 px-2 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
                         >
-                          Discount (15%) - Get KSh{" "}
-                          {Math.round(invoice.amount * 0.85).toLocaleString()} now
+                          15% - KSh {Math.round(invoice.amount * 0.85).toLocaleString()}
                         </button>
                       </div>
                     </div>
@@ -190,23 +188,23 @@ export function InvoiceManager({
               <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                 Discounted Invoices
               </h3>
-              <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
                 {discountedInvoices.map((invoice) => (
                   <div
                     key={invoice.id}
-                    className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20"
+                    className="flex-1 min-w-[200px] rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-zinc-900 dark:text-zinc-100">
                           {invoice.invoiceNumber}
                         </div>
                         <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                          Discounted by {(invoice.discountRate! * 100).toFixed(0)}%
+                          {(invoice.discountRate! * 100).toFixed(0)}% off
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-zinc-600 dark:text-zinc-400 line-through">
+                      <div className="text-right whitespace-nowrap">
+                        <div className="text-xs text-zinc-600 dark:text-zinc-400 line-through">
                           KSh {invoice.amount.toLocaleString()}
                         </div>
                         <div className="font-bold text-green-600 dark:text-green-400">
@@ -225,22 +223,22 @@ export function InvoiceManager({
               <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                 Paid Invoices
               </h3>
-              <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
                 {paidInvoices.map((invoice) => (
                   <div
                     key={invoice.id}
-                    className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20"
+                    className="flex-1 min-w-[200px] rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20"
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-zinc-900 dark:text-zinc-100">
                           {invoice.invoiceNumber}
                         </div>
-                        <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                        <div className="truncate text-xs text-zinc-600 dark:text-zinc-400">
                           {invoice.clientName}
                         </div>
                       </div>
-                      <div className="font-bold text-green-600 dark:text-green-400">
+                      <div className="font-bold text-green-600 dark:text-green-400 whitespace-nowrap">
                         KSh {invoice.amount.toLocaleString()}
                       </div>
                     </div>

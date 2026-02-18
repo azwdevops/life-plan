@@ -48,31 +48,58 @@ export function CashflowTimeline({
         const monthsSincePurchase = month - owned.purchaseMonth;
         const investment = owned.investment;
 
+        // Use old values if extension happened in this month (new values apply from next month)
+        // If extension happened in previous month (month - 1), use new values
+        const baseMonthlyIncome = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth === month && owned.monthlyIncomeBeforeExtension !== undefined)
+          ? owned.monthlyIncomeBeforeExtension
+          : investment.monthlyIncome;
+        const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth === month && owned.monthlyCashflowBeforeExtension !== undefined)
+          ? owned.monthlyCashflowBeforeExtension
+          : investment.monthlyCashflow;
+        const baseMonthlyMaintenance = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth === month && owned.monthlyMaintenanceBeforeExtension !== undefined)
+          ? owned.monthlyMaintenanceBeforeExtension
+          : investment.monthlyMaintenance;
+
+        // Check if income and cashflow are both active and the same amount
+        const hasIncome = monthsSincePurchase > investment.incomeDelayMonths && baseMonthlyIncome > 0;
+        const hasCashflow = monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken;
+        const incomeEqualsCashflow = baseMonthlyIncome === baseMonthlyCashflow;
+
         // Recognize income
-        if (monthsSincePurchase > investment.incomeDelayMonths && investment.monthlyIncome > 0) {
-          totalIncome += investment.monthlyIncome;
-          sourceDetails.push(
-            `${investment.name} income: +${investment.monthlyIncome.toLocaleString()}`
-          );
+        if (hasIncome) {
+          totalIncome += baseMonthlyIncome;
         }
 
         // Receive cashflow
-        if (
-          monthsSincePurchase > investment.cashflowDelayMonths &&
-          investment.monthlyCashflow > 0 &&
-          !owned.earlyCashflowTaken
-        ) {
-          totalCashflow += investment.monthlyCashflow;
+        if (hasCashflow) {
+          totalCashflow += baseMonthlyCashflow;
+        }
+
+        // Add source detail - consolidate if income and cashflow are the same
+        if (hasIncome && hasCashflow && incomeEqualsCashflow) {
+          // Income and cashflow are the same, show once
           sourceDetails.push(
-            `${investment.name} cash: +${investment.monthlyCashflow.toLocaleString()}`
+            `${investment.name}: +${baseMonthlyIncome.toLocaleString()}`
           );
+        } else {
+          // Show separately if different
+          if (hasIncome) {
+            sourceDetails.push(
+              `${investment.name} income: +${baseMonthlyIncome.toLocaleString()}`
+            );
+          }
+          if (hasCashflow) {
+            sourceDetails.push(
+              `${investment.name} cash: +${baseMonthlyCashflow.toLocaleString()}`
+            );
+          }
         }
 
         // Maintenance costs
-        if (investment.monthlyMaintenance > 0 && monthsSincePurchase > 0) {
-          totalMaintenance += investment.monthlyMaintenance;
+        if (baseMonthlyMaintenance > 0 && monthsSincePurchase > 0) {
+          totalMaintenance += baseMonthlyMaintenance;
           sourceDetails.push(
-            `${investment.name} maintenance: -${investment.monthlyMaintenance.toLocaleString()}`
+            `${investment.name} maintenance: -${baseMonthlyMaintenance.toLocaleString()}`
           );
         }
       });
@@ -91,19 +118,51 @@ export function CashflowTimeline({
       });
 
       if (totalIncome > 0 || totalCashflow > 0 || totalMaintenance > 0 || sourceDetails.length > 0) {
-        events.push({
-          month,
-          source: sourceDetails.join(", ") || "No activity",
-          income: totalIncome,
-          cashflow: totalCashflow,
-          maintenance: totalMaintenance,
-          netCashflow: totalCashflow - totalMaintenance,
-          type: "investment",
-        });
+        // Check if an event for this month already exists
+        const existingEventIndex = events.findIndex((e) => e.month === month);
+        if (existingEventIndex >= 0) {
+          // Merge with existing event
+          const existing = events[existingEventIndex];
+          events[existingEventIndex] = {
+            month,
+            source: [existing.source, sourceDetails.join(", ")].filter(Boolean).join("; "),
+            income: existing.income + totalIncome,
+            cashflow: existing.cashflow + totalCashflow,
+            maintenance: existing.maintenance + totalMaintenance,
+            netCashflow: existing.cashflow + totalCashflow - (existing.maintenance + totalMaintenance),
+            type: "investment",
+          };
+        } else {
+          events.push({
+            month,
+            source: sourceDetails.join(", ") || "No activity",
+            income: totalIncome,
+            cashflow: totalCashflow,
+            maintenance: totalMaintenance,
+            netCashflow: totalCashflow - totalMaintenance,
+            type: "investment",
+          });
+        }
       }
     }
 
-    return events;
+    // Sort events by month and remove any duplicates
+    const uniqueEvents = events.reduce((acc, event) => {
+      const existing = acc.find((e) => e.month === event.month);
+      if (existing) {
+        // Merge duplicates
+        existing.income += event.income;
+        existing.cashflow += event.cashflow;
+        existing.maintenance += event.maintenance;
+        existing.netCashflow = existing.cashflow - existing.maintenance;
+        existing.source = [existing.source, event.source].filter(Boolean).join("; ");
+      } else {
+        acc.push(event);
+      }
+      return acc;
+    }, [] as CashflowEvent[]);
+
+    return uniqueEvents.sort((a, b) => a.month - b.month);
   }, [portfolio, invoices, currentMonth]);
 
   return (

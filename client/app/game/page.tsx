@@ -17,6 +17,7 @@ import { InvestmentGenerator } from "./components/InvestmentGenerator";
 import { LoanManager } from "./components/LoanManager";
 import { BorrowingManager } from "./components/BorrowingManager";
 import { ExpensesManager } from "./components/ExpensesManager";
+import { GameOverSummary } from "./components/GameOverSummary";
 import { DialogProvider, useDialogs } from "./components/CustomDialogs";
 import { saveGame, loadGame, clearGame } from "./utils/gameStorage";
 import type { Investment, OwnedInvestment, GameState, Invoice, Loan, MarketCondition, UnexpectedEvent, Expense, ContingentLiability, ContingentLiabilityType } from "./types";
@@ -1354,20 +1355,26 @@ function GamePageContent() {
       // Update cashflow history (keep last 12 months)
       const newCashflowHistory = [...prev.cashflowHistory, netCashflowThisMonth].slice(-12);
 
-      // Check for game over: negative cashflow and no borrowing options available
+      // Check for game over: cash becomes 0 or negative cashflow with no borrowing options
       let gameOver = prev.gameOver;
       let gameOverReason = prev.gameOverReason;
       
-      if (!gameOver && newMoney < 0 && netCashflowThisMonth < 0) {
-        // Check if user has any borrowing options
-        const averageCashflow = newCashflowHistory.length > 0
-          ? newCashflowHistory.reduce((sum, cf) => sum + cf, 0) / newCashflowHistory.length
-          : 0;
-        const hasQualifiedBorrowing = newCashflowHistory.length >= 3 && averageCashflow >= 10000;
-        
-        if (!hasQualifiedBorrowing) {
+      if (!gameOver) {
+        // Game over if cash reaches 0 or below
+        if (newMoney <= 0) {
           gameOver = true;
-          gameOverReason = `Game Over: Negative cashflow (KSh ${Math.abs(netCashflowThisMonth).toLocaleString()}) and insufficient cashflow history to qualify for borrowing.`;
+          gameOverReason = `Game Over: Available cash reached KSh ${newMoney.toLocaleString()}.`;
+        } else if (newMoney < 0 && netCashflowThisMonth < 0) {
+          // Check if user has any borrowing options
+          const averageCashflow = newCashflowHistory.length > 0
+            ? newCashflowHistory.reduce((sum, cf) => sum + cf, 0) / newCashflowHistory.length
+            : 0;
+          const hasQualifiedBorrowing = newCashflowHistory.length >= 3 && averageCashflow >= 10000;
+          
+          if (!hasQualifiedBorrowing) {
+            gameOver = true;
+            gameOverReason = `Game Over: Negative cashflow (KSh ${Math.abs(netCashflowThisMonth).toLocaleString()}) and insufficient cashflow history to qualify for borrowing.`;
+          }
         }
       }
 
@@ -1511,57 +1518,46 @@ function GamePageContent() {
             </div>
           </div>
 
-          {/* Game Over Display */}
+          {/* Game Over Summary */}
           {gameState.gameOver && (
-            <div className="mb-6 rounded-xl border border-red-500 bg-red-50 p-6 shadow-lg dark:border-red-800 dark:bg-red-900/30">
-              <div className="flex items-center gap-3">
-                <span className="text-4xl">💀</span>
-                <div>
-                  <h2 className="text-2xl font-bold text-red-900 dark:text-red-100">Game Over</h2>
-                  <p className="mt-1 text-red-700 dark:text-red-300">
-                    {gameState.gameOverReason || "Your cashflow went negative and you don't qualify for borrowing."}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <GameOverSummary gameState={gameState} startDate={gameState.startDate} />
           )}
 
           {/* Game Stats */}
           <GameStats gameState={gameState} currentDate={currentDate} />
 
-          {/* Expenses Manager */}
+          {/* Expenses, Borrowing, and Investment Generator in flex layout */}
           {!gameState.gameOver && (
-            <div className="mb-6">
-              <ExpensesManager
-                expenses={gameState.expenses}
-                onAddExpense={handleAddExpense}
-                onUpdateExpense={handleUpdateExpense}
-                onDeleteExpense={handleDeleteExpense}
-              />
-            </div>
-          )}
-
-          {/* Borrowing Manager */}
-          {!gameState.gameOver && (
-            <div className="mb-6">
-              <BorrowingManager
-                currentMoney={gameState.currentMoney}
-                cashflowHistory={gameState.cashflowHistory}
-                currentMonth={gameState.currentMonth}
-                existingLoans={gameState.loans}
-                onBorrow={handleBorrow}
-              />
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row">
+              <div className="flex-1">
+                <ExpensesManager
+                  expenses={gameState.expenses}
+                  onAddExpense={handleAddExpense}
+                  onUpdateExpense={handleUpdateExpense}
+                  onDeleteExpense={handleDeleteExpense}
+                />
+              </div>
+              <div className="flex-1">
+                <BorrowingManager
+                  currentMoney={gameState.currentMoney}
+                  cashflowHistory={gameState.cashflowHistory}
+                  currentMonth={gameState.currentMonth}
+                  existingLoans={gameState.loans}
+                  onBorrow={handleBorrow}
+                />
+              </div>
+              <div className="flex-1">
+                <InvestmentGenerator
+                  onGenerate={handleGenerateInvestments}
+                  existingInvestmentIds={existingInvestmentIds}
+                />
+              </div>
             </div>
           )}
 
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Left Column - Investment Opportunities */}
             <div className="lg:col-span-2">
-              {/* Investment Generator */}
-              <InvestmentGenerator
-                onGenerate={handleGenerateInvestments}
-                existingInvestmentIds={existingInvestmentIds}
-              />
 
               <div className="mb-6">
                 <div className="mb-4 flex items-center justify-between">
