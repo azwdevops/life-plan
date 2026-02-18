@@ -147,6 +147,63 @@ export function GameOverSummary({ gameState, startDate }: GameOverSummaryProps) 
         </div>
       </div>
 
+      {/* Cash Flow Analysis */}
+      {gameState.monthlyCashInBreakdown && gameState.monthlyCashInBreakdown.length > 0 && (
+        <div className="mb-6">
+          <h3 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Final Month Cash Flow Analysis
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+              <div className="mb-2 text-sm font-semibold text-green-700 dark:text-green-300">
+                Cash In: KSh {(gameState.monthlyCashIn || 0).toLocaleString()}
+              </div>
+              <div className="space-y-1 text-xs text-green-600 dark:text-green-400">
+                {gameState.monthlyCashInBreakdown.map((item, idx) => (
+                  <div key={idx} className="flex justify-between">
+                    <span>{item.source}:</span>
+                    <span className="font-semibold">+KSh {item.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+              <div className="mb-2 text-sm font-semibold text-red-700 dark:text-red-300">
+                Cash Out: KSh {(gameState.monthlyCashOut || 0).toLocaleString()}
+              </div>
+              <div className="space-y-1 text-xs text-red-600 dark:text-red-400">
+                {gameState.monthlyCashOutBreakdown && gameState.monthlyCashOutBreakdown.length > 0 ? (
+                  gameState.monthlyCashOutBreakdown.map((item, idx) => (
+                    <div key={idx} className="flex justify-between">
+                      <span>{item.source}:</span>
+                      <span className="font-semibold">-KSh {item.amount.toLocaleString()}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-zinc-500 dark:text-zinc-400">No cash out recorded</div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 rounded-lg border-2 border-zinc-300 bg-white p-4 dark:border-zinc-600 dark:bg-zinc-800">
+            <div className="mb-1 text-xs text-zinc-600 dark:text-zinc-400">Net Cash Flow (Final Month)</div>
+            <div className={`text-2xl font-bold ${
+              (gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0) >= 0
+                ? "text-green-600 dark:text-green-400"
+                : "text-red-600 dark:text-red-400"
+            }`}>
+              {(gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0) >= 0 ? "+" : ""}
+              KSh {((gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0)).toLocaleString()}
+            </div>
+            <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+              Available cash: KSh {gameState.currentMoney.toLocaleString()} | 
+              Needed: KSh {(gameState.monthlyCashOut || 0).toLocaleString()} | 
+              Had: KSh {(gameState.monthlyCashIn || 0).toLocaleString()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Net Worth and ROI */}
       <div className="mb-6 grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border-2 border-zinc-300 bg-white p-4 shadow-sm dark:border-zinc-600 dark:bg-zinc-800">

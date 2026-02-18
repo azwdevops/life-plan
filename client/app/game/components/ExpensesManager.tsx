@@ -10,6 +10,7 @@ interface ExpensesManagerProps {
   onAddExpense: (expense: Omit<Expense, "id">) => void;
   onUpdateExpense: (id: number, expense: Partial<Expense>) => void;
   onDeleteExpense: (id: number) => void;
+  onClearAllExpenses: () => void;
 }
 
 const expenseCategories: { value: ExpenseCategory; label: string; icon: string; defaultAmount: number; names: string[] }[] = [
@@ -62,8 +63,9 @@ export function ExpensesManager({
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
+  onClearAllExpenses,
 }: ExpensesManagerProps) {
-  const { prompt, alert } = useDialogs();
+  const { prompt, alert, confirm } = useDialogs();
   const [showDialog, setShowDialog] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
@@ -252,6 +254,22 @@ export function ExpensesManager({
                 >
                   + Add Expense
                 </button>
+                {expenses.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm(
+                        `Are you sure you want to delete all ${expenses.length} expense(s)? This cannot be undone.`,
+                        "Reset All Expenses"
+                      );
+                      if (confirmed) {
+                        onClearAllExpenses();
+                      }
+                    }}
+                    className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600"
+                  >
+                    🔄 Reset All
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -312,12 +330,28 @@ export function ExpensesManager({
                     />
                   </div>
                 </div>
-                <button
-                  onClick={handleGenerateRandomExpenses}
-                  className="w-full rounded-lg bg-purple-600 px-4 py-2 font-medium text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
-                >
-                  Generate {numExpenses} Random Expenses
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm(
+                        `Are you sure you want to delete all ${expenses.length} expense(s) and start fresh?`,
+                        "Reset All Expenses"
+                      );
+                      if (confirmed) {
+                        onClearAllExpenses();
+                      }
+                    }}
+                    className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600"
+                  >
+                    🔄 Reset All Expenses
+                  </button>
+                  <button
+                    onClick={handleGenerateRandomExpenses}
+                    className="flex-1 rounded-lg bg-purple-600 px-4 py-2 font-medium text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
+                  >
+                    Generate {numExpenses} Random Expenses
+                  </button>
+                </div>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400">
                   Expenses will be generated with realistic names and random amounts between KSh {parseInt(minAmount.replace(/,/g, "")) || 3000} and KSh {parseInt(maxAmount.replace(/,/g, "")) || 30000}
                 </p>

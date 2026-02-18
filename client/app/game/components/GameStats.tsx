@@ -1,6 +1,7 @@
 "use client";
 
 import type { GameState, MarketCondition } from "../types";
+import { CashFlowBreakdown } from "./CashFlowBreakdown";
 
 function formatMonthYear(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -108,6 +109,16 @@ export function GameStats({ gameState }: GameStatsProps) {
         </div>
       </div>
 
+      {/* Cash Flow Breakdown */}
+      <div className="mb-6">
+        <CashFlowBreakdown
+          cashIn={gameState.monthlyCashIn || 0}
+          cashOut={gameState.monthlyCashOut || 0}
+          cashInBreakdown={gameState.monthlyCashInBreakdown || []}
+          cashOutBreakdown={gameState.monthlyCashOutBreakdown || []}
+        />
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -153,21 +164,6 @@ export function GameStats({ gameState }: GameStatsProps) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Monthly Cashflow
-        </div>
-        <div className={`text-2xl font-bold ${
-          netMonthlyCashflow >= 0
-            ? "text-green-600 dark:text-green-400"
-            : "text-red-600 dark:text-red-400"
-        }`}>
-          {netMonthlyCashflow >= 0 ? "+" : ""}KSh {netMonthlyCashflow.toLocaleString()}
-        </div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-          (Cash received)
-        </div>
-      </div>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">

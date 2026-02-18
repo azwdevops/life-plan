@@ -378,6 +378,10 @@ function GamePageContent() {
       totalExpenses: 0,
       contingentLiabilities: [],
       totalContingentLiabilities: 0,
+      monthlyCashIn: 0,
+      monthlyCashOut: 0,
+      monthlyCashInBreakdown: [],
+      monthlyCashOutBreakdown: [],
     };
   });
 
@@ -545,6 +549,10 @@ function GamePageContent() {
           totalDebt: prev.totalDebt + loanAmount,
           diversificationScore: calculateDiversificationScore(newPortfolio),
           portfolioRiskReduction: calculateRiskReduction(newPortfolio),
+          monthlyCashIn: prev.monthlyCashIn + loanAmount,
+          monthlyCashOut: prev.monthlyCashOut + purchaseAmount,
+          monthlyCashInBreakdown: [...prev.monthlyCashInBreakdown, { source: "Short-term Loan (for purchase)", amount: loanAmount }],
+          monthlyCashOutBreakdown: [...prev.monthlyCashOutBreakdown, { source: `Purchase: ${investment.name}`, amount: purchaseAmount }],
         };
       });
       return;
@@ -582,6 +590,8 @@ function GamePageContent() {
         totalInvested: prev.totalInvested + purchaseAmount,
         diversificationScore: calculateDiversificationScore(newPortfolio),
         portfolioRiskReduction: calculateRiskReduction(newPortfolio),
+        monthlyCashOut: prev.monthlyCashOut + purchaseAmount,
+        monthlyCashOutBreakdown: [...prev.monthlyCashOutBreakdown, { source: `Purchase: ${investment.name}`, amount: purchaseAmount }],
       };
     });
   };
@@ -649,6 +659,9 @@ function GamePageContent() {
         const salePrice = owned.currentValue || owned.purchaseCost; // Use current value, fallback to purchase cost
         const exitCost = Math.round(salePrice * investment.exitCostPercent);
         let proceeds = salePrice - exitCost;
+        
+        // Track cash in from sale
+        const saleCashIn = proceeds;
 
         // Check for early exit penalty
         if (
@@ -676,6 +689,8 @@ function GamePageContent() {
           totalCashflow: prev.totalCashflow + proceeds,
           diversificationScore: calculateDiversificationScore(newPortfolio),
           portfolioRiskReduction: calculateRiskReduction(newPortfolio),
+          monthlyCashIn: prev.monthlyCashIn + proceeds,
+          monthlyCashInBreakdown: [...prev.monthlyCashInBreakdown, { source: `Sale: ${investment.name}`, amount: proceeds }],
         };
       }
 
@@ -713,11 +728,15 @@ function GamePageContent() {
         startMonth: prev.currentMonth,
       };
 
+      const loanTypeLabel = loanData.type === "overdraft" ? "Overdraft" : loanData.type === "short_term" ? "Short-term Loan" : "Long-term Loan";
+
       return {
         ...prev,
         currentMoney: prev.currentMoney + loanData.amount,
         loans: [...prev.loans, newLoan],
         totalDebt: prev.totalDebt + loanData.amount,
+        monthlyCashIn: prev.monthlyCashIn + loanData.amount,
+        monthlyCashInBreakdown: [...prev.monthlyCashInBreakdown, { source: loanTypeLabel, amount: loanData.amount }],
       };
     });
   };
@@ -767,6 +786,14 @@ function GamePageContent() {
         totalExpenses,
       };
     });
+  };
+
+  const handleClearAllExpenses = () => {
+    setGameState((prev) => ({
+      ...prev,
+      expenses: [],
+      totalExpenses: 0,
+    }));
   };
 
   const handleExtendInvestment = async (ownedInvestmentId: number, topUpAmount: number) => {
@@ -881,6 +908,10 @@ function GamePageContent() {
       let newAccruedIncome = 0;
       let monthlyTaxPaid = 0;
       let monthlyOpportunityCost = 0;
+      let monthlyCashIn = 0;
+      let monthlyCashOut = 0;
+      const cashInBreakdown: Array<{ source: string; amount: number }> = [];
+      const cashOutBreakdown: Array<{ source: string; amount: number }> = [];
 
       // Update market condition (economic cycles)
       let newMarketCondition = prev.marketCondition;
@@ -1138,6 +1169,8 @@ function GamePageContent() {
           const totalPayout = owned.purchaseCost + afterTaxInterest;
           newMoney += totalPayout;
           totalCashflowThisMonth += totalPayout;
+          monthlyCashIn += totalPayout;
+          cashInBreakdown.push({ source: `${investment.name} (Fixed Deposit Maturity)`, amount: totalPayout });
           newAccrued -= totalInterest; // Reduce accrued by gross interest
         } else if (
           monthsSincePurchase > investment.cashflowDelayMonths &&
@@ -1157,6 +1190,8 @@ function GamePageContent() {
 
           newMoney += afterTaxCashflow;
           totalCashflowThisMonth += afterTaxCashflow;
+          monthlyCashIn += afterTaxCashflow;
+          cashInBreakdown.push({ source: `${investment.name} (Cashflow)`, amount: afterTaxCashflow });
           newAccrued -= actualCashflow; // Reduce accrued by gross amount
         }
 
@@ -1169,6 +1204,8 @@ function GamePageContent() {
         if (maintenanceToApply > 0 && monthsSincePurchase > 0) {
           newMoney -= maintenanceToApply;
           totalCashflowThisMonth -= maintenanceToApply;
+          monthlyCashOut += maintenanceToApply;
+          cashOutBreakdown.push({ source: `${investment.name} (Maintenance)`, amount: maintenanceToApply });
         }
 
         // Calculate current value with appreciation/depreciation
@@ -1244,6 +1281,8 @@ function GamePageContent() {
             // Deduct interest payment from cash
             newMoney -= interestPayment;
             totalCashflowThisMonth -= interestPayment;
+            monthlyCashOut += interestPayment;
+            cashOutBreakdown.push({ source: `Loan (${loan.type === "overdraft" ? "Overdraft" : loan.type === "short_term" ? "Short-term" : "Long-term"}) Interest`, amount: interestPayment });
             
             // Balance remains the same (no principal payment required, but can pay more)
             return {
@@ -1267,6 +1306,8 @@ function GamePageContent() {
           // Deduct payment from cash
           newMoney -= loan.monthlyPayment;
           totalCashflowThisMonth -= loan.monthlyPayment;
+          monthlyCashOut += loan.monthlyPayment;
+          cashOutBreakdown.push({ source: `Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment`, amount: loan.monthlyPayment });
 
           return {
             ...loan,
@@ -1289,6 +1330,8 @@ function GamePageContent() {
             newMoney += invoice.amount;
             totalCashflowThisMonth += invoice.amount;
             totalIncomeThisMonth += invoice.amount;
+            monthlyCashIn += invoice.amount;
+            cashInBreakdown.push({ source: `Invoice ${invoice.invoiceNumber}`, amount: invoice.amount });
             return { ...invoice, status: "paid" as const };
           }
         } else if (newMonth > invoice.paymentDueMonth + 1) {
@@ -1307,6 +1350,12 @@ function GamePageContent() {
         .reduce((sum, exp) => sum + exp.amount, 0);
       newMoney -= monthlyExpenses;
       totalCashflowThisMonth -= monthlyExpenses;
+      monthlyCashOut += monthlyExpenses;
+      if (monthlyExpenses > 0) {
+        prev.expenses.filter((exp) => exp.isActive).forEach((exp) => {
+          cashOutBreakdown.push({ source: `Expense: ${exp.name}`, amount: exp.amount });
+        });
+      }
 
       // Process contingent liabilities (occasional unexpected expenses)
       // 3% chance per month of a contingent liability
@@ -1340,6 +1389,8 @@ function GamePageContent() {
         // Deduct immediately (contingent liabilities must be paid)
         newMoney -= amount;
         totalCashflowThisMonth -= amount;
+        monthlyCashOut += amount;
+        cashOutBreakdown.push({ source: `Contingent Liability: ${randomType.description}`, amount });
       }
 
       const updatedContingentLiabilities = newContingentLiability
@@ -1348,6 +1399,12 @@ function GamePageContent() {
       const totalContingentLiabilities = updatedContingentLiabilities
         .filter((liability) => !liability.isPaid)
         .reduce((sum, liability) => sum + liability.amount, 0);
+
+      // Add taxes to cash out
+      if (monthlyTaxPaid > 0) {
+        monthlyCashOut += monthlyTaxPaid;
+        cashOutBreakdown.push({ source: "Taxes", amount: monthlyTaxPaid });
+      }
 
       // Calculate net cashflow for this month (after all transactions)
       const netCashflowThisMonth = totalCashflowThisMonth;
@@ -1404,6 +1461,10 @@ function GamePageContent() {
         totalExpenses: monthlyExpenses,
         contingentLiabilities: updatedContingentLiabilities,
         totalContingentLiabilities: totalContingentLiabilities,
+        monthlyCashIn: monthlyCashIn,
+        monthlyCashOut: monthlyCashOut,
+        monthlyCashInBreakdown: cashInBreakdown,
+        monthlyCashOutBreakdown: cashOutBreakdown,
       };
     });
   };
@@ -1452,6 +1513,10 @@ function GamePageContent() {
         totalExpenses: 0,
         contingentLiabilities: [],
         totalContingentLiabilities: 0,
+        monthlyCashIn: 0,
+        monthlyCashOut: 0,
+        monthlyCashInBreakdown: [],
+        monthlyCashOutBreakdown: [],
       });
       setGeneratedInvestments([]);
     }
@@ -1535,6 +1600,7 @@ function GamePageContent() {
                   onAddExpense={handleAddExpense}
                   onUpdateExpense={handleUpdateExpense}
                   onDeleteExpense={handleDeleteExpense}
+                  onClearAllExpenses={handleClearAllExpenses}
                 />
               </div>
               <div className="flex-1">

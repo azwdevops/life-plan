@@ -172,6 +172,10 @@ export interface GameState {
   totalExpenses: number; // Total monthly expenses
   contingentLiabilities: ContingentLiability[]; // Occasional unexpected expenses
   totalContingentLiabilities: number; // Total unpaid contingent liabilities
+  monthlyCashIn: number; // Cash received this month
+  monthlyCashOut: number; // Cash spent this month
+  monthlyCashInBreakdown: Array<{ source: string; amount: number }>; // Breakdown of cash in
+  monthlyCashOutBreakdown: Array<{ source: string; amount: number }>; // Breakdown of cash out
 }
 
 export interface Expense {
