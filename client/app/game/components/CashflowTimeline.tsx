@@ -40,7 +40,8 @@ export function CashflowTimeline({
       let totalIncome = 0;
       let totalCashflow = 0;
       let totalMaintenance = 0;
-      const sourceDetails: string[] = [];
+      const cashInItems: Array<{ label: string; amount: number }> = [];
+      const cashOutItems: Array<{ label: string; amount: number }> = [];
 
       // Process investments
       portfolio.forEach((owned) => {
@@ -77,29 +78,33 @@ export function CashflowTimeline({
         // Add source detail - consolidate if income and cashflow are the same
         if (hasIncome && hasCashflow && incomeEqualsCashflow) {
           // Income and cashflow are the same, show once
-          sourceDetails.push(
-            `${investment.name}: +${baseMonthlyIncome.toLocaleString()}`
-          );
+          cashInItems.push({
+            label: investment.name,
+            amount: baseMonthlyIncome,
+          });
         } else {
           // Show separately if different
           if (hasIncome) {
-            sourceDetails.push(
-              `${investment.name} income: +${baseMonthlyIncome.toLocaleString()}`
-            );
+            cashInItems.push({
+              label: `${investment.name} (Income)`,
+              amount: baseMonthlyIncome,
+            });
           }
           if (hasCashflow) {
-            sourceDetails.push(
-              `${investment.name} cash: +${baseMonthlyCashflow.toLocaleString()}`
-            );
+            cashInItems.push({
+              label: `${investment.name} (Cashflow)`,
+              amount: baseMonthlyCashflow,
+            });
           }
         }
 
         // Maintenance costs
         if (baseMonthlyMaintenance > 0 && monthsSincePurchase > 0) {
           totalMaintenance += baseMonthlyMaintenance;
-          sourceDetails.push(
-            `${investment.name} maintenance: -${baseMonthlyMaintenance.toLocaleString()}`
-          );
+          cashOutItems.push({
+            label: `${investment.name} (Maintenance)`,
+            amount: baseMonthlyMaintenance,
+          });
         }
       });
 
@@ -111,7 +116,10 @@ export function CashflowTimeline({
           if (!invoice.isDiscounted) {
             totalCashflow += invoice.amount;
             totalIncome += invoice.amount;
-            sourceDetails.push(`Invoice ${invoice.invoiceNumber}: +${invoice.amount.toLocaleString()}`);
+            cashInItems.push({
+              label: `Invoice ${invoice.invoiceNumber}`,
+              amount: invoice.amount,
+            });
           }
         }
       });
@@ -123,7 +131,10 @@ export function CashflowTimeline({
       // Monthly expenses
       expenses.filter((exp) => exp.isActive).forEach((exp) => {
         totalExpenses += exp.amount;
-        sourceDetails.push(`Expense: ${exp.name}: -${exp.amount.toLocaleString()}`);
+        cashOutItems.push({
+          label: exp.name,
+          amount: exp.amount,
+        });
       });
 
       // Loan payments
@@ -135,16 +146,22 @@ export function CashflowTimeline({
           const monthlyRate = loan.interestRate / 12;
           const interestPayment = Math.round(loan.remainingBalance * monthlyRate);
           totalLoanPayments += interestPayment;
-          sourceDetails.push(`Loan (Overdraft) Interest: -${interestPayment.toLocaleString()}`);
+          cashOutItems.push({
+            label: "Loan (Overdraft) Interest",
+            amount: interestPayment,
+          });
         } else if (loan.termMonths > 0 && monthsSinceLoan < loan.termMonths) {
           // Fixed-term loans
           totalLoanPayments += loan.monthlyPayment;
-          sourceDetails.push(`Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment: -${loan.monthlyPayment.toLocaleString()}`);
+          cashOutItems.push({
+            label: `Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment`,
+            amount: loan.monthlyPayment,
+          });
         }
       });
 
       // Always create event if there's any activity (income, cashflow, maintenance, expenses, loans)
-      if (totalIncome > 0 || totalCashflow > 0 || totalMaintenance > 0 || totalExpenses > 0 || totalLoanPayments > 0 || sourceDetails.length > 0) {
+      if (totalIncome > 0 || totalCashflow > 0 || totalMaintenance > 0 || totalExpenses > 0 || totalLoanPayments > 0 || cashInItems.length > 0 || cashOutItems.length > 0) {
         // Check if an event for this month already exists
         const existingEventIndex = events.findIndex((e) => e.month === month);
         if (existingEventIndex >= 0) {
@@ -154,24 +171,33 @@ export function CashflowTimeline({
           const mergedMaintenance = existing.maintenance + totalMaintenance;
           const mergedExpenses = totalExpenses; // Expenses are monthly, not cumulative per investment
           const mergedLoanPayments = totalLoanPayments; // Loan payments are monthly, not cumulative
+          
+          // Merge cash in/out items
+          const mergedCashInItems = [...(existing.cashInItems || []), ...cashInItems];
+          const mergedCashOutItems = [...(existing.cashOutItems || []), ...cashOutItems];
+          
           events[existingEventIndex] = {
             month,
-            source: [existing.source, sourceDetails.join(", ")].filter(Boolean).join("; "),
+            source: existing.source, // Keep legacy field
             income: existing.income + totalIncome,
             cashflow: mergedCashflow,
             maintenance: mergedMaintenance,
             netCashflow: mergedCashflow - mergedMaintenance - mergedExpenses - mergedLoanPayments,
             type: "investment",
+            cashInItems: mergedCashInItems,
+            cashOutItems: mergedCashOutItems,
           };
         } else {
           events.push({
             month,
-            source: sourceDetails.join(", ") || "No activity",
+            source: "No activity", // Legacy field
             income: totalIncome,
             cashflow: totalCashflow,
             maintenance: totalMaintenance,
             netCashflow: totalCashflow - totalMaintenance - totalExpenses - totalLoanPayments,
             type: "investment",
+            cashInItems,
+            cashOutItems,
           });
         }
       }
@@ -188,6 +214,9 @@ export function CashflowTimeline({
         // Net cashflow is already calculated in the event
         existing.netCashflow = event.netCashflow; // Use the calculated value from the event
         existing.source = [existing.source, event.source].filter(Boolean).join("; ");
+        // Merge cash in/out items
+        existing.cashInItems = [...(existing.cashInItems || []), ...(event.cashInItems || [])];
+        existing.cashOutItems = [...(existing.cashOutItems || []), ...(event.cashOutItems || [])];
       } else {
         acc.push(event);
       }
@@ -254,9 +283,50 @@ export function CashflowTimeline({
                     {(event.income - event.cashflow).toLocaleString()}
                   </div>
                 )}
-                <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  {event.source}
-                </div>
+                
+                {/* Formatted Breakdown */}
+                {(event.cashInItems && event.cashInItems.length > 0) || (event.cashOutItems && event.cashOutItems.length > 0) ? (
+                  <div className="mt-2 space-y-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                    {event.cashInItems && event.cashInItems.length > 0 && (
+                      <div>
+                        <div className="mb-1 text-xs font-semibold text-green-600 dark:text-green-400">
+                          Cash In:
+                        </div>
+                        <div className="space-y-0.5 pl-2">
+                          {event.cashInItems.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs">
+                              <span className="text-zinc-600 dark:text-zinc-400">{item.label}</span>
+                              <span className="font-medium text-green-600 dark:text-green-400">
+                                +KSh {item.amount.toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {event.cashOutItems && event.cashOutItems.length > 0 && (
+                      <div>
+                        <div className="mb-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                          Cash Out:
+                        </div>
+                        <div className="space-y-0.5 pl-2">
+                          {event.cashOutItems.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs">
+                              <span className="text-zinc-600 dark:text-zinc-400">{item.label}</span>
+                              <span className="font-medium text-red-600 dark:text-red-400">
+                                -KSh {item.amount.toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {event.source}
+                  </div>
+                )}
               </div>
             ))}
           </div>

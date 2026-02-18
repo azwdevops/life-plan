@@ -201,11 +201,13 @@ export interface ContingentLiability {
 
 export interface CashflowEvent {
   month: number;
-  source: string;
+  source: string; // Legacy field for backward compatibility
   income: number; // Income/profit recognized
   cashflow: number; // Actual cash received
   maintenance: number;
   netCashflow: number;
   type: "investment" | "invoice" | "discount";
+  cashInItems?: Array<{ label: string; amount: number }>; // Structured cash in breakdown
+  cashOutItems?: Array<{ label: string; amount: number }>; // Structured cash out breakdown
 }
 
