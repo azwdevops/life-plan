@@ -32,6 +32,17 @@ pipeline {
                         echo "📦 Frontend setup"
                         cd client
 
+                        echo "🔧 Loading NVM"
+                        export NVM_DIR="\$HOME/.nvm"
+                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
+
+                        echo "📋 Switching to Node 20 (required for Next.js 16.1.6)"
+                        if ! nvm use 20 2>/dev/null; then
+                            echo "⚠️  Node 20 not installed, installing..."
+                            nvm install 20
+                            nvm use 20
+                        fi
+
                         echo "🔍 Node versions"
                         node -v
                         npm -v

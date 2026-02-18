@@ -41,7 +41,7 @@ export function Dialog({
 
   // Handle click outside
   const handleOverlayClick = () => {
-    onClose();
+      onClose();
   };
 
   if (!isOpen) return null;
