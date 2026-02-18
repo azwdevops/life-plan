@@ -176,6 +176,8 @@ export interface GameState {
   monthlyCashOut: number; // Cash spent this month
   monthlyCashInBreakdown: Array<{ source: string; amount: number }>; // Breakdown of cash in
   monthlyCashOutBreakdown: Array<{ source: string; amount: number }>; // Breakdown of cash out
+  previousMonthCashIn: number; // Cash received last month
+  previousMonthCashOut: number; // Cash spent last month
 }
 
 export interface Expense {

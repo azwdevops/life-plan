@@ -24,20 +24,21 @@ export function InvestmentOpportunityCard({
     ? customAmountNum 
     : investment.initialCost;
   const canAfford = investment.initialCost === 0 || availableMoney >= effectiveAmount;
-  const netMonthlyIncome = investment.monthlyIncome - investment.monthlyMaintenance;
-  const netMonthlyCashflow = investment.monthlyCashflow - investment.monthlyMaintenance;
-  const roiMonths = netMonthlyCashflow > 0 
-    ? Math.ceil(investment.initialCost / netMonthlyCashflow)
+  
+  // Cashflow-focused calculations
+  const cashflowIn = investment.monthlyCashflow;
+  const cashflowOut = investment.monthlyMaintenance; // Maintenance is the main cash outflow
+  const netCashflow = cashflowIn - cashflowOut;
+  
+  const roiMonths = netCashflow > 0 
+    ? Math.ceil(investment.initialCost / netCashflow)
     : null;
 
-  // Calculate ROI percentages
-  const monthlyROI = investment.initialCost > 0 && netMonthlyCashflow > 0
-    ? (netMonthlyCashflow / investment.initialCost) * 100
+  // Calculate ROI percentages based on net cashflow
+  const monthlyROI = investment.initialCost > 0 && netCashflow > 0
+    ? (netCashflow / investment.initialCost) * 100
     : 0;
   const annualROI = monthlyROI * 12;
-
-  const hasIncomeCashflowGap = investment.monthlyIncome !== investment.monthlyCashflow ||
-    investment.incomeDelayMonths !== investment.cashflowDelayMonths;
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
@@ -72,41 +73,13 @@ export function InvestmentOpportunityCard({
           </div>
         )}
 
-        {investment.monthlyMaintenance > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-zinc-600 dark:text-zinc-400">Monthly Maintenance:</span>
-            <span className="font-semibold text-red-600 dark:text-red-400">
-              -KSh {investment.monthlyMaintenance.toLocaleString()}
-            </span>
-          </div>
-        )}
-
-        {investment.monthlyIncome > 0 ? (
+        {/* Cashflow In */}
+        {cashflowIn > 0 ? (
           <>
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-600 dark:text-zinc-400">Monthly Income (Profit):</span>
-              <span className="font-semibold text-blue-600 dark:text-blue-400">
-                +KSh {investment.monthlyIncome.toLocaleString()}
-              </span>
-            </div>
-            {investment.incomeDelayMonths > 0 && (
-              <div className="text-xs text-blue-600 dark:text-blue-400">
-                Income recognized after {investment.incomeDelayMonths} month{investment.incomeDelayMonths > 1 ? "s" : ""}
-              </div>
-            )}
-          </>
-        ) : investment.type === "consulting" ? (
-          <div className="rounded-lg bg-purple-50 p-2 text-xs text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
-            Create invoices to earn income
-          </div>
-        ) : null}
-
-        {investment.monthlyCashflow > 0 ? (
-          <>
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-600 dark:text-zinc-400">Monthly Cashflow:</span>
+              <span className="text-zinc-600 dark:text-zinc-400">Cashflow In:</span>
               <span className="font-semibold text-green-600 dark:text-green-400">
-                +KSh {investment.monthlyCashflow.toLocaleString()}
+                +KSh {cashflowIn.toLocaleString()}
               </span>
             </div>
             {investment.cashflowDelayMonths > 0 && (
@@ -117,15 +90,44 @@ export function InvestmentOpportunityCard({
           </>
         ) : !investment.isAppreciationOnly && investment.type !== "consulting" ? (
           <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-            No monthly cashflow
+            No cashflow in
           </div>
         ) : null}
 
-        {hasIncomeCashflowGap && (
-          <div className="rounded-lg bg-yellow-50 p-2 text-xs text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
-            ⚠️ Income and cashflow timing differ
+        {/* Cashflow Out */}
+        {cashflowOut > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-zinc-600 dark:text-zinc-400">Cashflow Out:</span>
+            <span className="font-semibold text-red-600 dark:text-red-400">
+              -KSh {cashflowOut.toLocaleString()}
+            </span>
           </div>
         )}
+
+        {/* Net Cashflow */}
+        <div className={`rounded-lg border-2 p-3 ${
+          netCashflow >= 0
+            ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20"
+            : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+              Net Cashflow:
+            </span>
+            <span className={`text-lg font-bold ${
+              netCashflow >= 0
+                ? "text-green-600 dark:text-green-400"
+                : "text-red-600 dark:text-red-400"
+            }`}>
+              {netCashflow >= 0 ? "+" : ""}KSh {netCashflow.toLocaleString()}
+            </span>
+          </div>
+          {netCashflow > 0 && investment.initialCost > 0 && (
+            <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+              Break even in {roiMonths} month{roiMonths && roiMonths > 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
 
         {investment.earlyCashflowDiscount?.available && (
           <div className="rounded-lg bg-green-50 p-2 text-xs text-green-800 dark:bg-green-900/20 dark:text-green-300">
@@ -157,9 +159,9 @@ export function InvestmentOpportunityCard({
         </div>
 
         {/* Tax Information */}
-        {investment.incomeTaxRate !== undefined && investment.incomeTaxRate > 0 && !investment.isTaxExempt && (
+        {investment.incomeTaxRate !== undefined && investment.incomeTaxRate > 0 && !investment.isTaxExempt && cashflowIn > 0 && (
           <div className="rounded-lg bg-purple-50 p-2 text-xs text-purple-800 dark:bg-purple-900/20 dark:text-purple-300">
-            💰 Income Tax: {(investment.incomeTaxRate * 100).toFixed(0)}% on monthly income
+            💰 Tax: {(investment.incomeTaxRate * 100).toFixed(0)}% on cashflow (reduces cash in)
           </div>
         )}
         {investment.isTaxExempt && (
@@ -174,14 +176,14 @@ export function InvestmentOpportunityCard({
         )}
 
         {/* Volatility Warning */}
-        {investment.volatility > 0.15 && investment.monthlyIncome > 0 && (
+        {investment.volatility > 0.15 && cashflowIn > 0 && (
           <div className="rounded-lg bg-red-50 p-2 text-xs text-red-800 dark:bg-red-900/20 dark:text-red-300">
-            ⚠️ High volatility: Returns can vary by ±{(investment.volatility * 100).toFixed(0)}% monthly
+            ⚠️ High volatility: Cashflow can vary by ±{(investment.volatility * 100).toFixed(0)}% monthly
           </div>
         )}
 
         {/* ROI Display - Visual */}
-        {netMonthlyCashflow > 0 && investment.initialCost > 0 && (
+        {netCashflow > 0 && investment.initialCost > 0 && (
           <div className="mt-3 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Monthly ROI:</span>

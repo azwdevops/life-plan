@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { OwnedInvestment, Invoice, CashflowEvent } from "../types";
+import type { OwnedInvestment, Invoice, CashflowEvent, Loan, Expense } from "../types";
 
 function getDateFromMonth(startDate: Date, monthOffset: number): Date {
   const date = new Date(startDate);
@@ -18,6 +18,8 @@ interface CashflowTimelineProps {
   invoices: Invoice[];
   currentMonth: number;
   startDate: Date;
+  loans: Loan[];
+  expenses: Expense[];
   onAdvanceMonth: () => void;
   disabled?: boolean;
 }
@@ -27,6 +29,8 @@ export function CashflowTimeline({
   invoices,
   currentMonth,
   startDate,
+  loans,
+  expenses,
   onAdvanceMonth,
   disabled = false,
 }: CashflowTimelineProps) {
@@ -117,19 +121,51 @@ export function CashflowTimeline({
         }
       });
 
-      if (totalIncome > 0 || totalCashflow > 0 || totalMaintenance > 0 || sourceDetails.length > 0) {
+      // Calculate expected cash out for this month
+      let totalExpenses = 0;
+      let totalLoanPayments = 0;
+      
+      // Monthly expenses
+      expenses.filter((exp) => exp.isActive).forEach((exp) => {
+        totalExpenses += exp.amount;
+        sourceDetails.push(`Expense: ${exp.name}: -${exp.amount.toLocaleString()}`);
+      });
+
+      // Loan payments
+      loans.forEach((loan) => {
+        const monthsSinceLoan = month - loan.startMonth;
+        
+        if (loan.type === "overdraft") {
+          // Overdraft: interest only
+          const monthlyRate = loan.interestRate / 12;
+          const interestPayment = Math.round(loan.remainingBalance * monthlyRate);
+          totalLoanPayments += interestPayment;
+          sourceDetails.push(`Loan (Overdraft) Interest: -${interestPayment.toLocaleString()}`);
+        } else if (loan.termMonths > 0 && monthsSinceLoan < loan.termMonths) {
+          // Fixed-term loans
+          totalLoanPayments += loan.monthlyPayment;
+          sourceDetails.push(`Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment: -${loan.monthlyPayment.toLocaleString()}`);
+        }
+      });
+
+      // Always create event if there's any activity (income, cashflow, maintenance, expenses, loans)
+      if (totalIncome > 0 || totalCashflow > 0 || totalMaintenance > 0 || totalExpenses > 0 || totalLoanPayments > 0 || sourceDetails.length > 0) {
         // Check if an event for this month already exists
         const existingEventIndex = events.findIndex((e) => e.month === month);
         if (existingEventIndex >= 0) {
           // Merge with existing event
           const existing = events[existingEventIndex];
+          const mergedCashflow = existing.cashflow + totalCashflow;
+          const mergedMaintenance = existing.maintenance + totalMaintenance;
+          const mergedExpenses = totalExpenses; // Expenses are monthly, not cumulative per investment
+          const mergedLoanPayments = totalLoanPayments; // Loan payments are monthly, not cumulative
           events[existingEventIndex] = {
             month,
             source: [existing.source, sourceDetails.join(", ")].filter(Boolean).join("; "),
             income: existing.income + totalIncome,
-            cashflow: existing.cashflow + totalCashflow,
-            maintenance: existing.maintenance + totalMaintenance,
-            netCashflow: existing.cashflow + totalCashflow - (existing.maintenance + totalMaintenance),
+            cashflow: mergedCashflow,
+            maintenance: mergedMaintenance,
+            netCashflow: mergedCashflow - mergedMaintenance - mergedExpenses - mergedLoanPayments,
             type: "investment",
           };
         } else {
@@ -139,7 +175,7 @@ export function CashflowTimeline({
             income: totalIncome,
             cashflow: totalCashflow,
             maintenance: totalMaintenance,
-            netCashflow: totalCashflow - totalMaintenance,
+            netCashflow: totalCashflow - totalMaintenance - totalExpenses - totalLoanPayments,
             type: "investment",
           });
         }
@@ -150,11 +186,12 @@ export function CashflowTimeline({
     const uniqueEvents = events.reduce((acc, event) => {
       const existing = acc.find((e) => e.month === event.month);
       if (existing) {
-        // Merge duplicates
+        // Merge duplicates - recalculate net cashflow
         existing.income += event.income;
         existing.cashflow += event.cashflow;
         existing.maintenance += event.maintenance;
-        existing.netCashflow = existing.cashflow - existing.maintenance;
+        // Net cashflow is already calculated in the event
+        existing.netCashflow = event.netCashflow; // Use the calculated value from the event
         existing.source = [existing.source, event.source].filter(Boolean).join("; ");
       } else {
         acc.push(event);
@@ -163,7 +200,7 @@ export function CashflowTimeline({
     }, [] as CashflowEvent[]);
 
     return uniqueEvents.sort((a, b) => a.month - b.month);
-  }, [portfolio, invoices, currentMonth]);
+  }, [portfolio, invoices, loans, expenses, currentMonth]);
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

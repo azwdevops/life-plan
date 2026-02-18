@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { GameState, MarketCondition } from "../types";
 import { CashFlowBreakdown } from "./CashFlowBreakdown";
 
@@ -111,12 +112,109 @@ export function GameStats({ gameState }: GameStatsProps) {
 
       {/* Cash Flow Breakdown */}
       <div className="mb-6">
-        <CashFlowBreakdown
-          cashIn={gameState.monthlyCashIn || 0}
-          cashOut={gameState.monthlyCashOut || 0}
-          cashInBreakdown={gameState.monthlyCashInBreakdown || []}
-          cashOutBreakdown={gameState.monthlyCashOutBreakdown || []}
-        />
+        {(() => {
+          // Calculate expected cash in/out for next month
+          const nextMonth = gameState.currentMonth + 1;
+          let expectedCashIn = 0;
+          let expectedCashOut = 0;
+
+          // Expected cash in from investments
+          gameState.portfolio.forEach((owned) => {
+            const monthsSincePurchase = nextMonth - owned.purchaseMonth;
+            const investment = owned.investment;
+            
+            // Use new values if extension happened before next month
+            const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
+              ? investment.monthlyCashflow
+              : (owned.lastExtensionMonth === nextMonth && owned.monthlyCashflowBeforeExtension !== undefined)
+              ? owned.monthlyCashflowBeforeExtension
+              : investment.monthlyCashflow;
+
+            if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken) {
+              // Apply tax if applicable
+              let afterTaxCashflow = baseMonthlyCashflow;
+              if (investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
+                const taxAmount = Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
+                afterTaxCashflow = baseMonthlyCashflow - taxAmount;
+              }
+              expectedCashIn += afterTaxCashflow;
+            }
+          });
+
+          // Expected cash in from invoices
+          gameState.invoices.forEach((invoice) => {
+            if (invoice.status === "pending" && invoice.paymentDueMonth === nextMonth && !invoice.isDiscounted) {
+              expectedCashIn += invoice.amount;
+            }
+          });
+
+          // Expected cash out: maintenance
+          gameState.portfolio.forEach((owned) => {
+            const monthsSincePurchase = nextMonth - owned.purchaseMonth;
+            const investment = owned.investment;
+            
+            const baseMonthlyMaintenance = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
+              ? investment.monthlyMaintenance
+              : (owned.lastExtensionMonth === nextMonth && owned.monthlyMaintenanceBeforeExtension !== undefined)
+              ? owned.monthlyMaintenanceBeforeExtension
+              : investment.monthlyMaintenance;
+
+            if (baseMonthlyMaintenance > 0 && monthsSincePurchase > 0) {
+              expectedCashOut += baseMonthlyMaintenance;
+            }
+          });
+
+          // Expected cash out: expenses
+          expectedCashOut += gameState.expenses
+            .filter((exp) => exp.isActive)
+            .reduce((sum, exp) => sum + exp.amount, 0);
+
+          // Expected cash out: loan payments
+          gameState.loans.forEach((loan) => {
+            const monthsSinceLoan = nextMonth - loan.startMonth;
+            
+            if (loan.type === "overdraft") {
+              const monthlyRate = loan.interestRate / 12;
+              const interestPayment = Math.round(loan.remainingBalance * monthlyRate);
+              expectedCashOut += interestPayment;
+            } else if (loan.termMonths > 0 && monthsSinceLoan < loan.termMonths) {
+              expectedCashOut += loan.monthlyPayment;
+            }
+          });
+
+          // Expected cash out: taxes (estimate based on expected income)
+          let expectedTaxes = 0;
+          gameState.portfolio.forEach((owned) => {
+            const monthsSincePurchase = nextMonth - owned.purchaseMonth;
+            const investment = owned.investment;
+            
+            const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
+              ? investment.monthlyCashflow
+              : (owned.lastExtensionMonth === nextMonth && owned.monthlyCashflowBeforeExtension !== undefined)
+              ? owned.monthlyCashflowBeforeExtension
+              : investment.monthlyCashflow;
+
+            if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken) {
+              if (investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
+                expectedTaxes += Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
+              }
+            }
+          });
+          expectedCashOut += expectedTaxes;
+
+          return (
+            <CashFlowBreakdown
+              cashIn={gameState.monthlyCashIn || 0}
+              cashOut={gameState.monthlyCashOut || 0}
+              cashInBreakdown={gameState.monthlyCashInBreakdown || []}
+              cashOutBreakdown={gameState.monthlyCashOutBreakdown || []}
+              previousCashIn={gameState.previousMonthCashIn || 0}
+              previousCashOut={gameState.previousMonthCashOut || 0}
+              expectedCashIn={expectedCashIn}
+              expectedCashOut={expectedCashOut}
+            />
+          );
+        })()}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

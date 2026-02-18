@@ -377,11 +377,13 @@ function GamePageContent() {
       expenses: [],
       totalExpenses: 0,
       contingentLiabilities: [],
-      totalContingentLiabilities: 0,
-      monthlyCashIn: 0,
-      monthlyCashOut: 0,
-      monthlyCashInBreakdown: [],
-      monthlyCashOutBreakdown: [],
+        totalContingentLiabilities: 0,
+        monthlyCashIn: 0,
+        monthlyCashOut: 0,
+        monthlyCashInBreakdown: [],
+        monthlyCashOutBreakdown: [],
+        previousMonthCashIn: 0,
+        previousMonthCashOut: 0,
     };
   });
 
@@ -1461,6 +1463,8 @@ function GamePageContent() {
         totalExpenses: monthlyExpenses,
         contingentLiabilities: updatedContingentLiabilities,
         totalContingentLiabilities: totalContingentLiabilities,
+        previousMonthCashIn: prev.monthlyCashIn, // Save previous month before updating
+        previousMonthCashOut: prev.monthlyCashOut, // Save previous month before updating
         monthlyCashIn: monthlyCashIn,
         monthlyCashOut: monthlyCashOut,
         monthlyCashInBreakdown: cashInBreakdown,
@@ -1687,6 +1691,8 @@ function GamePageContent() {
                 invoices={gameState.invoices}
                 currentMonth={gameState.currentMonth}
                 startDate={gameState.startDate}
+                loans={gameState.loans}
+                expenses={gameState.expenses}
                 onAdvanceMonth={handleAdvanceMonth}
               />
             </div>
