@@ -1372,18 +1372,21 @@ function GamePageContent() {
       let newContingentLiability: ContingentLiability | null = null;
       
       if (Math.random() < contingentLiabilityChance) {
-        const liabilityTypes: Array<{ type: ContingentLiabilityType; description: string; minAmount: number; maxAmount: number }> = [
-          { type: "medical_emergency", description: "Medical emergency", minAmount: 5000, maxAmount: 50000 },
-          { type: "car_repair", description: "Car repair", minAmount: 3000, maxAmount: 30000 },
-          { type: "home_repair", description: "Home repair", minAmount: 5000, maxAmount: 40000 },
-          { type: "legal_fee", description: "Legal fees", minAmount: 10000, maxAmount: 100000 },
-          { type: "family_emergency", description: "Family emergency", minAmount: 5000, maxAmount: 50000 },
-          { type: "other", description: "Unexpected expense", minAmount: 2000, maxAmount: 20000 },
+        const liabilityTypes: Array<{ type: ContingentLiabilityType; description: string }> = [
+          { type: "medical_emergency", description: "Medical emergency" },
+          { type: "car_repair", description: "Car repair" },
+          { type: "home_repair", description: "Home repair" },
+          { type: "legal_fee", description: "Legal fees" },
+          { type: "family_emergency", description: "Family emergency" },
+          { type: "other", description: "Unexpected expense" },
         ];
         
         const randomType = liabilityTypes[Math.floor(Math.random() * liabilityTypes.length)];
+        // All contingent liabilities have min 100 and max 2000
+        const minAmount = 100;
+        const maxAmount = 2000;
         const amount = Math.round(
-          randomType.minAmount + Math.random() * (randomType.maxAmount - randomType.minAmount)
+          minAmount + Math.random() * (maxAmount - minAmount)
         );
         
         newContingentLiability = {
