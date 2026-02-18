@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog } from "@/components/Dialog";
 
 interface CashFlowBreakdownProps {
@@ -12,6 +12,11 @@ interface CashFlowBreakdownProps {
   previousCashOut: number;
   expectedCashIn: number;
   expectedCashOut: number;
+  // Optional: breakdowns for previous and expected months
+  previousCashInBreakdown?: Array<{ source: string; amount: number }>;
+  previousCashOutBreakdown?: Array<{ source: string; amount: number }>;
+  expectedCashInBreakdown?: Array<{ source: string; amount: number }>;
+  expectedCashOutBreakdown?: Array<{ source: string; amount: number }>;
 }
 
 export function CashFlowBreakdown({
@@ -23,63 +28,92 @@ export function CashFlowBreakdown({
   previousCashOut,
   expectedCashIn,
   expectedCashOut,
+  previousCashInBreakdown = [],
+  previousCashOutBreakdown = [],
+  expectedCashInBreakdown = [],
+  expectedCashOutBreakdown = [],
 }: CashFlowBreakdownProps) {
-  const [showCashInDialog, setShowCashInDialog] = useState(false);
-  const [showCashOutDialog, setShowCashOutDialog] = useState(false);
+  const [showDialog, setShowDialog] = useState<"previous" | "current" | "expected" | null>(null);
 
   const netCash = cashIn - cashOut;
   const previousNetCash = previousCashIn - previousCashOut;
   const expectedNetCash = expectedCashIn - expectedCashOut;
 
-  // Group breakdown by source
-  const groupedCashIn = cashInBreakdown.reduce((acc, item) => {
-    const existing = acc.find((x) => x.source === item.source);
-    if (existing) {
-      existing.amount += item.amount;
-    } else {
-      acc.push({ ...item });
-    }
-    return acc;
-  }, [] as Array<{ source: string; amount: number }>);
+  // Group breakdown by source helper function
+  const groupBreakdown = (breakdown: Array<{ source: string; amount: number }>) => {
+    return breakdown.reduce((acc, item) => {
+      const existing = acc.find((x) => x.source === item.source);
+      if (existing) {
+        existing.amount += item.amount;
+      } else {
+        acc.push({ ...item });
+      }
+      return acc;
+    }, [] as Array<{ source: string; amount: number }>);
+  };
 
-  const groupedCashOut = cashOutBreakdown.reduce((acc, item) => {
-    const existing = acc.find((x) => x.source === item.source);
-    if (existing) {
-      existing.amount += item.amount;
-    } else {
-      acc.push({ ...item });
+  // Group all breakdowns
+  const groupedCashIn = useMemo(() => groupBreakdown(cashInBreakdown), [cashInBreakdown]);
+  const groupedCashOut = useMemo(() => groupBreakdown(cashOutBreakdown), [cashOutBreakdown]);
+  const groupedPreviousCashIn = useMemo(() => groupBreakdown(previousCashInBreakdown), [previousCashInBreakdown]);
+  const groupedPreviousCashOut = useMemo(() => groupBreakdown(previousCashOutBreakdown), [previousCashOutBreakdown]);
+  const groupedExpectedCashIn = useMemo(() => groupBreakdown(expectedCashInBreakdown), [expectedCashInBreakdown]);
+  const groupedExpectedCashOut = useMemo(() => groupBreakdown(expectedCashOutBreakdown), [expectedCashOutBreakdown]);
+
+  // Get data for the selected month
+  const getDialogData = () => {
+    if (showDialog === "previous") {
+      return {
+        cashIn: previousCashIn,
+        cashOut: previousCashOut,
+        cashInBreakdown: groupedPreviousCashIn,
+        cashOutBreakdown: groupedPreviousCashOut,
+        title: "Previous Month Details",
+      };
+    } else if (showDialog === "current") {
+      return {
+        cashIn,
+        cashOut,
+        cashInBreakdown: groupedCashIn,
+        cashOutBreakdown: groupedCashOut,
+        title: "Current Month Details",
+      };
+    } else if (showDialog === "expected") {
+      return {
+        cashIn: expectedCashIn,
+        cashOut: expectedCashOut,
+        cashInBreakdown: groupedExpectedCashIn,
+        cashOutBreakdown: groupedExpectedCashOut,
+        title: "Expected Next Month Details",
+      };
     }
-    return acc;
-  }, [] as Array<{ source: string; amount: number }>);
+    return null;
+  };
+
+  const dialogData = getDialogData();
 
   return (
     <>
       <div className="rounded-xl border-2 border-zinc-300 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3">
           <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Cash Flow Overview
           </h3>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowCashInDialog(true)}
-              className="rounded-lg bg-green-100 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30"
-            >
-              Cash In Details
-            </button>
-            <button
-              onClick={() => setShowCashOutDialog(true)}
-              className="rounded-lg bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
-            >
-              Cash Out Details
-            </button>
-          </div>
         </div>
         
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {/* Previous Month */}
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <div className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              Previous Month
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                Previous Month
+              </div>
+              <button
+                onClick={() => setShowDialog("previous")}
+                className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                View Details
+              </button>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -114,12 +148,20 @@ export function CashFlowBreakdown({
           {/* Current Month */}
           <div className="rounded-lg border-2 border-blue-300 bg-blue-50 p-3 dark:border-blue-700 dark:bg-blue-900/20">
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                Current Month
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  Current Month
+                </div>
+                <span className="text-xs rounded-full bg-blue-200 px-2 py-0.5 text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                  Active
+                </span>
               </div>
-              <span className="text-xs rounded-full bg-blue-200 px-2 py-0.5 text-blue-800 dark:bg-blue-800 dark:text-blue-200">
-                Active
-              </span>
+              <button
+                onClick={() => setShowDialog("current")}
+                className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                View Details
+              </button>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -153,8 +195,16 @@ export function CashFlowBreakdown({
 
           {/* Expected (Next Month) */}
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <div className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              Expected (Next Month)
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                Expected (Next Month)
+              </div>
+              <button
+                onClick={() => setShowDialog("expected")}
+                className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                View Details
+              </button>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -188,111 +238,119 @@ export function CashFlowBreakdown({
         </div>
       </div>
 
-      {/* Cash In Dialog */}
-      <Dialog
-        isOpen={showCashInDialog}
-        onClose={() => setShowCashInDialog(false)}
-        title="Cash In Breakdown"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-            <div className="text-sm text-green-600 dark:text-green-400">Total Cash In</div>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              +KSh {cashIn.toLocaleString()}
-            </div>
-          </div>
-          {groupedCashIn.length > 0 ? (
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                Sources:
+      {/* Combined Cash In/Out Dialog */}
+      {dialogData && (
+        <Dialog
+          isOpen={showDialog !== null}
+          onClose={() => setShowDialog(null)}
+          title={dialogData.title}
+          size="xl"
+        >
+          <div className="space-y-4">
+            {/* Details: Cash In on Left, Cash Out on Right */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Cash In Column */}
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Cash In
+                </div>
+                {dialogData.cashInBreakdown.length > 0 ? (
+                  <div className="max-h-96 space-y-2 overflow-y-auto">
+                    {dialogData.cashInBreakdown
+                      .sort((a, b) => b.amount - a.amount)
+                      .map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800"
+                        >
+                          <span className="text-xs text-zinc-700 dark:text-zinc-300">
+                            {item.source}
+                          </span>
+                          <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                            +KSh {item.amount.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+                    No cash received
+                  </div>
+                )}
               </div>
-              <div className="max-h-96 space-y-2 overflow-y-auto">
-                {groupedCashIn
-                  .sort((a, b) => b.amount - a.amount)
-                  .map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-800"
-                    >
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                        {item.source}
-                      </span>
-                      <span className="font-semibold text-green-600 dark:text-green-400">
-                        +KSh {item.amount.toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              No cash received this month
-            </div>
-          )}
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowCashInDialog(false)}
-              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </Dialog>
 
-      {/* Cash Out Dialog */}
-      <Dialog
-        isOpen={showCashOutDialog}
-        onClose={() => setShowCashOutDialog(false)}
-        title="Cash Out Breakdown"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-            <div className="text-sm text-red-600 dark:text-red-400">Total Cash Out</div>
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              -KSh {cashOut.toLocaleString()}
-            </div>
-          </div>
-          {groupedCashOut.length > 0 ? (
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                Expenses:
-              </div>
-              <div className="max-h-96 space-y-2 overflow-y-auto">
-                {groupedCashOut
-                  .sort((a, b) => b.amount - a.amount)
-                  .map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-800"
-                    >
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                        {item.source}
-                      </span>
-                      <span className="font-semibold text-red-600 dark:text-red-400">
-                        -KSh {item.amount.toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
+              {/* Cash Out Column */}
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Cash Out
+                </div>
+                {dialogData.cashOutBreakdown.length > 0 ? (
+                  <div className="max-h-96 space-y-2 overflow-y-auto">
+                    {dialogData.cashOutBreakdown
+                      .sort((a, b) => b.amount - a.amount)
+                      .map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800"
+                        >
+                          <span className="text-xs text-zinc-700 dark:text-zinc-300">
+                            {item.source}
+                          </span>
+                          <span className="text-xs font-semibold text-red-600 dark:text-red-400">
+                            -KSh {item.amount.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+                    No cash spent
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              No cash spent this month
+
+            {/* Totals Summary */}
+            <div className="border-t border-zinc-300 pt-3 dark:border-zinc-600">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Total Cash In:</span>
+                  <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                    +KSh {dialogData.cashIn.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Total Cash Out:</span>
+                  <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                    -KSh {dialogData.cashOut.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-zinc-300 pt-2 dark:border-zinc-600">
+                <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Net Cash:</span>
+                <span
+                  className={`text-base font-bold ${
+                    (dialogData.cashIn - dialogData.cashOut) >= 0
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {(dialogData.cashIn - dialogData.cashOut) >= 0 ? "+" : ""}KSh {(dialogData.cashIn - dialogData.cashOut).toLocaleString()}
+                </span>
+              </div>
             </div>
-          )}
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowCashOutDialog(false)}
-              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              Close
-            </button>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowDialog(null)}
+                className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                Close
+              </button>
+            </div>
           </div>
-        </div>
-      </Dialog>
+        </Dialog>
+      )}
     </>
   );
 }

@@ -387,6 +387,8 @@ const INVESTMENT_OPPORTUNITIES: Investment[] = [
     correlationGroup: "equities", // Stock investments are correlated
     isFlexibleAmount: true, // Can buy any amount of shares
     minimumInvestment: 10000, // Minimum KSh 10,000
+    isExtendable: true, // Can extend by buying more shares
+    minimumTopUp: 5000, // Minimum top-up of KSh 5,000 for stocks
   },
   {
     id: 11,
@@ -412,6 +414,8 @@ const INVESTMENT_OPPORTUNITIES: Investment[] = [
     correlationGroup: "equities",
     isFlexibleAmount: true,
     minimumInvestment: 50000, // Minimum KSh 50,000
+    isExtendable: true, // Can extend by buying more shares
+    minimumTopUp: 10000, // Minimum top-up of KSh 10,000 for dividend stocks
   },
   {
     id: 12,
@@ -438,6 +442,8 @@ const INVESTMENT_OPPORTUNITIES: Investment[] = [
     correlationGroup: "equities",
     isFlexibleAmount: true,
     minimumInvestment: 20000, // Minimum KSh 20,000
+    isExtendable: true, // Can extend by buying more shares
+    minimumTopUp: 5000, // Minimum top-up of KSh 5,000 for growth stocks
   },
 ];
 
@@ -623,6 +629,7 @@ function GamePageContent() {
       };
 
       // For flexible amount investments, create a copy with adjusted values
+      // Always preserve isExtendable and minimumTopUp from the base investment
       const adjustedInvestment: Investment = investment.isFlexibleAmount && customAmount
         ? {
             ...investment,
@@ -630,6 +637,9 @@ function GamePageContent() {
             monthlyIncome: Math.round(investment.monthlyIncome * (purchaseAmount / investment.initialCost)),
             monthlyCashflow: Math.round(investment.monthlyCashflow * (purchaseAmount / investment.initialCost)),
             monthlyMaintenance: Math.round(investment.monthlyMaintenance * (purchaseAmount / investment.initialCost)),
+            // Preserve extension properties
+            isExtendable: investment.isExtendable,
+            minimumTopUp: investment.minimumTopUp,
           }
         : investment;
 
@@ -666,6 +676,7 @@ function GamePageContent() {
 
     // Enough cash, purchase directly
     // For flexible amount investments, create a copy with adjusted values
+    // Always preserve isExtendable and minimumTopUp from the base investment
     const adjustedInvestment: Investment = investment.isFlexibleAmount && customAmount
       ? {
           ...investment,
@@ -673,6 +684,9 @@ function GamePageContent() {
           monthlyIncome: Math.round(investment.monthlyIncome * (purchaseAmount / investment.initialCost)),
           monthlyCashflow: Math.round(investment.monthlyCashflow * (purchaseAmount / investment.initialCost)),
           monthlyMaintenance: Math.round(investment.monthlyMaintenance * (purchaseAmount / investment.initialCost)),
+          // Preserve extension properties
+          isExtendable: investment.isExtendable,
+          minimumTopUp: investment.minimumTopUp,
         }
       : investment;
 

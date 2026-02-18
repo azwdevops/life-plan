@@ -49,7 +49,15 @@ export function PortfolioDisplay({
       <div className="max-h-[600px] overflow-y-auto">
         <div className="flex flex-wrap items-stretch gap-2">
           {portfolio.map((owned) => {
-          const investment = owned.investment;
+          // Ensure stocks have isExtendable property (for stocks purchased before this feature was added)
+          // Determine minimumTopUp based on investment ID: 10=5000, 11=10000, 12=5000
+          const getStockMinimumTopUp = (investmentId: number) => {
+            if (investmentId === 11) return 10000; // Dividend Stock
+            return 5000; // Stock Shares or Growth Stock
+          };
+          const investment = owned.investment.type === "stocks" && !owned.investment.isExtendable
+            ? { ...owned.investment, isExtendable: true, minimumTopUp: owned.investment.minimumTopUp || getStockMinimumTopUp(owned.investmentId) }
+            : owned.investment;
           const monthsSincePurchase = currentMonth - owned.purchaseMonth;
           const isIncomeActive = monthsSincePurchase > investment.incomeDelayMonths;
           const isCashflowActive =

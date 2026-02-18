@@ -83,10 +83,12 @@ export function GameStats({ gameState }: GameStatsProps) {
       {/* Cash Flow Breakdown */}
       <div className="mb-6">
         {(() => {
-          // Calculate expected cash in/out for next month
+          // Calculate expected cash in/out for next month with breakdowns
           const nextMonth = gameState.currentMonth + 1;
           let expectedCashIn = 0;
           let expectedCashOut = 0;
+          const expectedCashInBreakdown: Array<{ source: string; amount: number }> = [];
+          const expectedCashOutBreakdown: Array<{ source: string; amount: number }> = [];
 
           // Expected cash in from investments
           gameState.portfolio.forEach((owned) => {
@@ -108,6 +110,7 @@ export function GameStats({ gameState }: GameStatsProps) {
                 afterTaxCashflow = baseMonthlyCashflow - taxAmount;
               }
               expectedCashIn += afterTaxCashflow;
+              expectedCashInBreakdown.push({ source: `${investment.name} (Cashflow)`, amount: afterTaxCashflow });
             }
           });
 
@@ -115,6 +118,7 @@ export function GameStats({ gameState }: GameStatsProps) {
           gameState.invoices.forEach((invoice) => {
             if (invoice.status === "pending" && invoice.paymentDueMonth === nextMonth && !invoice.isDiscounted) {
               expectedCashIn += invoice.amount;
+              expectedCashInBreakdown.push({ source: `Invoice ${invoice.invoiceNumber}`, amount: invoice.amount });
             }
           });
 
@@ -131,13 +135,16 @@ export function GameStats({ gameState }: GameStatsProps) {
 
             if (baseMonthlyMaintenance > 0 && monthsSincePurchase > 0) {
               expectedCashOut += baseMonthlyMaintenance;
+              expectedCashOutBreakdown.push({ source: `${investment.name} (Maintenance)`, amount: baseMonthlyMaintenance });
             }
           });
 
           // Expected cash out: expenses
-          expectedCashOut += gameState.expenses
-            .filter((exp) => exp.isActive)
-            .reduce((sum, exp) => sum + exp.amount, 0);
+          const activeExpenses = gameState.expenses.filter((exp) => exp.isActive);
+          activeExpenses.forEach((exp) => {
+            expectedCashOut += exp.amount;
+            expectedCashOutBreakdown.push({ source: `Expense: ${exp.name}`, amount: exp.amount });
+          });
 
           // Expected cash out: loan payments
           gameState.loans.forEach((loan) => {
@@ -147,8 +154,10 @@ export function GameStats({ gameState }: GameStatsProps) {
               const monthlyRate = loan.interestRate / 12;
               const interestPayment = Math.round(loan.remainingBalance * monthlyRate);
               expectedCashOut += interestPayment;
+              expectedCashOutBreakdown.push({ source: `Loan (Overdraft) Interest`, amount: interestPayment });
             } else if (loan.termMonths > 0 && monthsSinceLoan < loan.termMonths) {
               expectedCashOut += loan.monthlyPayment;
+              expectedCashOutBreakdown.push({ source: `Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment`, amount: loan.monthlyPayment });
             }
           });
 
@@ -166,11 +175,15 @@ export function GameStats({ gameState }: GameStatsProps) {
 
             if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken) {
               if (investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
-                expectedTaxes += Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
+                const taxAmount = Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
+                expectedTaxes += taxAmount;
               }
             }
           });
-          expectedCashOut += expectedTaxes;
+          if (expectedTaxes > 0) {
+            expectedCashOut += expectedTaxes;
+            expectedCashOutBreakdown.push({ source: "Taxes", amount: expectedTaxes });
+          }
 
           return (
             <CashFlowBreakdown
@@ -182,6 +195,8 @@ export function GameStats({ gameState }: GameStatsProps) {
               previousCashOut={gameState.previousMonthCashOut || 0}
               expectedCashIn={expectedCashIn}
               expectedCashOut={expectedCashOut}
+              expectedCashInBreakdown={expectedCashInBreakdown}
+              expectedCashOutBreakdown={expectedCashOutBreakdown}
             />
           );
         })()}
