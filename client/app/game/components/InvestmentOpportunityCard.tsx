@@ -65,7 +65,7 @@ export function InvestmentOpportunityCard({
                 {investment.isFlexibleAmount ? "Min Investment" : "Initial Cost"}
               </div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-investment.initialCost.toLocaleString()}
+                {investment.initialCost.toLocaleString()}
               </div>
               {investment.isFlexibleAmount && (
                 <div className="mt-0.5 text-xs text-blue-600 dark:text-blue-400">
@@ -80,7 +80,7 @@ investment.initialCost.toLocaleString()}
             <div className="rounded-lg border border-green-200 bg-green-50 p-2 dark:border-green-800 dark:bg-green-900/20">
               <div className="text-xs text-green-700 dark:text-green-300">Cashflow In</div>
               <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                +cashflowIn.toLocaleString()}
+                +{cashflowIn.toLocaleString()}
               </div>
               {investment.cashflowDelayMonths > 0 && (
                 <div className="mt-0.5 text-xs text-green-600 dark:text-green-400">
@@ -100,7 +100,7 @@ investment.initialCost.toLocaleString()}
             <div className="rounded-lg border border-red-200 bg-red-50 p-2 dark:border-red-800 dark:bg-red-900/20">
               <div className="text-xs text-red-700 dark:text-red-300">Cashflow Out</div>
               <div className="text-sm font-semibold text-red-600 dark:text-red-400">
-                -cashflowOut.toLocaleString()}
+                -{cashflowOut.toLocaleString()}
               </div>
             </div>
           )}
@@ -137,7 +137,7 @@ investment.initialCost.toLocaleString()}
                 ? "text-green-600 dark:text-green-400"
                 : "text-red-600 dark:text-red-400"
             }`}>
-              {netCashflow >= 0 ? "+" : ""}netCashflow.toLocaleString()}
+              {netCashflow >= 0 ? "+" : ""}{netCashflow.toLocaleString()}
             </span>
           </div>
           {netCashflow > 0 && investment.initialCost > 0 && (

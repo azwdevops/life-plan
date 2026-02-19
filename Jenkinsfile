@@ -44,7 +44,7 @@ pipeline {
                         # Use direct path to avoid alias resolution issues
                         # Node 24.13.0 is installed, use it directly via PATH
                         export PATH="\$NVM_DIR/versions/node/v24.13.0/bin:\$PATH"
-                        
+
                         echo "🔍 Node versions"
                         node -v
                         npm -v

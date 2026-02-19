@@ -259,22 +259,22 @@ export function CashflowTimeline({
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {event.netCashflow >= 0 ? "+" : ""}event.netCashflow.toLocaleString()}
+                    {event.netCashflow >= 0 ? "+" : ""}{event.netCashflow.toLocaleString()}
                   </span>
                 </div>
                 {event.income > 0 && (
                   <div className="text-xs text-blue-600 dark:text-blue-400">
-                    Income: +event.income.toLocaleString()}
+                    Income: +{event.income.toLocaleString()}
                   </div>
                 )}
                 {event.cashflow > 0 && (
                   <div className="text-xs text-green-600 dark:text-green-400">
-                    Cashflow: +event.cashflow.toLocaleString()}
+                    Cashflow: +{event.cashflow.toLocaleString()}
                   </div>
                 )}
                 {event.maintenance > 0 && (
                   <div className="text-xs text-red-600 dark:text-red-400">
-                    Maintenance: -event.maintenance.toLocaleString()}
+                    Maintenance: -{event.maintenance.toLocaleString()}
                   </div>
                 )}
                 {event.income !== event.cashflow && (

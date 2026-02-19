@@ -119,13 +119,13 @@ export function CashFlowBreakdown({
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash In:</span>
                 <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                  +previousCashIn.toLocaleString()}
+                  +{previousCashIn.toLocaleString()}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash Out:</span>
                 <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                  -previousCashOut.toLocaleString()}
+                  -{previousCashOut.toLocaleString()}
                 </span>
               </div>
               <div className="border-t border-zinc-300 pt-2 dark:border-zinc-600">
@@ -138,7 +138,7 @@ export function CashFlowBreakdown({
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {previousNetCash >= 0 ? "+" : ""}previousNetCash.toLocaleString()}
+                    {previousNetCash >= 0 ? "+" : ""}{previousNetCash.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -167,13 +167,13 @@ export function CashFlowBreakdown({
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash In:</span>
                 <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                  +cashIn.toLocaleString()}
+                  +{cashIn.toLocaleString()}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash Out:</span>
                 <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                  -cashOut.toLocaleString()}
+                  -{cashOut.toLocaleString()}
                 </span>
               </div>
               <div className="border-t border-blue-300 pt-2 dark:border-blue-600">
@@ -186,7 +186,7 @@ export function CashFlowBreakdown({
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {netCash >= 0 ? "+" : ""}netCash.toLocaleString()}
+                    {netCash >= 0 ? "+" : ""}{netCash.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -210,13 +210,13 @@ export function CashFlowBreakdown({
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash In:</span>
                 <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                  +expectedCashIn.toLocaleString()}
+                  +{expectedCashIn.toLocaleString()}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash Out:</span>
                 <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                  -expectedCashOut.toLocaleString()}
+                  -{expectedCashOut.toLocaleString()}
                 </span>
               </div>
               <div className="border-t border-zinc-300 pt-2 dark:border-zinc-600">
@@ -229,7 +229,7 @@ export function CashFlowBreakdown({
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {expectedNetCash >= 0 ? "+" : ""}expectedNetCash.toLocaleString()}
+                    {expectedNetCash >= 0 ? "+" : ""}{expectedNetCash.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -267,7 +267,7 @@ export function CashFlowBreakdown({
                             {item.source}
                           </span>
                           <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                            +item.amount.toLocaleString()}
+                            +{item.amount.toLocaleString()}
                           </span>
                         </div>
                       ))}
@@ -297,7 +297,7 @@ export function CashFlowBreakdown({
                             {item.source}
                           </span>
                           <span className="text-xs font-semibold text-red-600 dark:text-red-400">
-                            -item.amount.toLocaleString()}
+                            -{item.amount.toLocaleString()}
                           </span>
                         </div>
                       ))}
@@ -316,13 +316,13 @@ export function CashFlowBreakdown({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Total Cash In:</span>
                   <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                    +dialogData.cashIn.toLocaleString()}
+                    +{dialogData.cashIn.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Total Cash Out:</span>
                   <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                    -dialogData.cashOut.toLocaleString()}
+                    -{dialogData.cashOut.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -335,7 +335,7 @@ export function CashFlowBreakdown({
                       : "text-red-600 dark:text-red-400"
                   }`}
                 >
-                  {(dialogData.cashIn - dialogData.cashOut) >= 0 ? "+" : ""}(dialogData.cashIn - dialogData.cashOut).toLocaleString()}
+                  {(dialogData.cashIn - dialogData.cashOut) >= 0 ? "+" : ""}{(dialogData.cashIn - dialogData.cashOut).toLocaleString()}
                 </span>
               </div>
             </div>

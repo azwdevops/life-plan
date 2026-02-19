@@ -155,7 +155,7 @@ export function InvoiceManager({
                         </div>
                         <div className="text-right whitespace-nowrap">
                           <div className="font-bold text-zinc-900 dark:text-zinc-100">
-invoice.amount.toLocaleString()}
+{invoice.amount.toLocaleString()}
                           </div>
                           <div className="text-xs text-zinc-500 dark:text-zinc-400">
                             Due {formatMonthYear(getDateFromMonth(startDate, invoice.paymentDueMonth))}
@@ -167,13 +167,13 @@ invoice.amount.toLocaleString()}
                           onClick={() => onDiscountInvoice(invoice.id, 0.10)}
                           className="flex-1 rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
                         >
-                          10% - Math.round(invoice.amount * 0.9).toLocaleString()}
+                          10% - {Math.round(invoice.amount * 0.9).toLocaleString()}
                         </button>
                         <button
                           onClick={() => onDiscountInvoice(invoice.id, 0.15)}
                           className="flex-1 rounded-lg bg-green-600 px-2 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
                         >
-                          15% - Math.round(invoice.amount * 0.85).toLocaleString()}
+                          15% - {Math.round(invoice.amount * 0.85).toLocaleString()}
                         </button>
                       </div>
                     </div>
@@ -205,10 +205,10 @@ invoice.amount.toLocaleString()}
                       </div>
                       <div className="text-right whitespace-nowrap">
                         <div className="text-xs text-zinc-600 dark:text-zinc-400 line-through">
-invoice.amount.toLocaleString()}
+{invoice.amount.toLocaleString()}
                         </div>
                         <div className="font-bold text-green-600 dark:text-green-400">
-invoice.discountedAmount?.toLocaleString()}
+{invoice.discountedAmount?.toLocaleString()}
                         </div>
                       </div>
                     </div>
@@ -239,7 +239,7 @@ invoice.discountedAmount?.toLocaleString()}
                         </div>
                       </div>
                       <div className="font-bold text-green-600 dark:text-green-400 whitespace-nowrap">
-invoice.amount.toLocaleString()}
+{invoice.amount.toLocaleString()}
                       </div>
                     </div>
                   </div>

@@ -124,7 +124,7 @@ export function UpcomingExpenses() {
           <>
             <div className="mb-4 text-center">
               <div className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">
-                -Number(totalAmount).toLocaleString("en-US", {
+                -{Number(totalAmount).toLocaleString("en-US", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                   useGrouping: true,
@@ -268,7 +268,7 @@ export function UpcomingExpenses() {
                 <div className="flex items-center gap-2">
                   <div className="text-right">
                     <div className="font-semibold text-red-600 dark:text-red-400">
-                      -Number(expense.amount).toLocaleString("en-US", {
+                      -{Number(expense.amount).toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                         useGrouping: true,
@@ -303,7 +303,7 @@ export function UpcomingExpenses() {
               Total:
             </span>
             <span className="text-xl font-bold text-red-600 dark:text-red-400">
-              -totalAmount.toLocaleString("en-US", {
+              -{Number(totalAmount).toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
                 useGrouping: true,

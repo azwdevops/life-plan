@@ -82,7 +82,7 @@ export function GameOverSummary({ gameState, startDate }: GameOverSummaryProps) 
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
           <div className="mb-1 text-xs text-zinc-600 dark:text-zinc-400">Total Invested</div>
           <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-totalInvested.toLocaleString()}
+            {totalInvested.toLocaleString()}
           </div>
           <div className="text-xs text-zinc-500 dark:text-zinc-400">
             {gameState.portfolio.length} investment{gameState.portfolio.length !== 1 ? "s" : ""}
@@ -92,20 +92,20 @@ totalInvested.toLocaleString()}
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 shadow-sm dark:border-green-800 dark:bg-green-900/20">
           <div className="mb-1 text-xs text-green-600 dark:text-green-400">Total Income</div>
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-gameState.totalIncome.toLocaleString()}
+{gameState.totalIncome.toLocaleString()}
           </div>
           <div className="text-xs text-green-500 dark:text-green-400">
-            Avg: Math.round(averageMonthlyIncome).toLocaleString()}/month
+            Avg: {Math.round(averageMonthlyIncome).toLocaleString()}/month
           </div>
         </div>
 
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 shadow-sm dark:border-green-800 dark:bg-green-900/20">
           <div className="mb-1 text-xs text-green-600 dark:text-green-400">Total Cashflow</div>
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-gameState.totalCashflow.toLocaleString()}
+{gameState.totalCashflow.toLocaleString()}
           </div>
           <div className="text-xs text-green-500 dark:text-green-400">
-            Avg: Math.round(averageMonthlyCashflow).toLocaleString()}/month
+            Avg: {Math.round(averageMonthlyCashflow).toLocaleString()}/month
           </div>
         </div>
       </div>
@@ -115,14 +115,14 @@ gameState.totalCashflow.toLocaleString()}
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm dark:border-blue-800 dark:bg-blue-900/20">
           <div className="mb-1 text-xs text-blue-600 dark:text-blue-400">Portfolio Value</div>
           <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-totalPortfolioValue.toLocaleString()}
+            {totalPortfolioValue.toLocaleString()}
           </div>
         </div>
 
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-800 dark:bg-red-900/20">
           <div className="mb-1 text-xs text-red-600 dark:text-red-400">Total Debt</div>
           <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-gameState.totalDebt.toLocaleString()}
+            {gameState.totalDebt.toLocaleString()}
           </div>
           <div className="text-xs text-red-500 dark:text-red-400">
             {gameState.loans.length} loan{gameState.loans.length !== 1 ? "s" : ""}
@@ -132,14 +132,14 @@ gameState.totalDebt.toLocaleString()}
         <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 shadow-sm dark:border-purple-800 dark:bg-purple-900/20">
           <div className="mb-1 text-xs text-purple-600 dark:text-purple-400">Total Taxes Paid</div>
           <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-gameState.totalTaxPaid.toLocaleString()}
+{gameState.totalTaxPaid.toLocaleString()}
           </div>
         </div>
 
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-800 dark:bg-amber-900/20">
           <div className="mb-1 text-xs text-amber-600 dark:text-amber-400">Monthly Expenses</div>
           <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-gameState.totalExpenses.toLocaleString()}
+{gameState.totalExpenses.toLocaleString()}
           </div>
           <div className="text-xs text-amber-500 dark:text-amber-400">
             {gameState.expenses.filter((e) => e.isActive).length} active expense{gameState.expenses.filter((e) => e.isActive).length !== 1 ? "s" : ""}
@@ -156,27 +156,27 @@ gameState.totalExpenses.toLocaleString()}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
               <div className="mb-2 text-sm font-semibold text-green-700 dark:text-green-300">
-                Cash In: (gameState.monthlyCashIn || 0).toLocaleString()}
+                Cash In: {(gameState.monthlyCashIn || 0).toLocaleString()}
               </div>
               <div className="space-y-1 text-xs text-green-600 dark:text-green-400">
                 {gameState.monthlyCashInBreakdown.map((item, idx) => (
                   <div key={idx} className="flex justify-between">
                     <span>{item.source}:</span>
-                    <span className="font-semibold">+item.amount.toLocaleString()}</span>
+                    <span className="font-semibold">+{item.amount.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
               <div className="mb-2 text-sm font-semibold text-red-700 dark:text-red-300">
-                Cash Out: (gameState.monthlyCashOut || 0).toLocaleString()}
+                Cash Out: {(gameState.monthlyCashOut || 0).toLocaleString()}
               </div>
               <div className="space-y-1 text-xs text-red-600 dark:text-red-400">
                 {gameState.monthlyCashOutBreakdown && gameState.monthlyCashOutBreakdown.length > 0 ? (
                   gameState.monthlyCashOutBreakdown.map((item, idx) => (
                     <div key={idx} className="flex justify-between">
                       <span>{item.source}:</span>
-                      <span className="font-semibold">-item.amount.toLocaleString()}</span>
+                      <span className="font-semibold">-{item.amount.toLocaleString()}</span>
                     </div>
                   ))
                 ) : (
@@ -193,12 +193,12 @@ gameState.totalExpenses.toLocaleString()}
                 : "text-red-600 dark:text-red-400"
             }`}>
               {(gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0) >= 0 ? "+" : ""}
-((gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0)).toLocaleString()}
+              {((gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0)).toLocaleString()}
             </div>
             <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
-              Available cash: gameState.currentMoney.toLocaleString()} | 
-              Needed: (gameState.monthlyCashOut || 0).toLocaleString()} | 
-              Had: (gameState.monthlyCashIn || 0).toLocaleString()}
+              Available cash: {gameState.currentMoney.toLocaleString()} |
+              Needed: {(gameState.monthlyCashOut || 0).toLocaleString()} |
+              Had: {(gameState.monthlyCashIn || 0).toLocaleString()}
             </div>
           </div>
         </div>
@@ -209,10 +209,10 @@ gameState.totalExpenses.toLocaleString()}
         <div className="rounded-lg border-2 border-zinc-300 bg-white p-4 shadow-sm dark:border-zinc-600 dark:bg-zinc-800">
           <div className="mb-1 text-xs text-zinc-600 dark:text-zinc-400">Net Worth</div>
           <div className={`text-3xl font-bold ${netWorth >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-netWorth.toLocaleString()}
+            {netWorth.toLocaleString()}
           </div>
           <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            Cash: gameState.currentMoney.toLocaleString()} + Portfolio: totalPortfolioValue.toLocaleString()} - Debt: gameState.totalDebt.toLocaleString()}
+            Cash: {gameState.currentMoney.toLocaleString()} + Portfolio: {totalPortfolioValue.toLocaleString()} - Debt: {gameState.totalDebt.toLocaleString()}
           </div>
         </div>
 
@@ -222,7 +222,7 @@ netWorth.toLocaleString()}
             {roi >= 0 ? "+" : ""}{roi.toFixed(1)}%
           </div>
           <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            Returns: totalReturns.toLocaleString()} / Invested: totalInvested.toLocaleString()}
+            Returns: {totalReturns.toLocaleString()} / Invested: {totalInvested.toLocaleString()}
           </div>
         </div>
       </div>
@@ -248,10 +248,10 @@ netWorth.toLocaleString()}
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-zinc-900 dark:text-zinc-100">
-investments.reduce((sum, inv) => sum + (inv.currentValue || inv.purchaseCost), 0).toLocaleString()}
+                      {investments.reduce((sum, inv) => sum + (inv.currentValue || inv.purchaseCost), 0).toLocaleString()}
                     </div>
                     <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Invested: investments.reduce((sum, inv) => sum + inv.purchaseCost, 0).toLocaleString()}
+                      Invested: {investments.reduce((sum, inv) => sum + inv.purchaseCost, 0).toLocaleString()}
                     </div>
                   </div>
                 </div>

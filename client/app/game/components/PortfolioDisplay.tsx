@@ -91,7 +91,7 @@ export function PortfolioDisplay({
                 <div>
                   <span className="text-xs text-zinc-500 dark:text-zinc-500">Purchase:</span>
                   <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-owned.purchaseCost.toLocaleString()}
+                    {owned.purchaseCost.toLocaleString()}
                   </p>
                 </div>
                 {owned.currentValue !== undefined && owned.currentValue !== owned.purchaseCost && (
@@ -102,7 +102,7 @@ owned.purchaseCost.toLocaleString()}
                         ? "text-green-600 dark:text-green-400"
                         : "text-red-600 dark:text-red-400"
                     }`}>
-owned.currentValue.toLocaleString()}
+{owned.currentValue.toLocaleString()}
                       <span className="ml-1 text-xs">
                         ({owned.currentValue > owned.purchaseCost ? "+" : ""}
                         {(((owned.currentValue - owned.purchaseCost) / owned.purchaseCost) * 100).toFixed(1)}%)
@@ -140,14 +140,14 @@ owned.currentValue.toLocaleString()}
                     <div>
                       <span className="text-xs text-zinc-500 dark:text-zinc-500">Income:</span>
                       <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                        +investment.monthlyIncome.toLocaleString()}
+                        +{investment.monthlyIncome.toLocaleString()}
                       </p>
                     </div>
                     {hasIncomeCashflowGap && (
                       <div>
                         <span className="text-xs text-zinc-500 dark:text-zinc-500">Accrued:</span>
                         <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-owned.accruedIncome.toLocaleString()}
+{owned.accruedIncome.toLocaleString()}
                         </p>
                       </div>
                     )}
@@ -158,7 +158,7 @@ owned.accruedIncome.toLocaleString()}
                   <div>
                     <span className="text-xs text-zinc-500 dark:text-zinc-500">Cashflow:</span>
                     <p className="text-xs font-semibold text-green-600 dark:text-green-400">
-                      +investment.monthlyCashflow.toLocaleString()}
+                      +{investment.monthlyCashflow.toLocaleString()}
                     </p>
                   </div>
                 )}
@@ -167,7 +167,7 @@ owned.accruedIncome.toLocaleString()}
                   <div>
                     <span className="text-xs text-zinc-500 dark:text-zinc-500">Maint:</span>
                     <p className="text-xs font-semibold text-red-600 dark:text-red-400">
-                      -investment.monthlyMaintenance.toLocaleString()}
+                      -{investment.monthlyMaintenance.toLocaleString()}
                     </p>
                   </div>
                 )}
@@ -179,7 +179,7 @@ owned.accruedIncome.toLocaleString()}
                       ? "text-green-600 dark:text-green-400"
                       : "text-red-600 dark:text-red-400"
                   }`}>
-                    {netMonthlyCashflow >= 0 ? "+" : ""}netMonthlyCashflow.toLocaleString()}
+                    {netMonthlyCashflow >= 0 ? "+" : ""}{netMonthlyCashflow.toLocaleString()}
                   </p>
                 </div>
 
@@ -219,13 +219,13 @@ owned.accruedIncome.toLocaleString()}
                           {(event.incomeLoss > 0 || event.cashflowLoss > 0 || event.additionalCost) && (
                             <div className="mt-1 space-y-0.5">
                               {event.incomeLoss > 0 && (
-                                <div>Income Loss: -event.incomeLoss.toLocaleString()}</div>
+                                <div>Income Loss: -{event.incomeLoss.toLocaleString()}</div>
                               )}
                               {event.cashflowLoss > 0 && (
-                                <div>Cashflow Loss: -event.cashflowLoss.toLocaleString()}</div>
+                                <div>Cashflow Loss: -{event.cashflowLoss.toLocaleString()}</div>
                               )}
                               {event.additionalCost && event.additionalCost > 0 && (
-                                <div>Additional Cost: -event.additionalCost.toLocaleString()}</div>
+                                <div>Additional Cost: -{event.additionalCost.toLocaleString()}</div>
                               )}
                             </div>
                           )}

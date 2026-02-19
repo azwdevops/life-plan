@@ -211,7 +211,7 @@ export function ExpensesManager({
               Monthly Expenses
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Total: totalMonthlyExpenses.toLocaleString()}/month
+              Total: {totalMonthlyExpenses.toLocaleString()}/month
             </p>
           </div>
           <button
@@ -237,7 +237,7 @@ export function ExpensesManager({
             <div className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800">
               <div className="text-sm text-zinc-600 dark:text-zinc-400">Total Monthly Expenses</div>
               <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-totalMonthlyExpenses.toLocaleString()}
+                {totalMonthlyExpenses.toLocaleString()}
               </div>
             </div>
             {!showAddForm && !showGenerator && (
@@ -382,7 +382,7 @@ totalMonthlyExpenses.toLocaleString()}
                       {category.label}
                     </div>
                     <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                      Default: category.defaultAmount.toLocaleString()}
+                      Default: {category.defaultAmount.toLocaleString()}
                     </div>
                   </button>
                 ))}
@@ -432,7 +432,7 @@ totalMonthlyExpenses.toLocaleString()}
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-expense.amount.toLocaleString()}/month
+{expense.amount.toLocaleString()}/month
                           </div>
                         </div>
                         <div className="flex gap-2">
