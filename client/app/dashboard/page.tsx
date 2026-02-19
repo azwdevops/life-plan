@@ -210,8 +210,8 @@ export default function DashboardPage() {
       .reduce((sum, balance) => sum + balance, 0);
   }, [allTransactionsWithItems, ledgers, ledgerGroups]);
 
-  // Expected Net = (Actual Cash/Bank + Cash In - Cash Out) - Upcoming Expenses
-  const expectedNet = actualCashBankTotal + totalCashIn - totalCashOut - totalUpcomingExpenses;
+  // Expected Net = Actual Cash/Bank - Upcoming Expenses
+  const expectedNet = actualCashBankTotal - totalUpcomingExpenses;
 
   // Create a map of spending_type_id to spending_type name
   const spendingTypeMap = useMemo(() => {
