@@ -89,7 +89,7 @@ export function ExpensesManager({
     if (!nameStr) return;
 
     const amountStr = await prompt(
-      `Enter monthly amount (default: KSh ${defaultAmount.toLocaleString()}):`,
+      `Enter monthly amount (default: ${defaultAmount.toLocaleString()}):`,
       "Add Expense",
       defaultAmount.toString()
     );
@@ -119,7 +119,7 @@ export function ExpensesManager({
 
   const handleEditExpense = async (expense: Expense) => {
     const amountStr = await prompt(
-      `Enter new monthly amount (current: KSh ${expense.amount.toLocaleString()}):`,
+      `Enter new monthly amount (current: ${expense.amount.toLocaleString()}):`,
       expense.amount.toString(),
       "Edit Expense"
     );
@@ -211,7 +211,7 @@ export function ExpensesManager({
               Monthly Expenses
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Total: KSh {totalMonthlyExpenses.toLocaleString()}/month
+              Total: totalMonthlyExpenses.toLocaleString()}/month
             </p>
           </div>
           <button
@@ -237,7 +237,7 @@ export function ExpensesManager({
             <div className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800">
               <div className="text-sm text-zinc-600 dark:text-zinc-400">Total Monthly Expenses</div>
               <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                KSh {totalMonthlyExpenses.toLocaleString()}
+totalMonthlyExpenses.toLocaleString()}
               </div>
             </div>
             {!showAddForm && !showGenerator && (
@@ -307,7 +307,7 @@ export function ExpensesManager({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Min Amount (KSh)
+                      Min Amount
                     </label>
                     <input
                       type="text"
@@ -319,7 +319,7 @@ export function ExpensesManager({
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Max Amount (KSh)
+                      Max Amount
                     </label>
                     <input
                       type="text"
@@ -353,7 +353,7 @@ export function ExpensesManager({
                   </button>
                 </div>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                  Expenses will be generated with realistic names and random amounts between KSh {parseInt(minAmount.replace(/,/g, "")) || 3000} and KSh {parseInt(maxAmount.replace(/,/g, "")) || 30000}
+                  Expenses will be generated with realistic names and random amounts between {parseInt(minAmount.replace(/,/g, "")) || 3000} and {parseInt(maxAmount.replace(/,/g, "")) || 30000}
                 </p>
               </div>
             </div>
@@ -382,7 +382,7 @@ export function ExpensesManager({
                       {category.label}
                     </div>
                     <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                      Default: KSh {category.defaultAmount.toLocaleString()}
+                      Default: category.defaultAmount.toLocaleString()}
                     </div>
                   </button>
                 ))}
@@ -432,7 +432,7 @@ export function ExpensesManager({
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            KSh {expense.amount.toLocaleString()}/month
+expense.amount.toLocaleString()}/month
                           </div>
                         </div>
                         <div className="flex gap-2">

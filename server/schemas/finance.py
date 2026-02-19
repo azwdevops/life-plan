@@ -152,3 +152,30 @@ class TransactionWithItems(TransactionResponse):
 
     class Config:
         from_attributes = True
+
+
+# Upcoming Expense Schemas
+class UpcomingExpenseBase(BaseModel):
+    name: str
+    amount: Decimal
+    due_date: date
+
+
+class UpcomingExpenseCreate(UpcomingExpenseBase):
+    pass
+
+
+class UpcomingExpenseUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[Decimal] = None
+    due_date: Optional[date] = None
+
+
+class UpcomingExpenseResponse(UpcomingExpenseBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

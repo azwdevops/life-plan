@@ -259,28 +259,27 @@ export function CashflowTimeline({
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {event.netCashflow >= 0 ? "+" : ""}KSh {event.netCashflow.toLocaleString()}
+                    {event.netCashflow >= 0 ? "+" : ""}event.netCashflow.toLocaleString()}
                   </span>
                 </div>
                 {event.income > 0 && (
                   <div className="text-xs text-blue-600 dark:text-blue-400">
-                    Income: +KSh {event.income.toLocaleString()}
+                    Income: +event.income.toLocaleString()}
                   </div>
                 )}
                 {event.cashflow > 0 && (
                   <div className="text-xs text-green-600 dark:text-green-400">
-                    Cashflow: +KSh {event.cashflow.toLocaleString()}
+                    Cashflow: +event.cashflow.toLocaleString()}
                   </div>
                 )}
                 {event.maintenance > 0 && (
                   <div className="text-xs text-red-600 dark:text-red-400">
-                    Maintenance: -KSh {event.maintenance.toLocaleString()}
+                    Maintenance: -event.maintenance.toLocaleString()}
                   </div>
                 )}
                 {event.income !== event.cashflow && (
                   <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                    ⚠️ Income-Cashflow gap: KSh{" "}
-                    {(event.income - event.cashflow).toLocaleString()}
+                    ⚠️ Income-Cashflow gap:                     {(event.income - event.cashflow).toLocaleString()}
                   </div>
                 )}
                 
@@ -297,7 +296,7 @@ export function CashflowTimeline({
                             <div key={idx} className="flex items-center justify-between text-xs">
                               <span className="text-zinc-600 dark:text-zinc-400">{item.label}</span>
                               <span className="font-medium text-green-600 dark:text-green-400">
-                                +KSh {item.amount.toLocaleString()}
+                                +{item.amount.toLocaleString()}
                               </span>
                             </div>
                           ))}
@@ -314,7 +313,7 @@ export function CashflowTimeline({
                             <div key={idx} className="flex items-center justify-between text-xs">
                               <span className="text-zinc-600 dark:text-zinc-400">{item.label}</span>
                               <span className="font-medium text-red-600 dark:text-red-400">
-                                -KSh {item.amount.toLocaleString()}
+                                -{item.amount.toLocaleString()}
                               </span>
                             </div>
                           ))}

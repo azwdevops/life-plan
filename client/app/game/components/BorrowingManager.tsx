@@ -35,7 +35,7 @@ export function BorrowingManager({
   existingLoans,
   onBorrow,
 }: BorrowingManagerProps) {
-  const { prompt, alert } = useDialogs();
+  const { prompt, alert, confirm } = useDialogs();
   const [showDialog, setShowDialog] = useState(false);
 
   // Calculate qualification metrics
@@ -101,7 +101,7 @@ export function BorrowingManager({
     if (averageCashflow < option.qualificationCriteria.minAverageCashflow) {
       return {
         qualified: false,
-        reason: `Average monthly cashflow must be at least KSh ${option.qualificationCriteria.minAverageCashflow.toLocaleString()}`,
+        reason: `Average monthly cashflow must be at least ${option.qualificationCriteria.minAverageCashflow.toLocaleString()}`,
       };
     }
 
@@ -125,23 +125,24 @@ export function BorrowingManager({
       return;
     }
 
+    const minAmount = 1000;
     const amountStr = await prompt(
-      `Enter loan amount (max: KSh ${option.maxAmount.toLocaleString()}):`,
-      "Borrow Money",
-      option.maxAmount.toString()
+      `Enter loan amount (min: ${minAmount.toLocaleString()}, max: ${option.maxAmount.toLocaleString()}):`,
+      option.maxAmount.toString(),
+      "Borrow Money"
     );
 
     if (!amountStr) return;
 
     const amount = parseInt(amountStr.replace(/,/g, ""), 10);
-    if (isNaN(amount) || amount <= 0) {
-      await alert("Invalid amount. Please enter a positive number.", "Invalid Input");
+    if (isNaN(amount) || amount < minAmount) {
+      await alert(`Invalid amount. Minimum is ${minAmount.toLocaleString()}.`, "Invalid Input");
       return;
     }
 
     if (amount > option.maxAmount) {
       await alert(
-        `Maximum loan amount is KSh ${option.maxAmount.toLocaleString()}.`,
+        `Maximum loan amount is ${option.maxAmount.toLocaleString()}.`,
         "Amount Exceeded"
       );
       return;
@@ -162,19 +163,18 @@ export function BorrowingManager({
       );
     }
 
-    const confirmBorrow = await prompt(
+    const confirmBorrow = await confirm(
       `Loan Details:\n` +
       `Type: ${option.name}\n` +
-      `Amount: KSh ${amount.toLocaleString()}\n` +
+      `Amount: ${amount.toLocaleString()}\n` +
       `Interest Rate: ${(option.interestRate * 100).toFixed(1)}% per year\n` +
       `Term: ${option.termMonths === 0 ? "Flexible (overdraft)" : `${option.termMonths} months`}\n` +
-      `Monthly Payment: KSh ${monthlyPayment.toLocaleString()}\n\n` +
+      `Monthly Payment: ${monthlyPayment.toLocaleString()}\n\n` +
       `Confirm to proceed?`,
-      "Confirm Loan",
-      "yes"
+      "Confirm Loan"
     );
 
-    if (confirmBorrow?.toLowerCase() === "yes" || confirmBorrow?.toLowerCase() === "y") {
+    if (confirmBorrow) {
       onBorrow({
         type: option.type,
         amount,
@@ -222,13 +222,13 @@ export function BorrowingManager({
               <div>
                 <span className="text-zinc-600 dark:text-zinc-400">Average Monthly Cashflow:</span>
                 <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  KSh {Math.round(averageCashflow).toLocaleString()}
+                  {Math.round(averageCashflow).toLocaleString()}
                 </p>
               </div>
               <div>
                 <span className="text-zinc-600 dark:text-zinc-400">Total Debt:</span>
                 <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  KSh {totalDebt.toLocaleString()}
+                  {totalDebt.toLocaleString()}
                 </p>
               </div>
               <div>
@@ -284,7 +284,7 @@ export function BorrowingManager({
                 <div>
                   <span className="text-zinc-600 dark:text-zinc-400">Max Amount:</span>
                   <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                    KSh {option.maxAmount.toLocaleString()}
+                    {option.maxAmount.toLocaleString()}
                   </p>
                 </div>
                 <div>
@@ -303,7 +303,7 @@ export function BorrowingManager({
                   <span className="text-zinc-600 dark:text-zinc-400">Requirements:</span>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">
                     {option.qualificationCriteria.minMonthsHistory} months history,{" "}
-                    KSh {option.qualificationCriteria.minAverageCashflow.toLocaleString()} avg
+                    {option.qualificationCriteria.minAverageCashflow.toLocaleString()} avg
                     cashflow
                   </p>
                 </div>

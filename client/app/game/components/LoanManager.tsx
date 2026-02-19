@@ -56,24 +56,24 @@ export function LoanManager({ loans, currentMonth, startDate }: LoanManagerProps
                 <div>
                   <span className="text-red-600 dark:text-red-400">Original Amount:</span>
                   <p className="font-semibold text-red-900 dark:text-red-100">
-                    KSh {loan.amount.toLocaleString()}
+                    {loan.amount.toLocaleString()}
                   </p>
                 </div>
 
                 <div>
                   <span className="text-red-600 dark:text-red-400">Remaining Balance:</span>
                   <p className="font-semibold text-red-900 dark:text-red-100">
-                    KSh {loan.remainingBalance.toLocaleString()}
+                    {loan.remainingBalance.toLocaleString()}
                   </p>
                 </div>
 
                 <div>
                   <span className="text-red-600 dark:text-red-400">Monthly Payment:</span>
                   <p className="font-semibold text-red-900 dark:text-red-100">
-                    KSh {loan.monthlyPayment.toLocaleString()}
+                    {loan.monthlyPayment.toLocaleString()}
                   </p>
                   <p className="text-xs text-red-500 dark:text-red-400">
-                    (Interest: KSh {currentInterest.toLocaleString()})
+                    (Interest: {currentInterest.toLocaleString()})
                   </p>
                 </div>
 

@@ -91,7 +91,7 @@ export function PortfolioDisplay({
                 <div>
                   <span className="text-xs text-zinc-500 dark:text-zinc-500">Purchase:</span>
                   <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                    KSh {owned.purchaseCost.toLocaleString()}
+owned.purchaseCost.toLocaleString()}
                   </p>
                 </div>
                 {owned.currentValue !== undefined && owned.currentValue !== owned.purchaseCost && (
@@ -102,7 +102,7 @@ export function PortfolioDisplay({
                         ? "text-green-600 dark:text-green-400"
                         : "text-red-600 dark:text-red-400"
                     }`}>
-                      KSh {owned.currentValue.toLocaleString()}
+owned.currentValue.toLocaleString()}
                       <span className="ml-1 text-xs">
                         ({owned.currentValue > owned.purchaseCost ? "+" : ""}
                         {(((owned.currentValue - owned.purchaseCost) / owned.purchaseCost) * 100).toFixed(1)}%)
@@ -140,14 +140,14 @@ export function PortfolioDisplay({
                     <div>
                       <span className="text-xs text-zinc-500 dark:text-zinc-500">Income:</span>
                       <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                        +KSh {investment.monthlyIncome.toLocaleString()}
+                        +investment.monthlyIncome.toLocaleString()}
                       </p>
                     </div>
                     {hasIncomeCashflowGap && (
                       <div>
                         <span className="text-xs text-zinc-500 dark:text-zinc-500">Accrued:</span>
                         <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                          KSh {owned.accruedIncome.toLocaleString()}
+owned.accruedIncome.toLocaleString()}
                         </p>
                       </div>
                     )}
@@ -158,7 +158,7 @@ export function PortfolioDisplay({
                   <div>
                     <span className="text-xs text-zinc-500 dark:text-zinc-500">Cashflow:</span>
                     <p className="text-xs font-semibold text-green-600 dark:text-green-400">
-                      +KSh {investment.monthlyCashflow.toLocaleString()}
+                      +investment.monthlyCashflow.toLocaleString()}
                     </p>
                   </div>
                 )}
@@ -167,7 +167,7 @@ export function PortfolioDisplay({
                   <div>
                     <span className="text-xs text-zinc-500 dark:text-zinc-500">Maint:</span>
                     <p className="text-xs font-semibold text-red-600 dark:text-red-400">
-                      -KSh {investment.monthlyMaintenance.toLocaleString()}
+                      -investment.monthlyMaintenance.toLocaleString()}
                     </p>
                   </div>
                 )}
@@ -179,7 +179,7 @@ export function PortfolioDisplay({
                       ? "text-green-600 dark:text-green-400"
                       : "text-red-600 dark:text-red-400"
                   }`}>
-                    {netMonthlyCashflow >= 0 ? "+" : ""}KSh {netMonthlyCashflow.toLocaleString()}
+                    {netMonthlyCashflow >= 0 ? "+" : ""}netMonthlyCashflow.toLocaleString()}
                   </p>
                 </div>
 
@@ -219,13 +219,13 @@ export function PortfolioDisplay({
                           {(event.incomeLoss > 0 || event.cashflowLoss > 0 || event.additionalCost) && (
                             <div className="mt-1 space-y-0.5">
                               {event.incomeLoss > 0 && (
-                                <div>Income Loss: -KSh {event.incomeLoss.toLocaleString()}</div>
+                                <div>Income Loss: -event.incomeLoss.toLocaleString()}</div>
                               )}
                               {event.cashflowLoss > 0 && (
-                                <div>Cashflow Loss: -KSh {event.cashflowLoss.toLocaleString()}</div>
+                                <div>Cashflow Loss: -event.cashflowLoss.toLocaleString()}</div>
                               )}
                               {event.additionalCost && event.additionalCost > 0 && (
-                                <div>Additional Cost: -KSh {event.additionalCost.toLocaleString()}</div>
+                                <div>Additional Cost: -event.additionalCost.toLocaleString()}</div>
                               )}
                             </div>
                           )}
@@ -242,7 +242,7 @@ export function PortfolioDisplay({
                         onClick={() => onEarlyCashflow(owned.id)}
                         className="w-full rounded bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
                       >
-                        Get Early Cash: KSh{" "}
+                        Get Early Cash: {" "}
                         {investment.earlyCashflowDiscount.immediateCashflow.toLocaleString()} now
                         ({(investment.earlyCashflowDiscount.discountRate * 100).toFixed(0)}%
                         discount)
@@ -276,9 +276,9 @@ export function PortfolioDisplay({
                         
                         const confirmed = await confirm(
                           `Are you sure you want to sell "${investment.name}"?\n\n` +
-                          `Current value: KSh ${salePrice.toLocaleString()}\n` +
-                          `Estimated proceeds: KSh ${proceeds.toLocaleString()}\n` +
-                          `(After exit costs: KSh ${exitCost.toLocaleString()})\n\n` +
+                          `Current value: ${salePrice.toLocaleString()}\n` +
+                          `Estimated proceeds: ${proceeds.toLocaleString()}\n` +
+                          `(After exit costs: ${exitCost.toLocaleString()})\n\n` +
                           `This will initiate a sale process that takes ${investment.exitTimeMonths} month(s) to complete.`,
                           "Sell Investment"
                         );
@@ -296,8 +296,8 @@ export function PortfolioDisplay({
                       onClick={async () => {
                         const minTopUp = investment.minimumTopUp || 1000;
                         const topUpAmount = await prompt(
-                          `Current investment: KSh ${owned.purchaseCost.toLocaleString()}\n` +
-                          `Minimum top-up: KSh ${minTopUp.toLocaleString()}\n\n` +
+                          `Current investment: ${owned.purchaseCost.toLocaleString()}\n` +
+                          `Minimum top-up: ${minTopUp.toLocaleString()}\n\n` +
                           `Enter amount to add:`,
                           minTopUp.toString(),
                           `Extend ${investment.name}`
@@ -307,7 +307,7 @@ export function PortfolioDisplay({
                           if (!isNaN(amount) && amount >= minTopUp) {
                             onExtendInvestment(owned.id, amount);
                           } else {
-                            alert(`Please enter a valid amount (minimum KSh ${minTopUp.toLocaleString()})`);
+                            alert(`Please enter a valid amount (minimum ${minTopUp.toLocaleString()})`);
                           }
                         }
                       }}

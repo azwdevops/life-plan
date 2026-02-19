@@ -578,11 +578,11 @@ function GamePageContent() {
     // Validate minimum investment
     if (investment.isFlexibleAmount && customAmount) {
       if (investment.minimumInvestment && customAmount < investment.minimumInvestment) {
-        await alert(`Minimum investment amount is KSh ${investment.minimumInvestment.toLocaleString()}`);
+        await alert(`Minimum investment amount is ${investment.minimumInvestment.toLocaleString()}`);
         return;
       }
       if (investment.maximumInvestment && customAmount > investment.maximumInvestment) {
-        await alert(`Maximum investment amount is KSh ${investment.maximumInvestment.toLocaleString()}`);
+        await alert(`Maximum investment amount is ${investment.maximumInvestment.toLocaleString()}`);
         return;
       }
     }
@@ -601,12 +601,12 @@ function GamePageContent() {
       );
 
       const confirmLoan = await confirm(
-        `Insufficient funds! You need KSh ${shortfall.toLocaleString()} more.\n\n` +
+        `Insufficient funds! You need ${shortfall.toLocaleString()} more.\n\n` +
         `Would you like to take a loan?\n` +
-        `Loan Amount: KSh ${loanAmount.toLocaleString()}\n` +
+        `Loan Amount: ${loanAmount.toLocaleString()}\n` +
         `Interest Rate: ${(interestRate * 100).toFixed(0)}% per year\n` +
         `Term: ${termMonths} months\n` +
-        `Monthly Payment: KSh ${monthlyPayment.toLocaleString()}\n\n` +
+        `Monthly Payment: ${monthlyPayment.toLocaleString()}\n\n` +
         `Click Confirm to take the loan, or Cancel to cancel purchase.`,
         "Loan Required"
       );
@@ -931,7 +931,7 @@ function GamePageContent() {
     
     // Validate top-up amount
     if (investment.minimumTopUp && topUpAmount < investment.minimumTopUp) {
-      await alert(`Minimum top-up amount is KSh ${investment.minimumTopUp.toLocaleString()}`);
+      await alert(`Minimum top-up amount is ${investment.minimumTopUp.toLocaleString()}`);
       return;
     }
 
@@ -1640,7 +1640,7 @@ function GamePageContent() {
         // Game over if cash reaches 0 or below
         if (newMoney <= 0) {
           gameOver = true;
-          gameOverReason = `Game Over: Available cash reached KSh ${newMoney.toLocaleString()}.`;
+          gameOverReason = `Game Over: Available cash reached ${newMoney.toLocaleString()}.`;
         } else if (newMoney < 0 && netCashflowThisMonth < 0) {
           // Check if user has any borrowing options
           const averageCashflow = newCashflowHistory.length > 0
@@ -1650,7 +1650,7 @@ function GamePageContent() {
           
           if (!hasQualifiedBorrowing) {
             gameOver = true;
-            gameOverReason = `Game Over: Negative cashflow (KSh ${Math.abs(netCashflowThisMonth).toLocaleString()}) and insufficient cashflow history to qualify for borrowing.`;
+            gameOverReason = `Game Over: Negative cashflow (${Math.abs(netCashflowThisMonth).toLocaleString()}) and insufficient cashflow history to qualify for borrowing.`;
           }
         }
       }

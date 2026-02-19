@@ -65,7 +65,7 @@ export function InvestmentOpportunityCard({
                 {investment.isFlexibleAmount ? "Min Investment" : "Initial Cost"}
               </div>
               <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                KSh {investment.initialCost.toLocaleString()}
+investment.initialCost.toLocaleString()}
               </div>
               {investment.isFlexibleAmount && (
                 <div className="mt-0.5 text-xs text-blue-600 dark:text-blue-400">
@@ -80,7 +80,7 @@ export function InvestmentOpportunityCard({
             <div className="rounded-lg border border-green-200 bg-green-50 p-2 dark:border-green-800 dark:bg-green-900/20">
               <div className="text-xs text-green-700 dark:text-green-300">Cashflow In</div>
               <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                +KSh {cashflowIn.toLocaleString()}
+                +cashflowIn.toLocaleString()}
               </div>
               {investment.cashflowDelayMonths > 0 && (
                 <div className="mt-0.5 text-xs text-green-600 dark:text-green-400">
@@ -100,7 +100,7 @@ export function InvestmentOpportunityCard({
             <div className="rounded-lg border border-red-200 bg-red-50 p-2 dark:border-red-800 dark:bg-red-900/20">
               <div className="text-xs text-red-700 dark:text-red-300">Cashflow Out</div>
               <div className="text-sm font-semibold text-red-600 dark:text-red-400">
-                -KSh {cashflowOut.toLocaleString()}
+                -cashflowOut.toLocaleString()}
               </div>
             </div>
           )}
@@ -137,7 +137,7 @@ export function InvestmentOpportunityCard({
                 ? "text-green-600 dark:text-green-400"
                 : "text-red-600 dark:text-red-400"
             }`}>
-              {netCashflow >= 0 ? "+" : ""}KSh {netCashflow.toLocaleString()}
+              {netCashflow >= 0 ? "+" : ""}netCashflow.toLocaleString()}
             </span>
           </div>
           {netCashflow > 0 && investment.initialCost > 0 && (
@@ -151,7 +151,7 @@ export function InvestmentOpportunityCard({
         <div className="grid grid-cols-2 gap-2">
           {investment.earlyCashflowDiscount?.available && (
             <div className="col-span-2 rounded-lg bg-green-50 p-2 text-xs text-green-800 dark:bg-green-900/20 dark:text-green-300">
-              💰 Early cash: KSh {investment.earlyCashflowDiscount.immediateCashflow.toLocaleString()} 
+              💰 Early cash: {investment.earlyCashflowDiscount.immediateCashflow.toLocaleString()} 
               ({(investment.earlyCashflowDiscount.discountRate * 100).toFixed(0)}% off)
             </div>
           )}
@@ -279,12 +279,12 @@ export function InvestmentOpportunityCard({
                   max={investment.maximumInvestment || undefined}
                   value={customAmount}
                   onChange={(e) => setCustomAmount(e.target.value)}
-                  placeholder={`Min: KSh ${(investment.minimumInvestment || investment.initialCost).toLocaleString()}`}
+                  placeholder={`Min: ${(investment.minimumInvestment || investment.initialCost).toLocaleString()}`}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                 />
                 <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  Minimum: KSh {(investment.minimumInvestment || investment.initialCost).toLocaleString()}
-                  {investment.maximumInvestment && ` | Maximum: KSh ${investment.maximumInvestment.toLocaleString()}`}
+                  Minimum: ${(investment.minimumInvestment || investment.initialCost).toLocaleString()}
+                  {investment.maximumInvestment && ` | Maximum: ${investment.maximumInvestment.toLocaleString()}`}
                 </div>
               </div>
               <button
@@ -311,7 +311,7 @@ export function InvestmentOpportunityCard({
                 setShowCustomInput(false);
                 setCustomAmount("");
               } else {
-                alert(`Please enter a valid amount (minimum KSh ${(investment.minimumInvestment || investment.initialCost).toLocaleString()})`);
+                alert(`Please enter a valid amount (minimum ${(investment.minimumInvestment || investment.initialCost).toLocaleString()})`);
               }
             } else {
               onPurchase();
@@ -325,10 +325,10 @@ export function InvestmentOpportunityCard({
           }`}
         >
           {investment.isFlexibleAmount && showCustomInput && customAmount
-            ? `Invest KSh ${parseInt(customAmount.replace(/,/g, ""), 10).toLocaleString()}`
+            ? `Invest ${parseInt(customAmount.replace(/,/g, ""), 10).toLocaleString()}`
             : canAfford 
-            ? `Purchase for KSh ${investment.initialCost.toLocaleString()}`
-            : `Need KSh ${(investment.initialCost - availableMoney).toLocaleString()} more`}
+            ? `Purchase for ${investment.initialCost.toLocaleString()}`
+            : `Need ${(investment.initialCost - availableMoney).toLocaleString()} more`}
         </button>
       )}
     </div>

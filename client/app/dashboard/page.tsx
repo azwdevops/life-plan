@@ -7,10 +7,12 @@ import "react-datepicker/dist/react-datepicker.css";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
+import { UpcomingExpensesButton } from "@/components/UpcomingExpensesButton";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useTransactions } from "@/lib/hooks/use-transactions";
-import { useLedgers, useSpendingTypes } from "@/lib/hooks/use-accounts";
+import { useLedgers, useSpendingTypes, useLedgerGroups } from "@/lib/hooks/use-accounts";
+import { useUpcomingExpenses } from "@/lib/hooks/use-upcoming-expenses";
 import { useQuery } from "@tanstack/react-query";
 import { getTransaction } from "@/lib/api/transactions";
 
@@ -22,8 +24,11 @@ export default function DashboardPage() {
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const { data: incomeTransactions = [], refetch: refetchIncome } = useTransactions("MONEY_RECEIVED");
   const { data: expenseTransactions = [], refetch: refetchExpenses } = useTransactions("MONEY_PAID");
+  const { data: transferTransactions = [], refetch: refetchTransfers } = useTransactions("JOURNAL");
   const { data: ledgers = [], refetch: refetchLedgers } = useLedgers();
   const { data: spendingTypes = [], refetch: refetchSpendingTypes } = useSpendingTypes();
+  const { data: ledgerGroups = [] } = useLedgerGroups();
+  const { data: upcomingExpenses = [] } = useUpcomingExpenses();
   const { token } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [periodType, setPeriodType] = useState<PeriodType>("month");
@@ -93,8 +98,16 @@ export default function DashboardPage() {
     });
   }, [expenseTransactions, startDate, endDate]);
 
+  const filteredTransferTransactions = useMemo(() => {
+    return transferTransactions.filter((transaction) => {
+      const transactionDate = new Date(transaction.transaction_date);
+      return transactionDate >= startDate && transactionDate <= endDate;
+    });
+  }, [transferTransactions, startDate, endDate]);
+
   // Calculate totals - ensure values are numbers
-  const totalIncome = filteredIncomeTransactions.reduce(
+  // Cash In: MONEY_RECEIVED transactions
+  const totalCashIn = filteredIncomeTransactions.reduce(
     (sum, transaction) => {
       const amount = typeof transaction.total_amount === 'string' 
         ? parseFloat(transaction.total_amount) 
@@ -103,7 +116,9 @@ export default function DashboardPage() {
     },
     0
   );
-  const totalExpenses = filteredExpenseTransactions.reduce(
+  
+  // Cash Out: MONEY_PAID transactions
+  const totalCashOut = filteredExpenseTransactions.reduce(
     (sum, transaction) => {
       const amount = typeof transaction.total_amount === 'string' 
         ? parseFloat(transaction.total_amount) 
@@ -112,7 +127,91 @@ export default function DashboardPage() {
     },
     0
   );
-  const netBalance = totalIncome - totalExpenses;
+  
+  // Transfers: JOURNAL transactions (separate, not counted in cash in/out)
+  const totalTransfers = filteredTransferTransactions.reduce(
+    (sum, transaction) => {
+      const amount = typeof transaction.total_amount === 'string' 
+        ? parseFloat(transaction.total_amount) 
+        : Number(transaction.total_amount) || 0;
+      return sum + amount;
+    },
+    0
+  );
+  
+  // Net Cash: Cash In - Cash Out (transfers are separate)
+  const netCash = totalCashIn - totalCashOut;
+
+  // Calculate total upcoming expenses
+  const totalUpcomingExpenses = upcomingExpenses.reduce(
+    (sum, expense) => {
+      const amount = typeof expense.amount === 'string' ? parseFloat(expense.amount) : Number(expense.amount) || 0;
+      return sum + amount;
+    },
+    0
+  );
+
+  // Get all transactions to calculate cash/bank balances
+  const { data: allTransactions = [] } = useTransactions();
+  const { data: allTransactionsWithItems = [] } = useQuery({
+    queryKey: ["allTransactionsWithItems", allTransactions.map(t => t.id).sort().join(',')],
+    queryFn: async () => {
+      if (!token || allTransactions.length === 0) return [];
+      const transactions = await Promise.all(
+        allTransactions.map((t) => getTransaction(token, t.id))
+      );
+      return transactions;
+    },
+    enabled: allTransactions.length > 0 && !!token,
+  });
+
+  // Calculate cash/bank account balances
+  const actualCashBankTotal = useMemo(() => {
+    // Get bank and cash account ledger groups
+    const bankCashGroups = ledgerGroups.filter(
+      (group) =>
+        group.category === "bank_accounts" || group.category === "cash_accounts"
+    );
+    const bankCashLedgerIds = new Set(
+      ledgers
+        .filter((ledger) =>
+          bankCashGroups.some((group) => group.id === ledger.ledger_group_id)
+        )
+        .map((ledger) => ledger.id)
+    );
+
+    // Calculate balances for cash/bank accounts (debit - credit for assets)
+    const ledgerBalances = new Map<number, number>();
+
+    if (allTransactionsWithItems.length > 0) {
+      allTransactionsWithItems.forEach((transaction) => {
+        transaction.items.forEach((item) => {
+          if (bankCashLedgerIds.has(item.ledger_id)) {
+            const amount =
+              typeof item.amount === "string"
+                ? parseFloat(item.amount)
+                : Number(item.amount) || 0;
+
+            const existing = ledgerBalances.get(item.ledger_id) || 0;
+            // For assets: DEBIT increases balance, CREDIT decreases balance
+            if (item.entry_type === "DEBIT") {
+              ledgerBalances.set(item.ledger_id, existing + amount);
+            } else if (item.entry_type === "CREDIT") {
+              ledgerBalances.set(item.ledger_id, existing - amount);
+            }
+          }
+        });
+      });
+    }
+
+    // Sum all positive balances (negative balances are overdrafts/liabilities)
+    return Array.from(ledgerBalances.values())
+      .filter((balance) => balance > 0)
+      .reduce((sum, balance) => sum + balance, 0);
+  }, [allTransactionsWithItems, ledgers, ledgerGroups]);
+
+  // Expected Net = (Actual Cash/Bank + Cash In - Cash Out) - Upcoming Expenses
+  const expectedNet = actualCashBankTotal + totalCashIn - totalCashOut - totalUpcomingExpenses;
 
   // Create a map of spending_type_id to spending_type name
   const spendingTypeMap = useMemo(() => {
@@ -156,6 +255,7 @@ export default function DashboardPage() {
       await Promise.all([
         refetchIncome(),
         refetchExpenses(),
+        refetchTransfers(),
         refetchLedgers(),
         refetchSpendingTypes(),
       ]);
@@ -389,49 +489,118 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-3">
-              <div className="text-center p-4 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <div className="mb-2 text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400">
-                  KSh {totalIncome.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                    useGrouping: true,
-                  })}
+            <div className="flex flex-wrap gap-4">
+              {/* Current Month Card */}
+              <div className="flex-1 min-w-[280px] rounded-lg border-2 border-blue-300 bg-blue-50 p-3 dark:border-blue-700 dark:bg-blue-900/20">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                      Current Month
+                    </div>
+                    <span className="text-xs rounded-full bg-blue-200 px-2 py-0.5 text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                      Active
+                    </span>
+                  </div>
                 </div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                  Total Income
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash In:</span>
+                    <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                      +{totalCashIn.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                        useGrouping: true,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400">Cash Out:</span>
+                    <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                      -{totalCashOut.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                        useGrouping: true,
+                      })}
+                    </span>
+                  </div>
+                  <div className="border-t border-blue-300 pt-2 dark:border-blue-600">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Net:</span>
+                      <span
+                        className={`text-base font-bold ${
+                          netCash >= 0
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {netCash >= 0 ? "+" : ""}{netCash.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                          useGrouping: true,
+                        })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="text-center p-4 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <div className="mb-2 text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400">
-                  KSh {totalExpenses.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                    useGrouping: true,
-                  })}
+
+              {/* Next Month Card */}
+              <div className="flex-1 min-w-[280px] rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                    Next Month
+                  </div>
                 </div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                  Total Expenses
-                </div>
-              </div>
-              <div className="text-center p-4 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <div className={`mb-2 text-2xl sm:text-3xl font-bold ${
-                  netBalance >= 0 
-                    ? "text-blue-600 dark:text-blue-400" 
-                    : "text-red-600 dark:text-red-400"
-                }`}>
-                  KSh {netBalance.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                    useGrouping: true,
-                  })}
-                </div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                  Net Balance
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400">Current Cash:</span>
+                    <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                      {actualCashBankTotal.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                        useGrouping: true,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400">Upcoming Expenses:</span>
+                    <span className="text-sm font-bold text-orange-600 dark:text-orange-400">
+                      -{Number(totalUpcomingExpenses).toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                        useGrouping: true,
+                      })}
+                    </span>
+                  </div>
+                  <div className="mb-2 flex justify-center">
+                    <UpcomingExpensesButton />
+                  </div>
+                  <div className="border-t border-zinc-300 pt-2 dark:border-zinc-600">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Expected Net:</span>
+                      <span
+                        className={`text-base font-bold ${
+                          expectedNet >= 0
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {expectedNet >= 0 ? "+" : ""}{expectedNet.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                          useGrouping: true,
+                        })}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-right text-xs text-zinc-500 dark:text-zinc-400">
+                      {expectedNet >= 0 ? "✓ Can cover expenses" : "⚠ Insufficient funds"}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+
 
           {/* Expenses by Spending Type Chart */}
           <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 md:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -462,7 +631,7 @@ export default function DashboardPage() {
                               maximumFractionDigits: 2,
                               useGrouping: true,
                             });
-                            return `${entry.name}: ${entry.percentage}% (KSh ${amount})`;
+                            return `${entry.name}: ${entry.percentage}% (${amount})`;
                         }}
                           outerRadius="70%"
                         fill="#8884d8"
@@ -478,7 +647,7 @@ export default function DashboardPage() {
                       <Tooltip
                         formatter={(value: number | undefined) => {
                           if (value === undefined) return "";
-                          return `KSh ${value.toLocaleString("en-US", {
+                          return `${value.toLocaleString("en-US", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                             useGrouping: true,
@@ -516,7 +685,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="text-right">
                           <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            KSh {item.value.toLocaleString("en-US", {
+                            {item.value.toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                               useGrouping: true,
@@ -552,4 +721,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 

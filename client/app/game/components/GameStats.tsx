@@ -208,7 +208,7 @@ export function GameStats({ gameState }: GameStatsProps) {
           Available Cash
         </div>
         <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-          KSh {gameState.currentMoney.toLocaleString()}
+gameState.currentMoney.toLocaleString()}
         </div>
       </div>
 
@@ -217,7 +217,7 @@ export function GameStats({ gameState }: GameStatsProps) {
           Portfolio Value
         </div>
         <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          KSh {totalPortfolioValue.toLocaleString()}
+totalPortfolioValue.toLocaleString()}
         </div>
         {totalAppreciation !== 0 && (
           <div className={`text-xs ${
@@ -226,12 +226,12 @@ export function GameStats({ gameState }: GameStatsProps) {
               : "text-red-600 dark:text-red-400"
           }`}>
             {totalAppreciation > 0 ? "📈" : "📉"} 
-            {totalAppreciation > 0 ? "+" : ""}KSh {Math.abs(totalAppreciation).toLocaleString()} 
+            {totalAppreciation > 0 ? "+" : ""}Math.abs(totalAppreciation).toLocaleString()} 
             ({totalAppreciation > 0 ? "+" : ""}{((totalAppreciation / totalPurchaseCost) * 100).toFixed(1)}%)
           </div>
         )}
         <div className="text-xs text-zinc-500 dark:text-zinc-400">
-          Purchase cost: KSh {totalPurchaseCost.toLocaleString()}
+          Purchase cost: totalPurchaseCost.toLocaleString()}
         </div>
       </div>
 
@@ -240,7 +240,7 @@ export function GameStats({ gameState }: GameStatsProps) {
           Monthly Income
         </div>
         <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          +KSh {monthlyPassiveIncome.toLocaleString()}
+          +monthlyPassiveIncome.toLocaleString()}
         </div>
         <div className="text-xs text-zinc-500 dark:text-zinc-400">
           (Profit recognized)
@@ -253,7 +253,7 @@ export function GameStats({ gameState }: GameStatsProps) {
           Accrued Income
         </div>
         <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-          KSh {gameState.accruedIncome.toLocaleString()}
+gameState.accruedIncome.toLocaleString()}
         </div>
         <div className="text-xs text-zinc-500 dark:text-zinc-400">
           (Earned, not received)
@@ -266,7 +266,7 @@ export function GameStats({ gameState }: GameStatsProps) {
             Total Debt
           </div>
           <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-            KSh {gameState.totalDebt.toLocaleString()}
+gameState.totalDebt.toLocaleString()}
           </div>
           <div className="text-xs text-red-500 dark:text-red-400">
             {gameState.loans.length} active loan{gameState.loans.length > 1 ? "s" : ""}
@@ -280,10 +280,10 @@ export function GameStats({ gameState }: GameStatsProps) {
             Taxes This Month
           </div>
           <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            -KSh {gameState.monthlyTaxPaid.toLocaleString()}
+            -gameState.monthlyTaxPaid.toLocaleString()}
           </div>
           <div className="text-xs text-purple-500 dark:text-purple-400">
-            Total paid: KSh {gameState.totalTaxPaid.toLocaleString()}
+            Total paid: gameState.totalTaxPaid.toLocaleString()}
           </div>
         </div>
       )}
@@ -326,14 +326,14 @@ export function GameStats({ gameState }: GameStatsProps) {
               Opportunity Cost This Month
             </span>
             <span className="text-lg font-bold text-orange-700 dark:text-orange-300">
-              -KSh {gameState.monthlyOpportunityCost.toLocaleString()}
+              -gameState.monthlyOpportunityCost.toLocaleString()}
             </span>
           </div>
           <div className="text-xs text-orange-600 dark:text-orange-400">
             Cost of capital tied up in lock-in periods and illiquid investments
           </div>
           <div className="mt-1 text-xs text-orange-500 dark:text-orange-400">
-            Total opportunity cost: KSh {gameState.totalOpportunityCost.toLocaleString()}
+            Total opportunity cost: gameState.totalOpportunityCost.toLocaleString()}
           </div>
         </div>
       )}
