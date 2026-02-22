@@ -22,6 +22,7 @@ export function useCreateTransaction() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["ledger-balances"] });
     },
   });
 }
@@ -70,6 +71,7 @@ export function useUpdateTransaction() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["transactions", data.id] });
+      queryClient.invalidateQueries({ queryKey: ["ledger-balances"] });
       queryClient.invalidateQueries({ queryKey: ["ledger-report"] });
       queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
     },
@@ -87,6 +89,7 @@ export function useDeleteTransaction() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["ledger-balances"] });
       queryClient.invalidateQueries({ queryKey: ["ledger-report"] });
       queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
     },

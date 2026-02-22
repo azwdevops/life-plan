@@ -259,6 +259,79 @@ class LedgerEntry(BaseModel):
         from_attributes = True
 
 
+class LedgerBalanceItem(BaseModel):
+    """Balance for one ledger: total debits minus total credits (all-time)."""
+    ledger_id: int
+    ledger_name: str
+    balance: Decimal
+
+
+class LedgerBalancesResponse(BaseModel):
+    items: List[LedgerBalanceItem]
+
+
+@router.get("/ledger-balances", response_model=LedgerBalancesResponse)
+async def get_ledger_balances(
+    parent_group_name: Optional[str] = Query(None, description="Filter by parent ledger group name (e.g. 'Current Assets')"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get per-ledger balance (total debit minus total credit) for each ledger.
+    Uses a single aggregated query. Optionally filter by parent group name.
+    Ledgers with no transactions appear with balance 0.
+    """
+    balance_subq = (
+        db.query(
+            TransactionItem.ledger_id,
+            (
+                func.sum(
+                    case(
+                        (TransactionItem.entry_type == EntryType.DEBIT, TransactionItem.amount),
+                        else_=0,
+                    )
+                )
+                - func.sum(
+                    case(
+                        (TransactionItem.entry_type == EntryType.CREDIT, TransactionItem.amount),
+                        else_=0,
+                    )
+                )
+            ).label("balance"),
+        )
+        .join(Transaction, Transaction.id == TransactionItem.transaction_id)
+        .filter(Transaction.user_id == current_user.id)
+        .group_by(TransactionItem.ledger_id)
+    ).subquery()
+
+    query = (
+        db.query(
+            Ledger.id.label("ledger_id"),
+            Ledger.name.label("ledger_name"),
+            func.coalesce(balance_subq.c.balance, 0).label("balance"),
+        )
+        .join(LedgerGroup, LedgerGroup.id == Ledger.ledger_group_id)
+        .join(ParentLedgerGroup, ParentLedgerGroup.id == LedgerGroup.parent_ledger_group_id)
+        .outerjoin(balance_subq, balance_subq.c.ledger_id == Ledger.id)
+        .filter(Ledger.user_id == current_user.id)
+        .filter(Ledger.is_active == True)
+    )
+    if parent_group_name is not None and parent_group_name.strip() != "":
+        query = query.filter(ParentLedgerGroup.name == parent_group_name.strip())
+
+    rows = query.order_by(Ledger.name).all()
+
+    items = [
+        LedgerBalanceItem(
+            ledger_id=row.ledger_id,
+            ledger_name=row.ledger_name,
+            balance=Decimal(str(row.balance)),
+        )
+        for row in rows
+    ]
+    return LedgerBalancesResponse(items=items)
+
+
 class LedgerReportResponse(BaseModel):
     ledger_id: int
     ledger_name: str

@@ -1,6 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { getTrialBalance, getLedgerReport } from "@/lib/api/reports";
+import { getTrialBalance, getLedgerReport, getLedgerBalances } from "@/lib/api/reports";
 import { useAuth } from "./use-auth";
+
+export function useLedgerBalances(parentGroupName?: string) {
+  const { token } = useAuth();
+
+  return useQuery({
+    queryKey: ["ledger-balances", parentGroupName ?? "all"],
+    queryFn: () => {
+      if (!token) throw new Error("Not authenticated");
+      return getLedgerBalances(token, parentGroupName);
+    },
+    enabled: !!token,
+    staleTime: 2 * 60 * 1000,
+  });
+}
 
 export function useTrialBalance(startDate: string, endDate: string) {
   const { token } = useAuth();

@@ -19,9 +19,8 @@ import {
   useParentLedgerGroups,
   useCreateLedgerGroup,
 } from "@/lib/hooks/use-accounts";
-import { useCreateTransaction, useTransactions } from "@/lib/hooks/use-transactions";
-import { useQuery } from "@tanstack/react-query";
-import { getTransaction } from "@/lib/api/transactions";
+import { useCreateTransaction } from "@/lib/hooks/use-transactions";
+import { useLedgerBalances } from "@/lib/hooks/use-reports";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
 export default function CurrentAssetsPage() {
@@ -32,7 +31,7 @@ export default function CurrentAssetsPage() {
   const { data: groups = [], refetch: refetchGroups } = useLedgerGroups();
   const { data: parentGroups = [], refetch: refetchParentGroups } = useParentLedgerGroups();
   const { token } = useAuth();
-  const { data: allTransactions = [], refetch: refetchTransactions } = useTransactions();
+  const { data: ledgerBalancesData, refetch: refetchLedgerBalances } = useLedgerBalances("Current Assets");
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
@@ -422,7 +421,7 @@ export default function CurrentAssetsPage() {
         refetchLedgers(),
         refetchGroups(),
         refetchParentGroups(),
-        refetchTransactions(),
+        refetchLedgerBalances(),
       ]);
     } catch (err) {
       console.error("Error refreshing data:", err);
@@ -431,69 +430,28 @@ export default function CurrentAssetsPage() {
     }
   };
 
-  // Fetch all transactions with items to calculate asset balances
-  const transactionIds = allTransactions.map(t => t.id).sort().join(',');
-  const { data: transactionsWithItems = [] } = useQuery({
-    queryKey: ["allTransactionsWithItems", transactionIds],
-    queryFn: async () => {
-      if (!token || allTransactions.length === 0) return [];
-      const transactions = await Promise.all(
-        allTransactions.map((t) => getTransaction(token, t.id))
-      );
-      return transactions;
-    },
-    enabled: allTransactions.length > 0 && !!token,
-  });
-
-  // Calculate asset balances (for assets: debit - credit)
+  // Asset balances from API: total debit minus total credit per ledger (efficient server-side aggregation)
   const assetsByLedger = useMemo(() => {
-    const ledgerBalances = new Map<number, number>();
-
-    // Process all transactions to calculate balances
-    if (transactionsWithItems.length > 0) {
-      transactionsWithItems.forEach((transaction) => {
-        transaction.items.forEach((item) => {
-          // Check if this ledger is a current asset ledger
-          const ledger = ledgers.find(l => l.id === item.ledger_id);
-          if (ledger && currentAssetLedgers.some(ca => ca.id === ledger.id)) {
-            const amount =
-              typeof item.amount === "string"
-                ? parseFloat(item.amount)
-                : Number(item.amount) || 0;
-
-            const existing = ledgerBalances.get(item.ledger_id) || 0;
-            // For assets: DEBIT increases balance, CREDIT decreases balance
-            if (item.entry_type === "DEBIT") {
-              ledgerBalances.set(item.ledger_id, existing + amount);
-            } else if (item.entry_type === "CREDIT") {
-              ledgerBalances.set(item.ledger_id, existing - amount);
-            }
-          }
-        });
-      });
-    }
-
-    // Calculate total assets (for percentage calculation)
-    const totalAssets = Array.from(ledgerBalances.values())
-      .filter(balance => balance > 0) // Only show positive balances
-      .reduce((sum, balance) => sum + balance, 0);
-
-    // Build result array with ledger names, only including positive balances
-    const result = Array.from(ledgerBalances.entries())
-      .filter(([_, balance]) => balance > 0) // Only show positive balances
-      .map(([ledgerId, balance]) => {
-        const ledger = ledgers.find(l => l.id === ledgerId);
+    const items = ledgerBalancesData?.items ?? [];
+    const withPositiveBalance = items.filter(
+      (item) => typeof item.balance === "number" ? item.balance > 0 : Number(item.balance) > 0
+    );
+    const totalAssets = withPositiveBalance.reduce(
+      (sum, item) => sum + (typeof item.balance === "number" ? item.balance : Number(item.balance)),
+      0
+    );
+    return withPositiveBalance
+      .map((item) => {
+        const value = typeof item.balance === "number" ? item.balance : Number(item.balance);
         return {
-          ledger_id: ledgerId,
-          name: ledger?.name || `Ledger ${ledgerId}`,
-          value: balance,
-          percentage: totalAssets > 0 ? (balance / totalAssets) * 100 : 0,
+          ledger_id: item.ledger_id,
+          name: item.ledger_name,
+          value,
+          percentage: totalAssets > 0 ? (value / totalAssets) * 100 : 0,
         };
       })
-      .sort((a, b) => b.value - a.value); // Sort by balance descending
-
-    return result;
-  }, [transactionsWithItems, ledgers, currentAssetLedgers]);
+      .sort((a, b) => b.value - a.value);
+  }, [ledgerBalancesData?.items]);
 
   // Colors for pie chart
   const COLORS = [

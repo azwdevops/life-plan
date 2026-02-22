@@ -87,6 +87,46 @@ export interface LedgerReportResponse {
   total_credit: number;
 }
 
+export interface LedgerBalanceItem {
+  ledger_id: number;
+  ledger_name: string;
+  balance: number;
+}
+
+export interface LedgerBalancesResponse {
+  items: LedgerBalanceItem[];
+}
+
+export async function getLedgerBalances(
+  token: string,
+  parentGroupName?: string
+): Promise<LedgerBalancesResponse> {
+  const params = new URLSearchParams();
+  if (parentGroupName != null && parentGroupName.trim() !== "") {
+    params.append("parent_group_name", parentGroupName.trim());
+  }
+  const qs = params.toString();
+  const url = `${API_BASE_URL}/api/v1/reports/ledger-balances${qs ? `?${qs}` : ""}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to fetch ledger balances");
+  }
+
+  return response.json();
+}
+
 export async function getLedgerReport(
   token: string,
   ledgerId: number,
