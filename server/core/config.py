@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str = _env_config("PESA_PLAN_DATABASE_URL")
+    OPENROUTER_API_KEY: str = _env_config("OPENROUTER_API_KEY")
 
 
 settings = Settings()

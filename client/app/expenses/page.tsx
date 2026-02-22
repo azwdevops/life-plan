@@ -22,7 +22,7 @@ import {
   useParentLedgerGroups,
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction, useTransactions } from "@/lib/hooks/use-transactions";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTransaction } from "@/lib/api/transactions";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
@@ -38,6 +38,7 @@ export default function ExpensesPage() {
   const { data: spendingTypes = [], refetch: refetchSpendingTypes } = useSpendingTypes();
   const { data: expenseTransactions = [], refetch: refetchExpenses } = useTransactions("MONEY_PAID");
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createSpendingTypeMutation = useCreateSpendingType();
@@ -270,12 +271,13 @@ export default function ExpensesPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["expenseTransactionsWithItems"] });
       await Promise.all([
         refetchExpenses(),
         refetchLedgers(),
         refetchSpendingTypes(),
       ]);
-      // Refetch expense transactions with items after expenses are refetched
       if (filteredExpenseTransactions.length > 0) {
         await refetchExpenseTransactionsWithItems();
       }

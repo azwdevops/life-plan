@@ -19,9 +19,8 @@ import {
   useParentLedgerGroups,
   useCreateLedgerGroup,
 } from "@/lib/hooks/use-accounts";
-import { useCreateTransaction, useTransactions } from "@/lib/hooks/use-transactions";
-import { useQuery } from "@tanstack/react-query";
-import { getTransaction } from "@/lib/api/transactions";
+import { useCreateTransaction } from "@/lib/hooks/use-transactions";
+import { useLedgerBalances } from "@/lib/hooks/use-reports";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
 export default function LoansPage() {
@@ -31,8 +30,7 @@ export default function LoansPage() {
   const { data: ledgers = [], isLoading: ledgersLoading, refetch: refetchLedgers } = useLedgers();
   const { data: groups = [], refetch: refetchGroups } = useLedgerGroups();
   const { data: parentGroups = [], refetch: refetchParentGroups } = useParentLedgerGroups();
-  const { token } = useAuth();
-  const { data: allTransactions = [], refetch: refetchTransactions } = useTransactions();
+  const { data: ledgerBalancesData, refetch: refetchLedgerBalances } = useLedgerBalances("Long Term Liabilities");
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
@@ -375,69 +373,26 @@ export default function LoansPage() {
     setShowCreateLiabilityDialog(true);
   };
 
-  // Fetch all transactions with items to calculate liability balances
-  const transactionIds = allTransactions.map(t => t.id).sort().join(',');
-  const { data: transactionsWithItems = [] } = useQuery({
-    queryKey: ["allTransactionsWithItems", transactionIds],
-    queryFn: async () => {
-      if (!token || allTransactions.length === 0) return [];
-      const transactions = await Promise.all(
-        allTransactions.map((t) => getTransaction(token, t.id))
-      );
-      return transactions;
-    },
-    enabled: allTransactions.length > 0 && !!token,
-  });
-
-  // Calculate liability balances (for liabilities: credit - debit)
+  // Liability balances from API (balance = debit - credit); for liabilities we show credit - debit
   const liabilitiesByLedger = useMemo(() => {
-    const ledgerBalances = new Map<number, number>();
-
-    // Process all transactions to calculate balances
-    if (transactionsWithItems.length > 0) {
-      transactionsWithItems.forEach((transaction) => {
-        transaction.items.forEach((item) => {
-          // Check if this ledger is a long-term liability ledger
-          const ledger = ledgers.find(l => l.id === item.ledger_id);
-          if (ledger && longTermLiabilityLedgers.some(ltl => ltl.id === ledger.id)) {
-            const amount =
-              typeof item.amount === "string"
-                ? parseFloat(item.amount)
-                : Number(item.amount) || 0;
-
-            const existing = ledgerBalances.get(item.ledger_id) || 0;
-            // For liabilities: CREDIT increases balance, DEBIT decreases balance
-            if (item.entry_type === "CREDIT") {
-              ledgerBalances.set(item.ledger_id, existing + amount);
-            } else if (item.entry_type === "DEBIT") {
-              ledgerBalances.set(item.ledger_id, existing - amount);
-            }
-          }
-        });
-      });
-    }
-
-    // Calculate total liabilities (for percentage calculation)
-    const totalLiabilities = Array.from(ledgerBalances.values())
-      .filter(balance => balance > 0) // Only show positive balances (outstanding liabilities)
-      .reduce((sum, balance) => sum + balance, 0);
-
-    // Build result array with ledger names, only including positive balances
-    const result = Array.from(ledgerBalances.entries())
-      .filter(([_, balance]) => balance > 0) // Only show outstanding liabilities
-      .map(([ledgerId, balance]) => {
-        const ledger = ledgers.find(l => l.id === ledgerId);
-        return {
-          ledger_id: ledgerId,
-          name: ledger?.name || `Ledger ${ledgerId}`,
-          value: balance,
-          percentage: totalLiabilities > 0 ? (balance / totalLiabilities) * 100 : 0,
-        };
+    const items = ledgerBalancesData?.items ?? [];
+    const withOutstanding = items
+      .map((item) => {
+        const raw = typeof item.balance === "number" ? item.balance : Number(item.balance);
+        const value = -raw; // credit - debit for liabilities
+        return { ...item, value };
       })
-      .sort((a, b) => b.value - a.value); // Sort by balance descending
-
-    return result;
-  }, [transactionsWithItems, ledgers, longTermLiabilityLedgers]);
+      .filter((item) => item.value > 0);
+    const totalLiabilities = withOutstanding.reduce((sum, item) => sum + item.value, 0);
+    return withOutstanding
+      .map((item) => ({
+        ledger_id: item.ledger_id,
+        name: item.ledger_name,
+        value: item.value,
+        percentage: totalLiabilities > 0 ? (item.value / totalLiabilities) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [ledgerBalancesData?.items]);
 
   // Colors for pie chart
   const COLORS = [
@@ -518,7 +473,7 @@ export default function LoansPage() {
         refetchLedgers(),
         refetchGroups(),
         refetchParentGroups(),
-        refetchTransactions(),
+        refetchLedgerBalances(),
       ]);
     } catch (err) {
       console.error("Error refreshing data:", err);

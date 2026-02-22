@@ -31,6 +31,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
     { icon: "💸", label: "Expenses", href: "/expenses", type: "link" as const },
     { icon: "💬", label: "Feedback", href: "/feedback", type: "link" as const },
     { icon: "🎮", label: "Investment Game", href: "/game", type: "link" as const },
+    { icon: "✨", label: "Self Discovery", href: "/game/self-discovery", type: "link" as const },
     { icon: "💰", label: "Income", href: "/income", type: "link" as const },
     { icon: "📝", label: "Journal", href: "/journal", type: "link" as const },
     { icon: "📋", label: "Liabilities", href: null, type: "expandable" as const, subMenuKey: "liabilities" },
