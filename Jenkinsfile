@@ -41,36 +41,19 @@ pipeline {
                             }
                         }
 
-                        # Use direct path to avoid alias resolution issues
-                        # Node 24.13.0 is installed, use it directly via PATH
-                        export PATH="\$NVM_DIR/versions/node/v24.13.0/bin:\$PATH"
+                        # Use Node 20 (Next.js 16 supports Node 18.18+, 20+)
+                        nvm use 20
+                        if ! command -v node >/dev/null 2>&1; then
+                            echo "❌ Node 20 not found. Available:"
+                            ls "\$NVM_DIR/versions/node/" 2>/dev/null || true
+                            exit 1
+                        fi
 
                         echo "🔍 Node versions"
                         node -v
                         npm -v
                         echo "Node path: \$(which node)"
                         echo "NPM path: \$(which npm)"
-                        
-                        # Verify Node version is correct
-                        NODE_VERSION=\$(node -v)
-                        if [[ "\$NODE_VERSION" != "v24.13.0" ]]; then
-                            echo "⚠️  Node version mismatch: \$NODE_VERSION (expected v24.13.0)"
-                            echo "Trying alternative method..."
-                            # Fallback: try to find and use the installed version
-                            if [ -d "\$NVM_DIR/versions/node/v24.13.0" ]; then
-                                export PATH="\$NVM_DIR/versions/node/v24.13.0/bin:\$PATH"
-                            elif [ -d "\$NVM_DIR/versions/node/v24.13.0" ]; then
-                                # Try without 'v' prefix
-                                export PATH="\$NVM_DIR/versions/node/24.13.0/bin:\$PATH"
-                            else
-                                echo "❌ Node 24.13.0 not found in expected location"
-                                echo "Available Node installations:"
-                                ls -la "\$NVM_DIR/versions/node/" 2>/dev/null || echo "No node versions directory found"
-                                exit 1
-                            fi
-                            node -v
-                            npm -v
-                        fi
 
                         npm install
                         npm run build
