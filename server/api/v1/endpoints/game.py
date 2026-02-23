@@ -60,7 +60,7 @@ def _call_openrouter(messages: list, model: Optional[str] = None, max_tokens: in
             "messages": messages,
             "max_tokens": max_tokens,
         },
-        timeout=60.0,
+        timeout=240.0,
     )
     response.raise_for_status()
     data = response.json()
@@ -124,8 +124,8 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "or 'Rarely/Sometimes/Often'). Options should differ clearly from each other and reflect a range of "
             "realistic responses (e.g. one might be self-critical, one avoidant, one balanced, one defensive). "
             "Write as short sentences or phrases that sound like real life, not textbook language.\n\n"
-            "Return ONLY a valid JSON array of objects. Each object must have: \"question\" (string) and \"options\" "
-            "(array of 4 objects with \"key\" (a/b/c/d) and \"text\" (string)). No markdown, no explanation, only the JSON array."
+            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
+            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
         ),
         "kind_of_wife": (
             "You are creating an assessment to help a man clarify the kind of wife he is looking for. "
@@ -144,8 +144,8 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "choices (e.g. 'She pushes me to go for it and handles the home front' vs 'She wants us to decide "
             "everything together' vs 'She has her own hustle and expects me to support it'). No textbook or "
             "generic wording—explore the full range of what men might actually want or recognise in a wife.\n\n"
-            "Return ONLY a valid JSON array of objects. Each object must have: \"question\" (string) and \"options\" "
-            "(array of 4 objects with \"key\" (a/b/c/d) and \"text\" (string)). No markdown, no explanation, only the JSON array."
+            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
+            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
         ),
         "attachment_style": (
             "You are a psychologist familiar with attachment theory (Bowlby, Ainsworth). Create an assessment to help "
@@ -166,8 +166,8 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "and focus on my own things' vs 'I check in a lot to make sure we're okay' vs 'I feel relieved when they're "
             "busy so I don't have to depend on them'). No textbook labels in the options—describe the behaviour or feeling, "
             "not the style name.\n\n"
-            "Return ONLY a valid JSON array of objects. Each object must have: \"question\" (string) and \"options\" "
-            "(array of 4 objects with \"key\" (a/b/c/d) and \"text\" (string)). No markdown, no explanation, only the JSON array."
+            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
+            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
         ),
         "what_drives_me": (
             "You are creating an assessment to help someone understand what drives them to pursue goals, projects, or endeavours. "
@@ -186,15 +186,15 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "Use short sentences that sound like real life (e.g. 'I need to see progress or I lose steam' vs 'I keep going "
             "even when no one is watching' vs 'I want people to know I did it' vs 'I do it so I don't feel I wasted my chance'). "
             "No textbook labels; describe the thought, feeling, or behaviour.\n\n"
-            "Return ONLY a valid JSON array of objects. Each object must have: \"question\" (string) and \"options\" "
-            "(array of 4 objects with \"key\" (a/b/c/d) and \"text\" (string)). No markdown, no explanation, only the JSON array."
+            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
+            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
         ),
     }
     prompt = test_prompts.get(
         body.test_id,
         f"Generate exactly 8 multiple-choice questions for the topic '{body.test_id}'. "
         "Each question must have exactly 4 options. Return ONLY a valid JSON array of objects with "
-        "\"question\" and \"options\" (array of 4 objects with \"key\" and \"text\"). No markdown, only JSON.",
+        '"question" and "options" (array of 4 objects with "key" and "text"). No markdown, only JSON.',
     )
     try:
         content = _call_openrouter(
