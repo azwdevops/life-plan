@@ -15,7 +15,8 @@
     "react": "19.2.3",
     "react-datepicker": "^9.1.0",
     "react-dom": "19.2.3",
-    "recharts": "^3.7.0"
+    "recharts": "^3.7.0",
+    "typescript": "^5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -24,8 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "tailwindcss": "^4"
   },
   "optionalDependencies": {
     "@next/swc-linux-x64-gnu": "^16.1.6"

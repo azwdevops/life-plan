@@ -55,7 +55,8 @@ pipeline {
                         echo "Node path: \$(which node)"
                         echo "NPM path: \$(which npm)"
 
-                        npm install
+                        # Install all deps including dev (needed for next build; NODE_ENV=production skips devDependencies)
+                        npm install --include=dev
                         npm run build
 
                         echo "🚀 Restarting PM2"
