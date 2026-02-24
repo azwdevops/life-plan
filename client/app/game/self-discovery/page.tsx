@@ -8,11 +8,13 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import type { GameApiProvider } from "@/lib/api/game";
+import { generateQuestions } from "@/lib/api/game";
 import {
   TESTS,
   API_OPTIONS,
   MODELS_BY_PROVIDER,
   saveSettings,
+  saveSession,
   loadSession,
 } from "./constants";
 
@@ -23,6 +25,8 @@ export default function SelfDiscoveryListPage() {
   const [api, setApi] = useState<GameApiProvider>("openrouter");
   const [model, setModel] = useState<string>(() => MODELS_BY_PROVIDER.openrouter[0].value);
   const [hasSavedByTestId, setHasSavedByTestId] = useState<Record<string, boolean>>({});
+  const [generatingTestId, setGeneratingTestId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.push("/login");
@@ -37,9 +41,26 @@ export default function SelfDiscoveryListPage() {
     setHasSavedByTestId(next);
   }, []);
 
-  const handleStart = (testId: string) => {
+  const handleContinue = (testId: string) => {
     saveSettings({ api, model });
     router.push(`/game/self-discovery/${testId}`);
+  };
+
+  const handleGenerateQuestions = (testId: string) => {
+    saveSettings({ api, model });
+    setGenerateError(null);
+    setGeneratingTestId(testId);
+    generateQuestions(testId, api, model)
+      .then((res) => {
+        saveSession(testId, { questions: res.questions, answers: [] });
+        setHasSavedByTestId((prev) => ({ ...prev, [testId]: true }));
+        setGeneratingTestId(null);
+        router.push(`/game/self-discovery/${testId}`);
+      })
+      .catch((e) => {
+        setGenerateError(e instanceof Error ? e.message : "Failed to generate questions");
+        setGeneratingTestId(null);
+      });
   };
 
   if (!isAuthenticated && !isLoading) return null;
@@ -102,26 +123,46 @@ export default function SelfDiscoveryListPage() {
             </div>
           </div>
 
+          {generateError && (
+            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+              {generateError}
+            </div>
+          )}
+
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {TESTS.map((test) => (
-              <div
-                key={test.id}
-                className="flex min-h-[180px] flex-col justify-between rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <div>
-                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{test.name}</h2>
-                  <p className="mt-2 text-justify text-sm text-zinc-600 dark:text-zinc-400">{test.description}</p>
+            {TESTS.map((test) => {
+              const hasSaved = hasSavedByTestId[test.id];
+              const isGenerating = generatingTestId === test.id;
+              return (
+                <div
+                  key={test.id}
+                  className="flex min-h-[180px] flex-col justify-between rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div>
+                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{test.name}</h2>
+                    <p className="mt-2 text-justify text-sm text-zinc-600 dark:text-zinc-400">{test.description}</p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2 justify-end">
+                    {hasSaved && (
+                      <button
+                        onClick={() => handleContinue(test.id)}
+                        disabled={isGenerating}
+                        className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:focus:ring-offset-zinc-900"
+                      >
+                        Continue
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleGenerateQuestions(test.id)}
+                      disabled={isGenerating}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
+                    >
+                      {isGenerating ? "Generating…" : hasSaved ? "Generate new questions" : "Generate questions"}
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={() => handleStart(test.id)}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
-                  >
-                    {hasSavedByTestId[test.id] ? "Continue" : "Start"}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </main>

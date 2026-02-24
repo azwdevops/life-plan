@@ -111,6 +111,17 @@ async def generate_questions(body: GenerateQuestionsRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only 'openrouter' API is supported for now",
         )
+    RANDOMIZE_OPTIONS_INSTRUCTION = (
+        "\n\nRANDOMIZE OPTION ORDER: For each question, shuffle the order of the four options so that the same "
+        "underlying type or category is NOT always in the same position (e.g. do not always put the first type at A, "
+        "the second at B, etc.). Assign keys a/b/c/d after shuffling. This is essential for a valid evaluation—"
+        "respondents must not be able to get a consistent result by always choosing the same letter."
+    )
+    JSON_FORMAT_TAIL = (
+        ' Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
+        '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
+    )
+
     test_prompts = {
         "self_esteem": (
             "You are a psychologist creating a self-esteem assessment that feels real and varied. "
@@ -123,9 +134,9 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "specific things people actually do, say, or feel in that situation—not scales (e.g. never 'Strongly agree' "
             "or 'Rarely/Sometimes/Often'). Options should differ clearly from each other and reflect a range of "
             "realistic responses (e.g. one might be self-critical, one avoidant, one balanced, one defensive). "
-            "Write as short sentences or phrases that sound like real life, not textbook language.\n\n"
-            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
-            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
+            "Write as short sentences or phrases that sound like real life, not textbook language."
+            + RANDOMIZE_OPTIONS_INSTRUCTION
+            + JSON_FORMAT_TAIL
         ),
         "kind_of_wife": (
             "You are creating an assessment to help a man clarify the kind of wife he is looking for. "
@@ -143,9 +154,9 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "one more reserved or pragmatic. Use short sentences or phrases that sound like real people and real "
             "choices (e.g. 'She pushes me to go for it and handles the home front' vs 'She wants us to decide "
             "everything together' vs 'She has her own hustle and expects me to support it'). No textbook or "
-            "generic wording—explore the full range of what men might actually want or recognise in a wife.\n\n"
-            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
-            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
+            "generic wording—explore the full range of what men might actually want or recognise in a wife."
+            + RANDOMIZE_OPTIONS_INSTRUCTION
+            + JSON_FORMAT_TAIL
         ),
         "attachment_style": (
             "You are a psychologist familiar with attachment theory (Bowlby, Ainsworth). Create an assessment to help "
@@ -165,9 +176,9 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "but also fear it, send mixed signals). Use short sentences that sound like real life (e.g. 'I give them space "
             "and focus on my own things' vs 'I check in a lot to make sure we're okay' vs 'I feel relieved when they're "
             "busy so I don't have to depend on them'). No textbook labels in the options—describe the behaviour or feeling, "
-            "not the style name.\n\n"
-            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
-            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
+            "not the style name."
+            + RANDOMIZE_OPTIONS_INSTRUCTION
+            + JSON_FORMAT_TAIL
         ),
         "what_drives_me": (
             "You are creating an assessment to help someone understand what drives them to pursue goals, projects, or endeavours. "
@@ -185,15 +196,17 @@ async def generate_questions(body: GenerateQuestionsRequest):
             "status), one avoidance-driven (proving others wrong, not wanting to regret), one mixed or context-dependent. "
             "Use short sentences that sound like real life (e.g. 'I need to see progress or I lose steam' vs 'I keep going "
             "even when no one is watching' vs 'I want people to know I did it' vs 'I do it so I don't feel I wasted my chance'). "
-            "No textbook labels; describe the thought, feeling, or behaviour.\n\n"
-            'Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
-            '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
+            "No textbook labels; describe the thought, feeling, or behaviour."
+            + RANDOMIZE_OPTIONS_INSTRUCTION
+            + JSON_FORMAT_TAIL
         ),
     }
     prompt = test_prompts.get(
         body.test_id,
         f"Generate exactly 8 multiple-choice questions for the topic '{body.test_id}'. "
-        "Each question must have exactly 4 options. Return ONLY a valid JSON array of objects with "
+        "Each question must have exactly 4 options."
+        + RANDOMIZE_OPTIONS_INSTRUCTION
+        + " Return ONLY a valid JSON array of objects with "
         '"question" and "options" (array of 4 objects with "key" and "text"). No markdown, only JSON.',
     )
     try:
@@ -300,3 +313,127 @@ async def analyze(body: AnalyzeRequest):
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         )
+
+
+# --- Revision (developer revision kits) ---
+
+revision_router = APIRouter()
+
+REVISION_NUM_QUESTIONS = 10
+
+class RevisionGenerateRequest(BaseModel):
+    category: str  # e.g. "theory", "code"
+    programming_language: str  # e.g. "C", "C#", "Python"
+    api: Optional[str] = "openrouter"
+    model: Optional[str] = None
+
+
+class RevisionAnalyzeRequest(BaseModel):
+    category: str
+    programming_language: str
+    questions: List[dict]
+    answers: List[str]
+    api: Optional[str] = "openrouter"
+    model: Optional[str] = None
+
+
+def _revision_generate_prompt(category: str, programming_language: str) -> str:
+    RANDOMIZE_OPTIONS = (
+        "\n\nRANDOMIZE OPTION ORDER: For each question, shuffle the order of the four options so that the correct or "
+        "best answer is NOT always in the same position. Assign keys a/b/c/d after shuffling."
+    )
+    JSON_TAIL = (
+        ' Return ONLY a valid JSON array of objects. Each object must have: "question" (string) and "options" '
+        '(array of 4 objects with "key" (a/b/c/d) and "text" (string)). No markdown, no explanation, only the JSON array.'
+    )
+    return (
+        f"You are creating a developer revision assessment. Generate exactly {REVISION_NUM_QUESTIONS} multiple-choice "
+        f"questions for {category} revision in {programming_language}. Each question must have exactly 4 options, "
+        "with one correct or clearly best answer.\n\n"
+        "Make questions clear and specific. For 'theory' focus on concepts, semantics, language rules, and best practices. "
+        "For 'code' include short code snippets or scenarios and ask what the code does, what is wrong, or what the output is. "
+        "Options should be plausible; avoid obviously wrong distractors. Use concise wording."
+        + RANDOMIZE_OPTIONS
+        + JSON_TAIL
+    )
+
+
+@revision_router.post("/generate-questions", response_model=GenerateQuestionsResponse)
+async def revision_generate_questions(body: RevisionGenerateRequest):
+    if body.api != "openrouter":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'openrouter' API is supported for now",
+        )
+    prompt = _revision_generate_prompt(body.category, body.programming_language)
+    try:
+        content = _call_openrouter(
+            [
+                {"role": "system", "content": "You output only valid JSON. No markdown code fences or extra text."},
+                {"role": "user", "content": prompt},
+            ],
+            model=body.model,
+        )
+        questions = _parse_questions_json(content)
+        if len(questions) < REVISION_NUM_QUESTIONS:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"LLM returned {len(questions)} questions; expected {REVISION_NUM_QUESTIONS}",
+            )
+        return GenerateQuestionsResponse(questions=questions[:REVISION_NUM_QUESTIONS])
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"OpenRouter error: {e.response.text}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+
+@revision_router.post("/analyze", response_model=AnalyzeResponse)
+async def revision_analyze(body: RevisionAnalyzeRequest):
+    if body.api != "openrouter":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'openrouter' API is supported for now",
+        )
+    qa_lines = []
+    for i, (q, a) in enumerate(zip(body.questions, body.answers), 1):
+        qtext = q.get("question", f"Q{i}") if isinstance(q, dict) else str(q)
+        qa_lines.append(f"Q{i}. {qtext}\nAnswer: {a}")
+    qa_block = "\n\n".join(qa_lines)
+    system = (
+        f"You are an expert in {body.programming_language} and developer assessments. Based on the following "
+        f"{body.category} revision questions and the user's answers, write a short summary (2–4 paragraphs) that "
+        "identifies specific weaknesses or gaps the developer should work on. Do NOT repeat the questions or restart "
+        "the test. Focus only on: which topics or areas were missed or answered incorrectly, what to revise (e.g. "
+        "specific language features, concepts, or practice), and concrete next steps (e.g. reread X, practice Y). "
+        "Be direct and actionable. Write in second person ('you') or neutral tone."
+        "\n\nOutput only the summary text, no headings or labels."
+    )
+    try:
+        analysis_text = _call_openrouter(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Questions and answers:\n\n{qa_block}"},
+            ],
+            model=body.model,
+            max_tokens=1024,
+        )
+        return AnalyzeResponse(analysis=analysis_text or "No analysis generated.")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"OpenRouter error: {e.response.text}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+
+router.include_router(revision_router, prefix="/revision", tags=["revision"])
