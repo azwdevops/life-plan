@@ -23,6 +23,7 @@ const CATEGORY_STYLES: Record<Gig["category"], string> = {
 export function GigCard({ gig, hoursAvailable = 300, onTakeGig }: GigCardProps) {
   const [showDescription, setShowDescription] = useState(false);
   const canTake = hoursAvailable >= gig.estimatedHours;
+  const earningsPerHour = gig.estimatedHours > 0 ? Math.round(gig.amount / gig.estimatedHours) : 0;
 
   return (
     <>
@@ -40,12 +41,22 @@ export function GigCard({ gig, hoursAvailable = 300, onTakeGig }: GigCardProps) 
         <p className="mb-3 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
           {gig.shortDescription}
         </p>
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-            {gig.amount.toLocaleString()}
-          </span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">KSh</span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">· ~{gig.estimatedHours} h</span>
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+              {gig.amount.toLocaleString()}
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">KSh</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">· ~{gig.estimatedHours} h</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              ROI
+            </span>
+            <span className="rounded-lg bg-emerald-500 px-2.5 py-1 text-sm font-bold text-white shadow-sm dark:bg-emerald-600 dark:text-emerald-100">
+              ~{earningsPerHour.toLocaleString()} KSh/h
+            </span>
+          </div>
         </div>
         <div className="mt-auto flex flex-wrap gap-2">
           <button
@@ -76,6 +87,14 @@ export function GigCard({ gig, hoursAvailable = 300, onTakeGig }: GigCardProps) 
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
             {CATEGORY_LABELS[gig.category]} · {gig.amount.toLocaleString()} KSh · ~{gig.estimatedHours} h
           </p>
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/30">
+            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+              ROI (earnings/h)
+            </span>
+            <span className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
+              ~{earningsPerHour.toLocaleString()} KSh/h
+            </span>
+          </div>
           <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
             {gig.fullDescription}
           </p>

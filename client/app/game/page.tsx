@@ -523,6 +523,23 @@ function GamePageContent() {
     );
   });
 
+  type GigSortKey = "amount" | "hours" | "roi";
+  const [gigSort, setGigSort] = useState<GigSortKey>("amount");
+  const [gigSortAsc, setGigSortAsc] = useState(true);
+  const sortedGigs = useMemo(() => {
+    const list = [...availableGigs];
+    const sign = gigSortAsc ? 1 : -1;
+    if (gigSort === "amount") {
+      list.sort((a, b) => sign * (a.amount - b.amount));
+    } else if (gigSort === "hours") {
+      list.sort((a, b) => sign * (a.estimatedHours - b.estimatedHours));
+    } else {
+      const roi = (g: Gig) => (g.estimatedHours > 0 ? g.amount / g.estimatedHours : 0);
+      list.sort((a, b) => sign * (roi(a) - roi(b)));
+    }
+    return list;
+  }, [availableGigs, gigSort, gigSortAsc]);
+
   // Auto-save game state to localStorage (debounced)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -579,6 +596,30 @@ function GamePageContent() {
     gameState.portfolio.forEach((owned) => ids.add(owned.investmentId));
     return ids;
   }, [generatedInvestments, gameState.portfolio]);
+
+  type InvSortKey = "cost" | "roi" | "time" | "netCashflow";
+  const [invSort, setInvSort] = useState<InvSortKey>("cost");
+  const [invSortAsc, setInvSortAsc] = useState(true);
+  const sortedOpportunities = useMemo(() => {
+    const list = availableOpportunities.filter((opp) => opp.type !== "consulting");
+    const sign = invSortAsc ? 1 : -1;
+    const getDueDiligence = (opp: Investment) => opp.dueDiligenceHours ?? (2 + ((opp.id * 7) % 5));
+    const getNetCashflow = (opp: Investment) => opp.monthlyCashflow - opp.monthlyMaintenance;
+    const getRoi = (opp: Investment) => {
+      const net = getNetCashflow(opp);
+      return opp.initialCost > 0 && net > 0 ? (net / opp.initialCost) * 100 * 12 : 0;
+    };
+    if (invSort === "cost") {
+      list.sort((a, b) => sign * (a.initialCost - b.initialCost));
+    } else if (invSort === "roi") {
+      list.sort((a, b) => sign * (getRoi(a) - getRoi(b)));
+    } else if (invSort === "time") {
+      list.sort((a, b) => sign * (getDueDiligence(a) - getDueDiligence(b)));
+    } else {
+      list.sort((a, b) => sign * (getNetCashflow(a) - getNetCashflow(b)));
+    }
+    return list;
+  }, [availableOpportunities, invSort, invSortAsc]);
 
   const totalPortfolioValue = useMemo(
     () =>
@@ -2203,8 +2244,38 @@ function GamePageContent() {
                   <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
                     One-off work in software or accounting. Payment is received next month after you take the gig.
                   </p>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Sort by:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["amount", "hours", "roi"] as const).map((key) => {
+                        const isActive = gigSort === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              if (isActive) {
+                                setGigSortAsc((prev) => !prev);
+                              } else {
+                                setGigSort(key);
+                                setGigSortAsc(true);
+                              }
+                            }}
+                            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                              isActive
+                                ? "bg-emerald-600 text-white dark:bg-emerald-500"
+                                : "bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
+                            }`}
+                          >
+                            {key === "amount" ? "Amount" : key === "hours" ? "Hours" : "ROI"}
+                            {isActive && (gigSortAsc ? " ↑" : " ↓")}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {availableGigs.map((gig) => (
+                    {sortedGigs.map((gig) => (
                       <GigCard key={gig.id} gig={gig} hoursAvailable={gameState.hoursAvailable ?? 300} onTakeGig={handleTakeGig} />
                     ))}
                   </div>
@@ -2237,14 +2308,43 @@ function GamePageContent() {
                     Investment Opportunities
                   </h2>
                   <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {availableOpportunities.filter(opp => opp.type !== "consulting").length} available
+                    {sortedOpportunities.length} available
                   </span>
                 </div>
-                {availableOpportunities.filter(opp => opp.type !== "consulting").length > 0 ? (
-                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {availableOpportunities
-                      .filter(opp => opp.type !== "consulting")
-                      .map((opportunity) => (
+                {sortedOpportunities.length > 0 ? (
+                  <>
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Sort by:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["cost", "roi", "time", "netCashflow"] as const).map((key) => {
+                          const isActive = invSort === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                if (isActive) {
+                                  setInvSortAsc((prev) => !prev);
+                                } else {
+                                  setInvSort(key);
+                                  setInvSortAsc(true);
+                                }
+                              }}
+                              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                                isActive
+                                  ? "bg-blue-600 text-white dark:bg-blue-500"
+                                  : "bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
+                              }`}
+                            >
+                              {key === "cost" ? "Cost" : key === "roi" ? "ROI" : key === "time" ? "Time" : "Net Cashflow"}
+                              {isActive && (invSortAsc ? " ↑" : " ↓")}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {sortedOpportunities.map((opportunity) => (
                         <InvestmentOpportunityCard
                           key={opportunity.id}
                           investment={opportunity}
@@ -2253,7 +2353,8 @@ function GamePageContent() {
                           onPurchase={(customAmount) => handlePurchase(opportunity, customAmount)}
                         />
                       ))}
-                  </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
                     <p className="text-zinc-600 dark:text-zinc-400">
