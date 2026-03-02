@@ -160,8 +160,11 @@ function generateRandomInvestment(
     monthlyMaintenance = 0;
   } else if (isRental && canRent && "monthlyRentMin" in template && "monthlyRentMax" in template) {
     // Shop rental option - pay monthly rent instead of purchase
-    const rentRange = template.monthlyRentMax - template.monthlyRentMin;
-    const monthlyRent = template.monthlyRentMin + Math.random() * rentRange;
+    const rentMin = template.monthlyRentMin;
+    const rentMax = template.monthlyRentMax;
+    if (rentMin == null || rentMax == null) throw new Error("Rental template missing rent bounds");
+    const rentRange = rentMax - rentMin;
+    const monthlyRent = rentMin + Math.random() * rentRange;
     initialCost = Math.round(monthlyRent / 1000) * 1000; // Use rent as "cost"
     // Rental shops typically have 15-25% profit margin
     monthlyIncome = Math.round(monthlyRent * (0.15 + Math.random() * 0.10));
