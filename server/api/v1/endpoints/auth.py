@@ -9,10 +9,34 @@ from core.security import (
     decode_access_token,
 )
 from models.user import User
-from schemas.auth import UserSignup, UserLogin, UserResponse, Token
+from models.group import Group
+from schemas.auth import (
+    UserSignup,
+    UserLogin,
+    UserResponse,
+    Token,
+    GroupResponse,
+    SetUserGroupsRequest,
+)
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+def require_groups(*group_names: str):
+    """Dependency: current user must belong to at least one of the given groups."""
+
+    async def _require(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+        db.refresh(current_user, ["groups"])
+        user_group_names = {g.name for g in current_user.groups}
+        if not user_group_names.intersection(set(group_names)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current_user
+
+    return _require
 
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -52,7 +76,13 @@ async def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return new_user
+    return UserResponse(
+        id=new_user.id,
+        email=new_user.email,
+        first_name=new_user.first_name,
+        is_active=new_user.is_active,
+        groups=[],
+    )
 
 
 @router.post("/login", response_model=Token)
@@ -133,7 +163,68 @@ async def get_current_user(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Get current user information."""
-    return current_user
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get current user information including group names."""
+    db.refresh(current_user, ["groups"])
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        is_active=current_user.is_active,
+        groups=[g.name for g in current_user.groups],
+    )
+
+
+# --- Groups (admin) ---
+
+require_admin = require_groups("admin")
+
+
+@router.get("/groups", response_model=list[GroupResponse])
+async def list_groups(db: Session = Depends(get_db)):
+    """List all groups. No auth required for listing (group names are not sensitive)."""
+    groups = db.query(Group).order_by(Group.name).all()
+    return groups
+
+
+@router.put("/admin/users/{user_id}/groups", response_model=UserResponse)
+async def set_user_groups(
+    user_id: int,
+    body: SetUserGroupsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Set which groups a user belongs to. Requires admin group."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    groups = (
+        db.query(Group)
+        .filter(Group.name.in_(body.group_names))
+        .all()
+    )
+    found_names = {g.name for g in groups}
+    invalid = set(body.group_names) - found_names
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown group(s): {sorted(invalid)}",
+        )
+
+    user.groups = groups
+    db.commit()
+    db.refresh(user)
+    db.refresh(user, ["groups"])
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        is_active=user.is_active,
+        groups=[g.name for g in user.groups],
+    )
 

@@ -41,7 +41,7 @@ export function InvestmentOpportunityCard({
   const annualROI = monthlyROI * 12;
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex h-full min-w-0 flex-col rounded-xl border-2 border-blue-300 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-blue-600 dark:bg-zinc-900">
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
           <span className="text-3xl">{investment.icon}</span>

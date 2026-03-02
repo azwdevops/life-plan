@@ -17,10 +17,11 @@ function getStoredAuth() {
   const storedToken = localStorage.getItem(TOKEN_KEY);
   const storedUser = localStorage.getItem(USER_KEY);
   
-  let user = null;
+  let user: UserResponse | null = null;
   if (storedToken && storedUser) {
     try {
-      user = JSON.parse(storedUser);
+      const parsed = JSON.parse(storedUser) as UserResponse;
+      user = { ...parsed, groups: Array.isArray(parsed.groups) ? parsed.groups : [] };
     } catch {
       // Invalid stored user, clear it
       localStorage.removeItem(TOKEN_KEY);

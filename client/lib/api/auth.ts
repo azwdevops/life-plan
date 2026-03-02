@@ -25,6 +25,7 @@ export interface UserResponse {
   email: string;
   first_name: string;
   is_active: boolean;
+  groups: string[];
 }
 
 export async function signup(data: SignupRequest): Promise<UserResponse> {

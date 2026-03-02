@@ -16,6 +16,7 @@ from core.config import settings
 
 # Import all models here so Alembic can detect them
 from models.user import User
+from models.group import Group
 from models.finance import ParentLedgerGroup, LedgerGroup, Ledger, SpendingType, Transaction, TransactionItem
 
 # this is the Alembic Config object, which provides

@@ -24,21 +24,6 @@ export function GameStats({ gameState }: GameStatsProps) {
   );
   const totalAppreciation = totalPortfolioValue - totalPurchaseCost;
 
-  const monthlyPassiveIncome = gameState.portfolio.reduce((sum, owned) => {
-    const monthsSincePurchase = gameState.currentMonth - owned.purchaseMonth;
-    const investment = owned.investment;
-    
-    // Use old values if extension happened in current month (new values apply from next month)
-    const monthlyIncome = (owned.lastExtensionMonth === gameState.currentMonth && owned.monthlyIncomeBeforeExtension !== undefined)
-      ? owned.monthlyIncomeBeforeExtension
-      : investment.monthlyIncome;
-
-    if (monthsSincePurchase > investment.incomeDelayMonths) {
-      return sum + monthlyIncome;
-    }
-    return sum;
-  }, 0);
-
   // Calculate gross cashflow (before tax) for all investments
   const monthlyGrossCashflow = gameState.portfolio.reduce((sum, owned) => {
     const monthsSincePurchase = gameState.currentMonth - owned.purchaseMonth;
@@ -80,8 +65,43 @@ export function GameStats({ gameState }: GameStatsProps) {
 
   return (
     <div className="mb-8">
-      {/* Cash Flow Breakdown */}
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap gap-4">
+        {/* Available Cash */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Available Cash
+          </div>
+          <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+            {gameState.currentMoney.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Portfolio Value */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Portfolio Value
+          </div>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {totalPortfolioValue.toLocaleString()}
+          </div>
+          {totalAppreciation !== 0 && (
+            <div className={`text-xs ${
+              totalAppreciation > 0
+                ? "text-green-600 dark:text-green-400"
+                : "text-red-600 dark:text-red-400"
+            }`}>
+              {totalAppreciation > 0 ? "📈" : "📉"}
+              {totalAppreciation > 0 ? "+" : ""}{Math.abs(totalAppreciation).toLocaleString()}
+              ({totalAppreciation > 0 ? "+" : ""}{((totalAppreciation / totalPurchaseCost) * 100).toFixed(1)}%)
+            </div>
+          )}
+          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+            Purchase cost: {totalPurchaseCost.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Cash Flow Overview */}
+        <div className="min-w-[280px] flex-1 basis-full lg:basis-auto">
         {(() => {
           // Calculate expected cash in/out for next month with breakdowns
           const nextMonth = gameState.currentMonth + 1;
@@ -200,66 +220,10 @@ export function GameStats({ gameState }: GameStatsProps) {
             />
           );
         })()}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Available Cash
-        </div>
-        <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-          {gameState.currentMoney.toLocaleString()}
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Portfolio Value
-        </div>
-        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          {totalPortfolioValue.toLocaleString()}
-        </div>
-        {totalAppreciation !== 0 && (
-          <div className={`text-xs ${
-            totalAppreciation > 0
-              ? "text-green-600 dark:text-green-400"
-              : "text-red-600 dark:text-red-400"
-          }`}>
-            {totalAppreciation > 0 ? "📈" : "📉"} 
-            {totalAppreciation > 0 ? "+" : ""}{Math.abs(totalAppreciation).toLocaleString()} 
-            ({totalAppreciation > 0 ? "+" : ""}{((totalAppreciation / totalPurchaseCost) * 100).toFixed(1)}%)
-          </div>
-        )}
-        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-          Purchase cost: {totalPurchaseCost.toLocaleString()}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Monthly Income
-        </div>
-        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          +{monthlyPassiveIncome.toLocaleString()}
-        </div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-          (Profit recognized)
-        </div>
-      </div>
-
-
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Accrued Income
-        </div>
-        <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-          {gameState.accruedIncome.toLocaleString()}
-        </div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-          (Earned, not received)
-        </div>
-      </div>
-
+      <div className="flex flex-wrap gap-4">
       {gameState.totalDebt > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-800 dark:bg-red-900/20">
           <div className="mb-2 text-sm text-red-600 dark:text-red-400">
@@ -290,7 +254,7 @@ export function GameStats({ gameState }: GameStatsProps) {
 
       {/* Diversification Score */}
       {gameState.portfolio.length > 0 && (
-        <div className="col-span-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-900/20">
+        <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-900/20">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               Portfolio Diversification
@@ -320,7 +284,7 @@ export function GameStats({ gameState }: GameStatsProps) {
 
       {/* Opportunity Cost Display */}
       {gameState.monthlyOpportunityCost > 0 && (
-        <div className="col-span-full rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm dark:border-orange-800 dark:bg-orange-900/20">
+        <div className="w-full rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm dark:border-orange-800 dark:bg-orange-900/20">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
               Opportunity Cost This Month

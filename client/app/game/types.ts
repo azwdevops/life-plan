@@ -3,6 +3,24 @@ export type LiquidityLevel = "high" | "medium" | "low" | "illiquid";
 export type ExpenseCategory = "rent" | "food" | "school_fees" | "fuel" | "utilities" | "other";
 export type ContingentLiabilityType = "medical_emergency" | "car_repair" | "home_repair" | "legal_fee" | "family_emergency" | "other";
 
+export type GigCategory = "software" | "accounting";
+
+export interface Gig {
+  id: number;
+  title: string;
+  category: GigCategory;
+  amount: number;
+  shortDescription: string;
+  fullDescription: string;
+}
+
+export interface PendingGig {
+  id: number;
+  title: string;
+  amount: number;
+  dueMonth: number;
+}
+
 export type UnexpectedEventType = "vacancy" | "breakdown" | "market_crash" | "default" | "maintenance_surprise";
 
 export interface UnexpectedEvent {
@@ -178,6 +196,7 @@ export interface GameState {
   monthlyCashOutBreakdown: Array<{ source: string; amount: number }>; // Breakdown of cash out
   previousMonthCashIn: number; // Cash received last month
   previousMonthCashOut: number; // Cash spent last month
+  pendingGigs: PendingGig[]; // Gigs taken; payment in dueMonth
 }
 
 export interface Expense {

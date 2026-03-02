@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     email: str
     first_name: str
     is_active: bool
+    groups: list[str] = []
 
     class Config:
         from_attributes = True
@@ -26,4 +27,16 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
+class SetUserGroupsRequest(BaseModel):
+    group_names: list[str]
 

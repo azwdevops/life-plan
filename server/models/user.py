@@ -1,6 +1,9 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from core.database import Base
+
+from models.group import user_groups
 
 
 class User(Base):
@@ -13,4 +16,10 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    groups = relationship(
+        "Group",
+        secondary=user_groups,
+        back_populates="users",
+    )
 

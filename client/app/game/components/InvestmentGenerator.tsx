@@ -1,207 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useDialogs } from "./CustomDialogs";
 import type { Investment } from "../types";
+import { INVESTMENT_POOL, LOCATIONS } from "../data/investmentPool";
+import type { InvestmentPoolTemplate } from "../data/investmentPool";
 
 interface InvestmentGeneratorProps {
   onGenerate: (investments: Investment[]) => void;
   existingInvestmentIds: Set<number>;
 }
 
-// Investment type templates with realistic Kenya market prices (min, max in KSh)
-// Based on actual Kenya market data 2024
-const INVESTMENT_TYPES = [
-  // Real Estate - Purchase prices
-  { 
-    type: "flat", 
-    name: "Residential Flat (2BR)", 
-    icon: "🏢", 
-    minCost: 3000000, 
-    maxCost: 8000000, // Nairobi: 3-8M for 2-bedroom
-    annualROI: 0.06, // 6% rental yield
-    maintenanceRate: 0.15, // 15% of rental income for maintenance
-    riskLevel: "medium" as const,
-    volatility: 0.15, // 15% variation
-    eventProbabilities: {
-      vacancy: 0.05,
-      maintenanceSurprise: 0.03,
-    },
-  },
-  { 
-    type: "flat", 
-    name: "Commercial Property", 
-    icon: "🏬", 
-    minCost: 5000000, 
-    maxCost: 15000000, // Commercial properties
-    annualROI: 0.08, // 8% rental yield
-    maintenanceRate: 0.20, // 20% of rental income
-    riskLevel: "medium" as const,
-    volatility: 0.18, // 18% variation
-    eventProbabilities: {
-      vacancy: 0.06,
-      maintenanceSurprise: 0.04,
-    },
-  },
-  // Shops - Can be rented or purchased
-  { 
-    type: "shop", 
-    name: "Retail Shop (Purchase)", 
-    icon: "🏪", 
-    minCost: 500000, 
-    maxCost: 3000000, // Shop purchase prices
-    annualROI: 0.10, // 10% return
-    maintenanceRate: 0.15,
-    canRent: true,
-    monthlyRentMin: 20000,
-    monthlyRentMax: 100000, // Monthly rental option
-    riskLevel: "medium" as const,
-    volatility: 0.20, // 20% variation
-    eventProbabilities: {
-      vacancy: 0.08,
-      default: 0.05,
-      maintenanceSurprise: 0.04,
-    },
-  },
-  { 
-    type: "shop", 
-    name: "Market Stall", 
-    icon: "🛒", 
-    minCost: 200000, 
-    maxCost: 800000,
-    annualROI: 0.12, // 12% return
-    maintenanceRate: 0.10,
-    canRent: true,
-    monthlyRentMin: 10000,
-    monthlyRentMax: 40000,
-    riskLevel: "medium" as const,
-    volatility: 0.25, // 25% variation
-    eventProbabilities: {
-      vacancy: 0.10,
-      default: 0.06,
-      maintenanceSurprise: 0.05,
-    },
-  },
-  // Land - Appreciation only, no monthly income
-  { 
-    type: "land", 
-    name: "Residential Land (1/8 acre)", 
-    icon: "🌾", 
-    minCost: 500000, 
-    maxCost: 3000000, // Varies by location
-    annualROI: 0.10, // 10% appreciation (no monthly income)
-    maintenanceRate: 0,
-    isAppreciationOnly: true,
-    riskLevel: "medium" as const,
-    volatility: 0.0, // No monthly income to vary
-  },
-  { 
-    type: "land", 
-    name: "Commercial Land", 
-    icon: "🏗️", 
-    minCost: 2000000, 
-    maxCost: 10000000,
-    annualROI: 0.12, // 12% appreciation
-    maintenanceRate: 0,
-    isAppreciationOnly: true,
-    riskLevel: "medium" as const,
-    volatility: 0.0, // No monthly income to vary
-  },
-  // Vehicles
-  { 
-    type: "matatu", 
-    name: "Matatu (14-seater)", 
-    icon: "🚐", 
-    minCost: 800000, 
-    maxCost: 1500000, // Actual matatu prices
-    annualROI: 0.18, // 18% annual return (1.5% monthly) - high but realistic
-    maintenanceRate: 0.30, // High maintenance (30% of income)
-    riskLevel: "high" as const,
-    volatility: 0.30, // 30% variation - very volatile
-    eventProbabilities: {
-      breakdown: 0.10,
-      maintenanceSurprise: 0.08,
-    },
-  },
-  { 
-    type: "matatu", 
-    name: "Taxi/Uber", 
-    icon: "🚕", 
-    minCost: 600000, 
-    maxCost: 1200000,
-    annualROI: 0.15, // 15% annual return (1.25% monthly)
-    maintenanceRate: 0.25,
-    riskLevel: "high" as const,
-    volatility: 0.25, // 25% variation
-    eventProbabilities: {
-      breakdown: 0.08,
-      maintenanceSurprise: 0.06,
-    },
-  },
-  // Financial Investments
-  { 
-    type: "mmf", 
-    name: "Money Market Fund", 
-    icon: "📈", 
-    minCost: 5000, // Minimum KSh 5,000 for MMF
-    maxCost: 10000000, // No limit really
-    annualROI: 0.10, // 10% annual (0.83% monthly)
-    maintenanceRate: 0,
-    riskLevel: "low" as const,
-    volatility: 0.05, // 5% variation - very stable
-  },
-  { 
-    type: "sacco", 
-    name: "SACCO Shares", 
-    icon: "🏛️", 
-    minCost: 5000, 
-    maxCost: 500000,
-    annualROI: 0.12, // 12% annual (1% monthly)
-    maintenanceRate: 0,
-    riskLevel: "low" as const,
-    volatility: 0.08, // 8% variation - relatively stable
-  },
-  { 
-    type: "sacco", 
-    name: "Investment Club", 
-    icon: "👥", 
-    minCost: 10000, 
-    maxCost: 1000000,
-    annualROI: 0.15, // 15% annual (1.25% monthly)
-    maintenanceRate: 0,
-    riskLevel: "medium" as const,
-    volatility: 0.12, // 12% variation
-  },
-  // Stocks
-  { 
-    type: "stocks", 
-    name: "Stock Shares", 
-    icon: "📊", 
-    minCost: 10000, 
-    maxCost: 500000,
-    annualROI: 0.0, // No guaranteed ROI (capital appreciation only)
-    maintenanceRate: 0,
-    riskLevel: "high" as const,
-    volatility: 0.35, // 35% variation - high volatility
-  },
-  { 
-    type: "stocks", 
-    name: "Dividend Stock", 
-    icon: "💹", 
-    minCost: 50000, 
-    maxCost: 2000000,
-    annualROI: 0.12, // 12% annual dividend yield (1% monthly)
-    maintenanceRate: 0,
-    riskLevel: "medium" as const,
-    volatility: 0.25, // 25% variation
-  },
-] as const;
+const RECENTLY_USED_MAX = 40;
 
-const LOCATIONS = [
-  "Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Thika", "Kitale", "Malindi"
-];
+function shuffleArray<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
-const DESCRIPTIONS = {
+/** Pick `count` pool indices, preferring ones not recently used, so each generation tends to be fresh. */
+function pickPoolIndices(
+  count: number,
+  recentlyUsed: number[]
+): number[] {
+  const usedSet = new Set(recentlyUsed);
+  const preferred = INVESTMENT_POOL.map((_, i) => i).filter((i) => !usedSet.has(i));
+  const rest = INVESTMENT_POOL.map((_, i) => i).filter((i) => usedSet.has(i));
+  const shuffled = [...shuffleArray(preferred), ...shuffleArray(rest)];
+  const indices: number[] = [];
+  const chosen = new Set<number>();
+  for (let i = 0; i < shuffled.length && indices.length < count; i++) {
+    if (!chosen.has(shuffled[i])) {
+      chosen.add(shuffled[i]);
+      indices.push(shuffled[i]);
+    }
+  }
+  return indices;
+}
+
+const DESCRIPTIONS: Record<string, string[]> = {
   flat: [
     "Well-maintained property in prime location",
     "Modern apartment with great amenities",
@@ -238,23 +79,56 @@ const DESCRIPTIONS = {
     "Regular dividend payments",
     "Stable investment with growth potential",
   ],
+  stocks: [
+    "Listed company with growth potential",
+    "Diversified equity exposure",
+    "Dividend-paying stock",
+    "Blue-chip investment",
+  ],
+  fixed_deposit: [
+    "Fixed-term government security",
+    "Predictable returns at maturity",
+    "Low-risk capital preservation",
+  ],
 };
+
+function getLiquidityAndExit(
+  type: InvestmentPoolTemplate["type"]
+): { liquidity: Investment["liquidity"]; exitCostPercent: number; exitTimeMonths: number; lockInMonths: number; earlyExitPenaltyPercent: number } {
+  switch (type) {
+    case "flat":
+      return { liquidity: "low", exitCostPercent: 0.08, exitTimeMonths: 3, lockInMonths: 6, earlyExitPenaltyPercent: 0.05 };
+    case "shop":
+      return { liquidity: "medium", exitCostPercent: 0.06, exitTimeMonths: 2, lockInMonths: 3, earlyExitPenaltyPercent: 0.05 };
+    case "land":
+      return { liquidity: "illiquid", exitCostPercent: 0.12, exitTimeMonths: 6, lockInMonths: 12, earlyExitPenaltyPercent: 0.15 };
+    case "matatu":
+      return { liquidity: "medium", exitCostPercent: 0.05, exitTimeMonths: 1, lockInMonths: 3, earlyExitPenaltyPercent: 0.08 };
+    case "mmf":
+      return { liquidity: "high", exitCostPercent: 0, exitTimeMonths: 0, lockInMonths: 0, earlyExitPenaltyPercent: 0 };
+    case "sacco":
+      return { liquidity: "medium", exitCostPercent: 0.02, exitTimeMonths: 1, lockInMonths: 6, earlyExitPenaltyPercent: 0.05 };
+    case "stocks":
+      return { liquidity: "high", exitCostPercent: 0.01, exitTimeMonths: 0, lockInMonths: 0, earlyExitPenaltyPercent: 0 };
+    case "fixed_deposit":
+      return { liquidity: "low", exitCostPercent: 0, exitTimeMonths: 12, lockInMonths: 12, earlyExitPenaltyPercent: 0.05 };
+    default:
+      return { liquidity: "medium", exitCostPercent: 0.05, exitTimeMonths: 1, lockInMonths: 0, earlyExitPenaltyPercent: 0 };
+  }
+}
 
 function generateRandomInvestment(
   baseId: number,
-  existingIds: Set<number>
+  existingIds: Set<number>,
+  template: InvestmentPoolTemplate
 ): Investment {
-  let investment: Investment;
   let id: number;
-  
-  // Generate unique ID
   do {
     id = baseId + Math.floor(Math.random() * 1000000);
   } while (existingIds.has(id));
 
-  const template = INVESTMENT_TYPES[Math.floor(Math.random() * INVESTMENT_TYPES.length)] as typeof INVESTMENT_TYPES[number];
   const location = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
-  const descriptionPool = DESCRIPTIONS[template.type as keyof typeof DESCRIPTIONS] || ["Investment opportunity"];
+  const descriptionPool = DESCRIPTIONS[template.type] || ["Investment opportunity"];
   const description = descriptionPool[Math.floor(Math.random() * descriptionPool.length)];
 
   // Generate cost within realistic Kenya market range
@@ -325,23 +199,19 @@ function generateRandomInvestment(
     incomeDelayMonths = Math.random() > 0.5 ? Math.floor(Math.random() * 3) : 0; // 0-2 months
     cashflowDelayMonths = incomeDelayMonths;
   } else if (template.type === "stocks") {
-    // Stocks: dividends may be paid monthly, quarterly, or not at all (growth stocks)
-    if (Math.random() > 0.5) {
-      // 50% chance of dividend-paying stock
-      incomeDelayMonths = Math.random() > 0.7 ? Math.floor(Math.random() * 2) : 0; // 0-1 months
-      cashflowDelayMonths = incomeDelayMonths;
-    } else {
-      // 50% chance of growth stock (no dividends)
+    if (template.isAppreciationOnly || template.annualROI === 0) {
       monthlyIncome = 0;
       monthlyCashflow = 0;
       incomeDelayMonths = 0;
       cashflowDelayMonths = 0;
+    } else {
+      incomeDelayMonths = Math.random() > 0.7 ? Math.floor(Math.random() * 2) : 0;
+      cashflowDelayMonths = incomeDelayMonths;
     }
-  } else if ((template as any).type === "fixed_deposit") {
-    // Fixed deposit: interest paid at maturity (12 months)
+  } else if (template.type === "fixed_deposit") {
     incomeDelayMonths = 12;
     cashflowDelayMonths = 12;
-    monthlyIncome = 0; // No monthly income, paid at maturity
+    monthlyIncome = 0;
     monthlyCashflow = 0;
   }
 
@@ -360,13 +230,14 @@ function generateRandomInvestment(
       }
     : undefined;
 
-  // Build name with location and rental indicator
+  const { liquidity, exitCostPercent, exitTimeMonths, lockInMonths, earlyExitPenaltyPercent } = getLiquidityAndExit(template.type);
+
   let investmentName = `${template.name} - ${location}`;
   if (isRental && canRent) {
     investmentName += " (Rental)";
   }
 
-  investment = {
+  const investment: Investment = {
     id,
     name: investmentName,
     type: template.type as Investment["type"],
@@ -381,34 +252,39 @@ function generateRandomInvestment(
     cashflowDelayMonths,
     icon: template.icon,
     isAppreciationOnly: ("isAppreciationOnly" in template && template.isAppreciationOnly) || false,
-    riskLevel: template.riskLevel as "low" | "medium" | "high",
+    riskLevel: template.riskLevel,
     volatility: template.volatility,
-    // Tax rates based on investment type
+    eventProbabilities: template.eventProbabilities,
+    liquidity,
+    exitCostPercent,
+    exitTimeMonths,
+    lockInMonths,
+    earlyExitPenaltyPercent,
     incomeTaxRate:
       template.type === "sacco"
-        ? 0.0 // Tax-exempt
+        ? 0.0
         : template.type === "flat"
-        ? 0.10 // 10% on rental income
+        ? 0.10
         : template.type === "shop"
-        ? 0.15 // 15% on business income
+        ? 0.15
         : template.type === "matatu"
-        ? 0.20 // 20% on business income
-        : template.type === "mmf"
-        ? 0.15 // 15% withholding tax
+        ? 0.20
+        : template.type === "mmf" || template.type === "fixed_deposit"
+        ? 0.15
         : template.type === "stocks"
-        ? 0.15 // 15% tax on dividends
+        ? 0.15
         : undefined,
     capitalGainsTaxRate:
-      template.type === "sacco"
-        ? 0.0 // Tax-exempt
+      template.type === "sacco" || template.type === "fixed_deposit"
+        ? 0.0
         : template.type === "land"
-        ? 0.10 // 10% on land
+        ? 0.10
         : template.type === "flat" || template.type === "shop"
-        ? 0.05 // 5% on property
+        ? 0.05
         : template.type === "matatu"
-        ? 0.0 // No capital gains (depreciating)
+        ? 0.0
         : template.type === "stocks"
-        ? 0.05 // 5% capital gains tax on stocks
+        ? 0.05
         : 0.0,
     isTaxExempt: template.type === "sacco",
     // Correlation groups for diversification
@@ -417,7 +293,7 @@ function generateRandomInvestment(
         ? "real_estate"
         : template.type === "matatu"
         ? "vehicles"
-        : template.type === "mmf" || template.type === "sacco"
+        : template.type === "mmf" || template.type === "sacco" || template.type === "fixed_deposit"
         ? "financial"
         : template.type === "stocks"
         ? "equities"
@@ -433,23 +309,22 @@ function generateRandomInvestment(
       template.type === "matatu"
         ? 0.15 + Math.random() * 0.10 // 15-25% for vehicles
         : undefined,
-    // Extension properties
     isExtendable:
-      template.type === "mmf" || template.type === "sacco" || 
+      template.type === "mmf" || template.type === "sacco" ||
       template.type === "flat" || template.type === "shop" || template.type === "land" || template.type === "stocks"
         ? true
         : false,
     minimumTopUp:
       template.type === "mmf" || template.type === "sacco"
-        ? 1000 // KSh 1,000 minimum for financial products
+        ? 1000
         : template.type === "stocks"
-        ? 5000 // KSh 5,000 minimum for stocks
+        ? 5000
         : template.type === "land"
-        ? 50000 // KSh 50,000 minimum for land
+        ? 50000
         : template.type === "flat"
-        ? 100000 // KSh 100,000 minimum for residential
+        ? 100000
         : template.type === "shop"
-        ? 200000 // KSh 200,000 minimum for commercial
+        ? 200000
         : undefined,
     isFlexibleAmount:
       template.type === "mmf" || template.type === "sacco" || template.type === "stocks"
@@ -457,14 +332,16 @@ function generateRandomInvestment(
         : false,
     minimumInvestment:
       template.type === "mmf"
-        ? 5000 // KSh 5,000 minimum for MMF
+        ? 5000
         : template.type === "sacco"
-        ? 5000 // KSh 5,000 minimum for SACCO
+        ? 5000
         : template.type === "stocks"
-        ? 10000 // KSh 10,000 minimum for stocks
+        ? 10000
+        : template.type === "fixed_deposit"
+        ? 50000
         : undefined,
     earlyCashflowDiscount,
-  } as Investment;
+  };
 
   return investment;
 }
@@ -476,6 +353,7 @@ export function InvestmentGenerator({
   const [count, setCount] = useState(5);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCount, setGeneratedCount] = useState(0);
+  const recentlyUsedRef = useRef<number[]>([]);
 
   const handleGenerate = () => {
     if (count < 1 || count > 20) {
@@ -486,26 +364,29 @@ export function InvestmentGenerator({
     setIsGenerating(true);
     setGeneratedCount(0);
 
-    // Simulate spinning/generating effect
+    const poolIndices = pickPoolIndices(count, recentlyUsedRef.current);
+    recentlyUsedRef.current = [...recentlyUsedRef.current, ...poolIndices].slice(-RECENTLY_USED_MAX);
+
     const investments: Investment[] = [];
     const baseId = Date.now();
-    
-    // Generate investments with delay for visual effect
+    const ids = new Set(existingInvestmentIds);
+
     const generateWithDelay = (index: number) => {
       setTimeout(() => {
-        const investment = generateRandomInvestment(baseId + index, existingInvestmentIds);
+        const template = INVESTMENT_POOL[poolIndices[index]];
+        const investment = generateRandomInvestment(baseId + index, ids, template);
         investments.push(investment);
+        ids.add(investment.id);
         setGeneratedCount(index + 1);
 
         if (index === count - 1) {
-          // All generated, finish
           setTimeout(() => {
             setIsGenerating(false);
             onGenerate(investments);
             setGeneratedCount(0);
           }, 300);
         }
-      }, index * 200); // 200ms delay between each
+      }, index * 200);
     };
 
     for (let i = 0; i < count; i++) {

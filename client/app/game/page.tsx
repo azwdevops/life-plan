@@ -10,7 +10,6 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { InvestmentOpportunityCard } from "./components/InvestmentOpportunityCard";
 import { PortfolioDisplay } from "./components/PortfolioDisplay";
-import { CashflowTimeline } from "./components/CashflowTimeline";
 import { GameStats } from "./components/GameStats";
 import { InvoiceManager } from "./components/InvoiceManager";
 import { InvestmentGenerator } from "./components/InvestmentGenerator";
@@ -19,8 +18,16 @@ import { BorrowingManager } from "./components/BorrowingManager";
 import { ExpensesManager } from "./components/ExpensesManager";
 import { GameOverSummary } from "./components/GameOverSummary";
 import { DialogProvider, useDialogs } from "./components/CustomDialogs";
+import { Dialog } from "@/components/Dialog";
 import { saveGame, loadGame, clearGame } from "./utils/gameStorage";
-import type { Investment, OwnedInvestment, GameState, Invoice, Loan, MarketCondition, UnexpectedEvent, Expense, ContingentLiability, ContingentLiabilityType } from "./types";
+import type { Investment, OwnedInvestment, GameState, Invoice, Loan, MarketCondition, UnexpectedEvent, Expense, ContingentLiability, ContingentLiabilityType, Gig } from "./types";
+import {
+  GIG_TEMPLATES,
+  createGigFromTemplate,
+  pickGigPoolIndices,
+} from "./data/gigPool";
+import { GigGenerator } from "./components/GigGenerator";
+import { GigCard } from "./components/GigCard";
 
 // Utility function to get date from month offset
 function getDateFromMonth(startDate: Date, monthOffset: number): Date {
@@ -494,6 +501,7 @@ function GamePageContent() {
         monthlyCashOutBreakdown: [],
         previousMonthCashIn: 0,
         previousMonthCashOut: 0,
+        pendingGigs: [],
     };
   });
 
@@ -504,6 +512,15 @@ function GamePageContent() {
   );
 
   const [generatedInvestments, setGeneratedInvestments] = useState<Investment[]>([]);
+  const [cashDetailsView, setCashDetailsView] = useState<"current" | "next" | null>(null);
+
+  const [availableGigs, setAvailableGigs] = useState<Gig[]>(() => {
+    const idBase = Date.now();
+    const indices = pickGigPoolIndices(8, []);
+    return indices.map((idx, i) =>
+      createGigFromTemplate(GIG_TEMPLATES[idx], idBase + i)
+    );
+  });
 
   // Auto-save game state to localStorage (debounced)
   useEffect(() => {
@@ -558,6 +575,95 @@ function GamePageContent() {
     gameState.portfolio.forEach((owned) => ids.add(owned.investmentId));
     return ids;
   }, [generatedInvestments, gameState.portfolio]);
+
+  const totalPortfolioValue = useMemo(
+    () =>
+      gameState.portfolio.reduce(
+        (sum, owned) => sum + (owned.currentValue ?? owned.purchaseCost),
+        0
+      ),
+    [gameState.portfolio]
+  );
+
+  // Expected cash in/out for next month (for header and details modal)
+  const nextMonthExpected = useMemo(() => {
+    const nextMonth = gameState.currentMonth + 1;
+    let expectedCashIn = 0;
+    let expectedCashOut = 0;
+    const expectedCashInBreakdown: Array<{ source: string; amount: number }> = [];
+    const expectedCashOutBreakdown: Array<{ source: string; amount: number }> = [];
+
+    gameState.portfolio.forEach((owned) => {
+      const monthsSincePurchase = nextMonth - owned.purchaseMonth;
+      const investment = owned.investment;
+      const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
+        ? investment.monthlyCashflow
+        : (owned.lastExtensionMonth === nextMonth && owned.monthlyCashflowBeforeExtension !== undefined)
+          ? owned.monthlyCashflowBeforeExtension
+          : investment.monthlyCashflow;
+      if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken) {
+        let afterTax = baseMonthlyCashflow;
+        if (investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
+          afterTax = baseMonthlyCashflow - Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
+        }
+        expectedCashIn += afterTax;
+        expectedCashInBreakdown.push({ source: `${investment.name} (Cashflow)`, amount: afterTax });
+      }
+    });
+    gameState.invoices.forEach((invoice) => {
+      if (invoice.status === "pending" && invoice.paymentDueMonth === nextMonth && !invoice.isDiscounted) {
+        expectedCashIn += invoice.amount;
+        expectedCashInBreakdown.push({ source: `Invoice ${invoice.invoiceNumber}`, amount: invoice.amount });
+      }
+    });
+    gameState.portfolio.forEach((owned) => {
+      const monthsSincePurchase = nextMonth - owned.purchaseMonth;
+      const investment = owned.investment;
+      const baseMonthlyMaintenance = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
+        ? investment.monthlyMaintenance
+        : (owned.lastExtensionMonth === nextMonth && owned.monthlyMaintenanceBeforeExtension !== undefined)
+          ? owned.monthlyMaintenanceBeforeExtension
+          : investment.monthlyMaintenance;
+      if (baseMonthlyMaintenance > 0 && monthsSincePurchase > 0) {
+        expectedCashOut += baseMonthlyMaintenance;
+        expectedCashOutBreakdown.push({ source: `${investment.name} (Maintenance)`, amount: baseMonthlyMaintenance });
+      }
+    });
+    gameState.expenses.filter((e) => e.isActive).forEach((exp) => {
+      expectedCashOut += exp.amount;
+      expectedCashOutBreakdown.push({ source: `Expense: ${exp.name}`, amount: exp.amount });
+    });
+    gameState.loans.forEach((loan) => {
+      const monthsSinceLoan = nextMonth - loan.startMonth;
+      if (loan.type === "overdraft") {
+        const interestPayment = Math.round(loan.remainingBalance * (loan.interestRate / 12));
+        expectedCashOut += interestPayment;
+        expectedCashOutBreakdown.push({ source: "Loan (Overdraft) Interest", amount: interestPayment });
+      } else if (loan.termMonths > 0 && monthsSinceLoan < loan.termMonths) {
+        expectedCashOut += loan.monthlyPayment;
+        expectedCashOutBreakdown.push({ source: `Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment`, amount: loan.monthlyPayment });
+      }
+    });
+    let expectedTaxes = 0;
+    gameState.portfolio.forEach((owned) => {
+      const monthsSincePurchase = nextMonth - owned.purchaseMonth;
+      const investment = owned.investment;
+      const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
+        ? investment.monthlyCashflow
+        : (owned.lastExtensionMonth === nextMonth && owned.monthlyCashflowBeforeExtension !== undefined)
+          ? owned.monthlyCashflowBeforeExtension
+          : investment.monthlyCashflow;
+      if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken &&
+          investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
+        expectedTaxes += Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
+      }
+    });
+    if (expectedTaxes > 0) {
+      expectedCashOut += expectedTaxes;
+      expectedCashOutBreakdown.push({ source: "Taxes", amount: expectedTaxes });
+    }
+    return { cashIn: expectedCashIn, cashOut: expectedCashOut, cashInBreakdown: expectedCashInBreakdown, cashOutBreakdown: expectedCashOutBreakdown };
+  }, [gameState.currentMonth, gameState.portfolio, gameState.invoices, gameState.expenses, gameState.loans]);
 
   const handleGenerateInvestments = (newInvestments: Investment[]) => {
     setGeneratedInvestments((prev) => [...prev, ...newInvestments]);
@@ -733,6 +839,27 @@ function GamePageContent() {
       ...prev,
       invoices: [...prev.invoices, newInvoice],
     }));
+  };
+
+  const handleTakeGig = (gig: Gig) => {
+    setGameState((prev) => ({
+      ...prev,
+      pendingGigs: [
+        ...(prev.pendingGigs ?? []),
+        {
+          id: gig.id,
+          title: gig.title,
+          amount: gig.amount,
+          dueMonth: prev.currentMonth + 1,
+        },
+      ],
+    }));
+    setAvailableGigs((prev) => {
+      const rest = prev.filter((g) => g.id !== gig.id);
+      const template = GIG_TEMPLATES[Math.floor(Math.random() * GIG_TEMPLATES.length)];
+      const newGig = createGigFromTemplate(template, Date.now() + Math.floor(Math.random() * 10000));
+      return [...rest, newGig];
+    });
   };
 
   const handleDiscountInvoice = (invoiceId: number, discountRate: number) => {
@@ -1535,6 +1662,17 @@ function GamePageContent() {
 
       const newTotalDebt = updatedLoans.reduce((sum, loan) => sum + loan.remainingBalance, 0);
 
+      const pendingGigs = (prev as GameState).pendingGigs ?? [];
+      const gigsDue = pendingGigs.filter((g) => g.dueMonth <= newMonth);
+      const updatedPendingGigs = pendingGigs.filter((g) => g.dueMonth > newMonth);
+      gigsDue.forEach((g) => {
+        newMoney += g.amount;
+        totalCashflowThisMonth += g.amount;
+        totalIncomeThisMonth += g.amount;
+        monthlyCashIn += g.amount;
+        cashInBreakdown.push({ source: `Gig: ${g.title}`, amount: g.amount });
+      });
+
       // Process invoices
       const updatedInvoices: Invoice[] = prev.invoices.map((invoice): Invoice => {
         if (invoice.status === "paid" || invoice.status === "discounted") {
@@ -1687,6 +1825,7 @@ function GamePageContent() {
         monthlyCashOut: monthlyCashOut,
         monthlyCashInBreakdown: cashInBreakdown,
         monthlyCashOutBreakdown: cashOutBreakdown,
+        pendingGigs: updatedPendingGigs,
       };
     });
   };
@@ -1741,14 +1880,116 @@ function GamePageContent() {
         monthlyCashOutBreakdown: [],
         previousMonthCashIn: 0,
         previousMonthCashOut: 0,
+        pendingGigs: [],
       });
       setGeneratedInvestments([]);
+      const idBase = Date.now();
+      const indices = pickGigPoolIndices(8, []);
+      setAvailableGigs(
+        indices.map((idx, i) =>
+          createGigFromTemplate(GIG_TEMPLATES[idx], idBase + i)
+        )
+      );
     }
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
-      <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+      <Header
+              onMenuClick={toggleSidebar}
+              isSidebarOpen={isSidebarOpen}
+              availableCash={gameState.currentMoney}
+              portfolioValue={totalPortfolioValue}
+              cashAnalysis={{
+                currentMonthLabel: formatMonthYear(currentDate),
+                nextMonthLabel: formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1)),
+                currentIn: gameState.monthlyCashIn || 0,
+                currentOut: gameState.monthlyCashOut || 0,
+                nextIn: nextMonthExpected.cashIn,
+                nextOut: nextMonthExpected.cashOut,
+              }}
+              onViewCurrentDetails={() => setCashDetailsView("current")}
+              onViewNextDetails={() => setCashDetailsView("next")}
+              onAdvanceMonth={!gameState.gameOver ? handleAdvanceMonth : undefined}
+              advanceMonthLabel={!gameState.gameOver ? formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1)) : undefined}
+            />
+      <Dialog
+            isOpen={cashDetailsView !== null}
+            onClose={() => setCashDetailsView(null)}
+            title={cashDetailsView === "current" ? `Current month — ${formatMonthYear(currentDate)}` : cashDetailsView === "next" ? `Expected next month — ${formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1))}` : "Cash flow details"}
+            size="lg"
+          >
+            {cashDetailsView === "current" && (
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Cash in ({(gameState.monthlyCashIn || 0).toLocaleString()})</p>
+                    <ul className="space-y-1 text-sm">
+                      {(gameState.monthlyCashInBreakdown || []).length > 0
+                        ? (gameState.monthlyCashInBreakdown || []).map((item, i) => (
+                            <li key={i} className="flex justify-between text-green-700 dark:text-green-400">
+                              <span className="truncate pr-2">{item.source}</span>
+                              <span>{item.amount.toLocaleString()}</span>
+                            </li>
+                          ))
+                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Cash out ({(gameState.monthlyCashOut || 0).toLocaleString()})</p>
+                    <ul className="space-y-1 text-sm">
+                      {(gameState.monthlyCashOutBreakdown || []).length > 0
+                        ? (gameState.monthlyCashOutBreakdown || []).map((item, i) => (
+                            <li key={i} className="flex justify-between text-red-700 dark:text-red-400">
+                              <span className="truncate pr-2">{item.source}</span>
+                              <span>{item.amount.toLocaleString()}</span>
+                            </li>
+                          ))
+                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Net: {((gameState.monthlyCashIn || 0) - (gameState.monthlyCashOut || 0)).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {cashDetailsView === "next" && (
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Expected cash in ({nextMonthExpected.cashIn.toLocaleString()})</p>
+                    <ul className="space-y-1 text-sm">
+                      {nextMonthExpected.cashInBreakdown.length > 0
+                        ? nextMonthExpected.cashInBreakdown.map((item, i) => (
+                            <li key={i} className="flex justify-between text-green-700 dark:text-green-400">
+                              <span className="truncate pr-2">{item.source}</span>
+                              <span>{item.amount.toLocaleString()}</span>
+                            </li>
+                          ))
+                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Expected cash out ({nextMonthExpected.cashOut.toLocaleString()})</p>
+                    <ul className="space-y-1 text-sm">
+                      {nextMonthExpected.cashOutBreakdown.length > 0
+                        ? nextMonthExpected.cashOutBreakdown.map((item, i) => (
+                            <li key={i} className="flex justify-between text-red-700 dark:text-red-400">
+                              <span className="truncate pr-2">{item.source}</span>
+                              <span>{item.amount.toLocaleString()}</span>
+                            </li>
+                          ))
+                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Expected net: {(nextMonthExpected.cashIn - nextMonthExpected.cashOut).toLocaleString()}
+                </p>
+              </div>
+            )}
+          </Dialog>
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -1872,9 +2113,7 @@ function GamePageContent() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* Left Column - Portfolio and Investment Opportunities */}
-            <div className="lg:col-span-2">
+          <div>
               {/* Portfolio Display - Moved before Investment Opportunities */}
               <PortfolioDisplay
                 portfolio={gameState.portfolio}
@@ -1884,6 +2123,24 @@ function GamePageContent() {
                 onSellInvestment={handleSellInvestment}
                 onExtendInvestment={handleExtendInvestment}
               />
+
+              {/* Gigs Section */}
+              {!gameState.gameOver && (
+                <div className="mb-4">
+                  <h2 className="mb-3 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+                    Gigs
+                  </h2>
+                  <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+                    One-off work in software or accounting. Payment is received next month after you take the gig.
+                  </p>
+                  <GigGenerator onGenerate={(gigs) => setAvailableGigs(gigs)} />
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {availableGigs.map((gig) => (
+                      <GigCard key={gig.id} gig={gig} onTakeGig={handleTakeGig} />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Consulting Services Section */}
               <div className="mb-4 rounded-xl border-2 border-purple-300 bg-purple-50 p-4 shadow-sm dark:border-purple-700 dark:bg-purple-900/20">
@@ -1915,7 +2172,7 @@ function GamePageContent() {
                   </span>
                 </div>
                 {availableOpportunities.filter(opp => opp.type !== "consulting").length > 0 ? (
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {availableOpportunities
                       .filter(opp => opp.type !== "consulting")
                       .map((opportunity) => (
@@ -1941,19 +2198,6 @@ function GamePageContent() {
                 currentMonth={gameState.currentMonth}
                 startDate={gameState.startDate}
               />
-            </div>
-
-            {/* Right Column - Cashflow Timeline */}
-            <div className="lg:col-span-1">
-              <CashflowTimeline
-                portfolio={gameState.portfolio}
-                invoices={gameState.invoices}
-                currentMonth={gameState.currentMonth}
-                startDate={gameState.startDate}
-                loans={gameState.loans}
-                expenses={gameState.expenses}
-              />
-            </div>
           </div>
         </div>
       </main>
