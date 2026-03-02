@@ -184,12 +184,13 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                           )}
                         </li>
                       );
-                    } else {
-                      const isActive = pathname === item.href;
+                    } else if (item.type === "link") {
+                      const href = item.href;
+                      const isActive = pathname === href;
                       return (
                         <li key={item.label}>
                           <Link
-                            href={item.href}
+                            href={href}
                             className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
                               isActive
                                 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
