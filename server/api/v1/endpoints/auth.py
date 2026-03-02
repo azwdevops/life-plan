@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from core.database import get_db
 from core.security import (
     verify_password,
@@ -76,12 +76,19 @@ async def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
+    # Add new user to member group (not admin)
+    member_group = db.query(Group).filter(Group.name == "member").first()
+    if member_group:
+        new_user.groups.append(member_group)
+        db.commit()
+        db.refresh(new_user, ["groups"])
+
     return UserResponse(
         id=new_user.id,
         email=new_user.email,
         first_name=new_user.first_name,
         is_active=new_user.is_active,
-        groups=[],
+        groups=[g.name for g in new_user.groups],
     )
 
 
@@ -188,6 +195,30 @@ async def list_groups(db: Session = Depends(get_db)):
     """List all groups. No auth required for listing (group names are not sensitive)."""
     groups = db.query(Group).order_by(Group.name).all()
     return groups
+
+
+@router.get("/admin/users", response_model=list[UserResponse])
+async def list_users_admin(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """List all users with their groups. Requires admin group."""
+    users = (
+        db.query(User)
+        .options(joinedload(User.groups))
+        .order_by(User.email)
+        .all()
+    )
+    return [
+        UserResponse(
+            id=u.id,
+            email=u.email,
+            first_name=u.first_name,
+            is_active=u.is_active,
+            groups=[g.name for g in u.groups],
+        )
+        for u in users
+    ]
 
 
 @router.put("/admin/users/{user_id}/groups", response_model=UserResponse)

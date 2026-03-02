@@ -36,9 +36,9 @@ function getDateFromMonth(startDate: Date, monthOffset: number): Date {
   return date;
 }
 
-// Utility function to format date as "Month Year"
+// Utility function to format date as "Mon Year" (e.g. Nov 2025)
 function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 // Utility function to calculate time elapsed from start date
@@ -616,6 +616,12 @@ function GamePageContent() {
         expectedCashInBreakdown.push({ source: `Invoice ${invoice.invoiceNumber}`, amount: invoice.amount });
       }
     });
+    (gameState.pendingGigs ?? []).forEach((gig) => {
+      if (gig.dueMonth === nextMonth) {
+        expectedCashIn += gig.amount;
+        expectedCashInBreakdown.push({ source: `Gig: ${gig.title}`, amount: gig.amount });
+      }
+    });
     gameState.portfolio.forEach((owned) => {
       const monthsSincePurchase = nextMonth - owned.purchaseMonth;
       const investment = owned.investment;
@@ -644,26 +650,8 @@ function GamePageContent() {
         expectedCashOutBreakdown.push({ source: `Loan (${loan.type === "short_term" ? "Short-term" : "Long-term"}) Payment`, amount: loan.monthlyPayment });
       }
     });
-    let expectedTaxes = 0;
-    gameState.portfolio.forEach((owned) => {
-      const monthsSincePurchase = nextMonth - owned.purchaseMonth;
-      const investment = owned.investment;
-      const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
-        ? investment.monthlyCashflow
-        : (owned.lastExtensionMonth === nextMonth && owned.monthlyCashflowBeforeExtension !== undefined)
-          ? owned.monthlyCashflowBeforeExtension
-          : investment.monthlyCashflow;
-      if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken &&
-          investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
-        expectedTaxes += Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
-      }
-    });
-    if (expectedTaxes > 0) {
-      expectedCashOut += expectedTaxes;
-      expectedCashOutBreakdown.push({ source: "Taxes", amount: expectedTaxes });
-    }
     return { cashIn: expectedCashIn, cashOut: expectedCashOut, cashInBreakdown: expectedCashInBreakdown, cashOutBreakdown: expectedCashOutBreakdown };
-  }, [gameState.currentMonth, gameState.portfolio, gameState.invoices, gameState.expenses, gameState.loans]);
+  }, [gameState.currentMonth, gameState.portfolio, gameState.invoices, gameState.expenses, gameState.loans, gameState.pendingGigs]);
 
   const handleGenerateInvestments = (newInvestments: Investment[]) => {
     setGeneratedInvestments((prev) => [...prev, ...newInvestments]);

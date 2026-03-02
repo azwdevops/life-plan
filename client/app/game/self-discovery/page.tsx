@@ -20,8 +20,9 @@ import {
 
 export default function SelfDiscoveryListPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, toggleSidebar, setIsSidebarOpen } = useSidebar();
+  const isAdmin = user?.groups?.includes("admin");
   const [api, setApi] = useState<GameApiProvider>("openrouter");
   const [model, setModel] = useState<string>(() => MODELS_BY_PROVIDER.openrouter[0].value);
   const [hasSavedByTestId, setHasSavedByTestId] = useState<Record<string, boolean>>({});
@@ -31,6 +32,10 @@ export default function SelfDiscoveryListPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.push("/login");
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isAdmin) router.push("/dashboard");
+  }, [isLoading, isAuthenticated, isAdmin, router]);
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
@@ -64,6 +69,7 @@ export default function SelfDiscoveryListPage() {
   };
 
   if (!isAuthenticated && !isLoading) return null;
+  if (isAuthenticated && !isLoading && !isAdmin) return null;
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>

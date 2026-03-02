@@ -10,7 +10,7 @@ function getDateFromMonth(startDate: Date, monthOffset: number): Date {
 }
 
 function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 interface InvoiceManagerProps {

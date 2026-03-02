@@ -78,3 +78,49 @@ export async function getCurrentUser(token: string): Promise<UserResponse> {
   return response.json();
 }
 
+export interface GroupResponse {
+  id: number;
+  name: string;
+}
+
+export async function getGroups(): Promise<GroupResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/groups`);
+  if (!response.ok) throw new Error("Failed to fetch groups");
+  return response.json();
+}
+
+export async function getAdminUsers(token: string): Promise<UserResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/admin/users`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!response.ok) {
+    if (response.status === 403) throw new Error("Admin access required");
+    throw new Error("Failed to fetch users");
+  }
+  return response.json();
+}
+
+export async function setUserGroups(
+  token: string,
+  userId: number,
+  groupNames: string[]
+): Promise<UserResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/admin/users/${userId}/groups`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ group_names: groupNames }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to update user groups");
+  }
+  return response.json();
+}
+

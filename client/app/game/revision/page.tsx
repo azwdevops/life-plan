@@ -24,8 +24,9 @@ import {
 
 export default function RevisionListPage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, toggleSidebar, setIsSidebarOpen } = useSidebar();
+  const isAdmin = user?.groups?.includes("admin");
   const [api, setApi] = useState<RevisionApiProvider>("openrouter");
   const [model, setModel] = useState<string>(() => MODELS_BY_PROVIDER.openrouter[0].value);
   const [category, setCategory] = useState<string>(REVISION_CATEGORIES[0].value);
@@ -33,6 +34,14 @@ export default function RevisionListPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [currentSession, setCurrentSession] = useState<ReturnType<typeof getCurrentRevisionSession>>(null);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) router.push("/login");
+  }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isAdmin) router.push("/dashboard");
+  }, [isLoading, isAuthenticated, isAdmin, router]);
 
   useEffect(() => {
     setCurrentSession(getCurrentRevisionSession());
@@ -80,6 +89,9 @@ export default function RevisionListPage() {
       year: "numeric",
     });
   };
+
+  if (!isAuthenticated && !isLoading) return null;
+  if (isAuthenticated && !isLoading && !isAdmin) return null;
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>

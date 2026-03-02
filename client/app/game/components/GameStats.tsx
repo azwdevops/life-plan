@@ -5,7 +5,7 @@ import type { GameState } from "../types";
 import { CashFlowBreakdown } from "./CashFlowBreakdown";
 
 function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 interface GameStatsProps {
@@ -142,6 +142,14 @@ export function GameStats({ gameState }: GameStatsProps) {
             }
           });
 
+          // Expected cash in from gigs (payment due next month)
+          (gameState.pendingGigs ?? []).forEach((gig) => {
+            if (gig.dueMonth === nextMonth) {
+              expectedCashIn += gig.amount;
+              expectedCashInBreakdown.push({ source: `Gig: ${gig.title}`, amount: gig.amount });
+            }
+          });
+
           // Expected cash out: maintenance
           gameState.portfolio.forEach((owned) => {
             const monthsSincePurchase = nextMonth - owned.purchaseMonth;
@@ -181,30 +189,6 @@ export function GameStats({ gameState }: GameStatsProps) {
             }
           });
 
-          // Expected cash out: taxes (estimate based on expected income)
-          let expectedTaxes = 0;
-          gameState.portfolio.forEach((owned) => {
-            const monthsSincePurchase = nextMonth - owned.purchaseMonth;
-            const investment = owned.investment;
-            
-            const baseMonthlyCashflow = (owned.lastExtensionMonth !== undefined && owned.lastExtensionMonth < nextMonth)
-              ? investment.monthlyCashflow
-              : (owned.lastExtensionMonth === nextMonth && owned.monthlyCashflowBeforeExtension !== undefined)
-              ? owned.monthlyCashflowBeforeExtension
-              : investment.monthlyCashflow;
-
-            if (monthsSincePurchase > investment.cashflowDelayMonths && baseMonthlyCashflow > 0 && !owned.earlyCashflowTaken) {
-              if (investment.incomeTaxRate && !investment.isTaxExempt && investment.incomeTaxRate > 0) {
-                const taxAmount = Math.round(baseMonthlyCashflow * investment.incomeTaxRate);
-                expectedTaxes += taxAmount;
-              }
-            }
-          });
-          if (expectedTaxes > 0) {
-            expectedCashOut += expectedTaxes;
-            expectedCashOutBreakdown.push({ source: "Taxes", amount: expectedTaxes });
-          }
-
           return (
             <CashFlowBreakdown
               cashIn={gameState.monthlyCashIn || 0}
@@ -238,23 +222,9 @@ export function GameStats({ gameState }: GameStatsProps) {
         </div>
       )}
 
-      {gameState.monthlyTaxPaid > 0 && (
-        <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 shadow-sm dark:border-purple-800 dark:bg-purple-900/20">
-          <div className="mb-2 text-sm text-purple-600 dark:text-purple-400">
-            Taxes This Month
-          </div>
-          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            -{gameState.monthlyTaxPaid.toLocaleString()}
-          </div>
-          <div className="text-xs text-purple-500 dark:text-purple-400">
-            Total paid: {gameState.totalTaxPaid.toLocaleString()}
-          </div>
-        </div>
-      )}
-
-      {/* Diversification Score */}
+      {/* Portfolio diversification and opportunity cost in flex with wrap */}
       {gameState.portfolio.length > 0 && (
-        <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-900/20">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-900/20">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               Portfolio Diversification
@@ -284,7 +254,7 @@ export function GameStats({ gameState }: GameStatsProps) {
 
       {/* Opportunity Cost Display */}
       {gameState.monthlyOpportunityCost > 0 && (
-        <div className="w-full rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm dark:border-orange-800 dark:bg-orange-900/20">
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm dark:border-orange-800 dark:bg-orange-900/20">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
               Opportunity Cost This Month

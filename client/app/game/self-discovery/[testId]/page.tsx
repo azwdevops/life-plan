@@ -22,8 +22,9 @@ export default function SelfDiscoveryTestPage() {
   const router = useRouter();
   const params = useParams();
   const testId = params?.testId as string | undefined;
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, toggleSidebar, setIsSidebarOpen } = useSidebar();
+  const isAdmin = user?.groups?.includes("admin");
   const initialized = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("loading");
@@ -44,6 +45,10 @@ export default function SelfDiscoveryTestPage() {
       return;
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isAdmin) router.push("/dashboard");
+  }, [isLoading, isAuthenticated, isAdmin, router]);
 
   useEffect(() => {
     if (!testId || initialized.current || isLoading || !isAuthenticated) return;
@@ -163,6 +168,7 @@ export default function SelfDiscoveryTestPage() {
 
   if (!isAuthenticated && !isLoading) return null;
   if (!testId || !testMeta) return null;
+  if (!isLoading && isAuthenticated && !isAdmin) return null;
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>

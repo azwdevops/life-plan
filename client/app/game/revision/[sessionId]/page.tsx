@@ -22,8 +22,9 @@ export default function RevisionSessionPage() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params?.sessionId as string | undefined;
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, toggleSidebar, setIsSidebarOpen } = useSidebar();
+  const isAdmin = user?.groups?.includes("admin");
   const initialized = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("loading");
@@ -31,6 +32,14 @@ export default function RevisionSessionPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) router.push("/login");
+  }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isAdmin) router.push("/dashboard");
+  }, [isLoading, isAuthenticated, isAdmin, router]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -118,6 +127,7 @@ export default function RevisionSessionPage() {
   };
 
   if (!sessionId || !session) return null;
+  if (!isLoading && isAuthenticated && !isAdmin) return null;
 
   const categoryLabel = REVISION_CATEGORIES.find((c) => c.value === session.category)?.label ?? session.category;
   const languageLabel = PROGRAMMING_LANGUAGES.find((l) => l.value === session.programmingLanguage)?.label ?? session.programmingLanguage;
