@@ -465,7 +465,7 @@ function GamePageContent() {
     if (typeof window !== "undefined") {
       const savedGame = loadGame();
       if (savedGame) {
-        return savedGame;
+        return { ...savedGame, hoursAvailable: savedGame.hoursAvailable ?? 300 };
       }
     }
     return {
@@ -502,6 +502,7 @@ function GamePageContent() {
         previousMonthCashIn: 0,
         previousMonthCashOut: 0,
         pendingGigs: [],
+        hoursAvailable: 300,
     };
   });
 
@@ -563,9 +564,12 @@ function GamePageContent() {
     // Combine base opportunities with generated ones
     const allOpportunities = [...INVESTMENT_OPPORTUNITIES, ...generatedInvestments];
     
-    return allOpportunities.filter(
-      (opp) => opp.type === "consulting" || !ownedIds.has(opp.id)
-    );
+    return allOpportunities
+      .filter((opp) => opp.type === "consulting" || !ownedIds.has(opp.id))
+      .map((opp) => ({
+        ...opp,
+        dueDiligenceHours: opp.dueDiligenceHours ?? (2 + ((opp.id * 7) % 5)), // 2–6 stable per id
+      }));
   }, [gameState.portfolio, generatedInvestments]);
 
   const existingInvestmentIds = useMemo(() => {
@@ -664,6 +668,13 @@ function GamePageContent() {
       return;
     }
 
+    const dueDiligenceHours = investment.dueDiligenceHours ?? 2 + Math.floor(Math.random() * 5);
+    const hoursAvailable = gameState.hoursAvailable ?? 300;
+    if (hoursAvailable < dueDiligenceHours) {
+      await alert("Not enough time for due diligence. This opportunity needs " + dueDiligenceHours + " hours; you have " + hoursAvailable + " hours left this month.");
+      return;
+    }
+
     // For flexible amount investments, use custom amount or default to initialCost
     const purchaseAmount = investment.isFlexibleAmount && customAmount 
       ? customAmount 
@@ -752,6 +763,7 @@ function GamePageContent() {
         const newPortfolio = [...prev.portfolio, ownedInvestment];
         return {
           ...prev,
+          hoursAvailable: Math.max(0, (prev.hoursAvailable ?? 300) - dueDiligenceHours),
           currentMoney: prev.currentMoney + loanAmount - purchaseAmount,
           portfolio: newPortfolio,
           totalInvested: prev.totalInvested + purchaseAmount,
@@ -799,6 +811,7 @@ function GamePageContent() {
       const newPortfolio = [...prev.portfolio, ownedInvestment];
       return {
         ...prev,
+        hoursAvailable: Math.max(0, (prev.hoursAvailable ?? 300) - dueDiligenceHours),
         currentMoney: prev.currentMoney - purchaseAmount,
         portfolio: newPortfolio,
         totalInvested: prev.totalInvested + purchaseAmount,
@@ -830,14 +843,21 @@ function GamePageContent() {
   };
 
   const handleTakeGig = (gig: Gig) => {
+    const hours = gameState.hoursAvailable ?? 300;
+    if (hours < gig.estimatedHours) {
+      alert("Time not enough. This gig needs " + gig.estimatedHours + " hours; you have " + hours + " hours left. Choose another gig.");
+      return;
+    }
     setGameState((prev) => ({
       ...prev,
+      hoursAvailable: Math.max(0, (prev.hoursAvailable ?? 300) - gig.estimatedHours),
       pendingGigs: [
         ...(prev.pendingGigs ?? []),
         {
           id: gig.id,
           title: gig.title,
           amount: gig.amount,
+          estimatedHours: gig.estimatedHours,
           dueMonth: prev.currentMonth + 1,
         },
       ],
@@ -1814,6 +1834,7 @@ function GamePageContent() {
         monthlyCashInBreakdown: cashInBreakdown,
         monthlyCashOutBreakdown: cashOutBreakdown,
         pendingGigs: updatedPendingGigs,
+        hoursAvailable: 300,
       };
     });
   };
@@ -1869,6 +1890,7 @@ function GamePageContent() {
         previousMonthCashIn: 0,
         previousMonthCashOut: 0,
         pendingGigs: [],
+        hoursAvailable: 300,
       });
       setGeneratedInvestments([]);
       const idBase = Date.now();
@@ -1887,6 +1909,7 @@ function GamePageContent() {
               onMenuClick={toggleSidebar}
               isSidebarOpen={isSidebarOpen}
               availableCash={gameState.currentMoney}
+              hoursAvailable={gameState.hoursAvailable ?? 300}
               portfolioValue={totalPortfolioValue}
               cashAnalysis={{
                 currentMonthLabel: formatMonthYear(currentDate),
@@ -2071,34 +2094,93 @@ function GamePageContent() {
           {/* Game Stats */}
           <GameStats gameState={gameState} currentDate={currentDate} />
 
-          {/* Expenses, Borrowing, and Investment Generator in flex layout */}
+          {/* Monthly Expenses, Borrowing Options, Portfolio diversification, Opportunity cost — one flex row */}
           {!gameState.gameOver && (
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row">
-              <div className="flex-1">
-                <ExpensesManager
-                  expenses={gameState.expenses}
-                  onAddExpense={handleAddExpense}
-                  onUpdateExpense={handleUpdateExpense}
-                  onDeleteExpense={handleDeleteExpense}
-                  onClearAllExpenses={handleClearAllExpenses}
-                />
+            <>
+              <div className="mb-4 flex flex-wrap gap-4">
+                <div className="min-w-[200px] flex-1">
+                  <ExpensesManager
+                    expenses={gameState.expenses}
+                    onAddExpense={handleAddExpense}
+                    onUpdateExpense={handleUpdateExpense}
+                    onDeleteExpense={handleDeleteExpense}
+                    onClearAllExpenses={handleClearAllExpenses}
+                  />
+                </div>
+                <div className="min-w-[200px] flex-1">
+                  <BorrowingManager
+                    currentMoney={gameState.currentMoney}
+                    cashflowHistory={gameState.cashflowHistory}
+                    currentMonth={gameState.currentMonth}
+                    existingLoans={gameState.loans}
+                    onBorrow={handleBorrow}
+                  />
+                </div>
+                <div className="min-w-[200px] flex-1">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800 dark:bg-emerald-900/20">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                        Portfolio Diversification
+                      </span>
+                      <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                        {gameState.portfolio.length > 0 ? `${(gameState.diversificationScore * 100).toFixed(0)}%` : "—"}
+                      </span>
+                    </div>
+                    {gameState.portfolio.length > 0 ? (
+                      <>
+                        <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-emerald-200 dark:bg-emerald-800">
+                          <div
+                            className="h-full bg-emerald-600 transition-all duration-300 dark:bg-emerald-400"
+                            style={{ width: `${gameState.diversificationScore * 100}%` }}
+                          />
+                        </div>
+                        {gameState.portfolioRiskReduction > 0 && (
+                          <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                            ✅ Risk reduced by {(gameState.portfolioRiskReduction * 100).toFixed(0)}%
+                          </div>
+                        )}
+                        {gameState.diversificationScore < 0.5 && gameState.portfolio.length > 1 && (
+                          <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                            💡 Diversify across types to reduce risk
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">No portfolio yet</div>
+                    )}
+                  </div>
+                </div>
+                <div className="min-w-[200px] flex-1">
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm dark:border-orange-800 dark:bg-orange-900/20">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                        Opportunity Cost
+                      </span>
+                      <span className="text-lg font-bold text-orange-700 dark:text-orange-300">
+                        {gameState.monthlyOpportunityCost > 0 ? `-${gameState.monthlyOpportunityCost.toLocaleString()}` : "0"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-orange-600 dark:text-orange-400">
+                      Capital tied up (lock-in / illiquid)
+                    </div>
+                    <div className="mt-1 text-xs text-orange-500 dark:text-orange-400">
+                      Total: {(gameState.totalOpportunityCost ?? 0).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1">
-                <BorrowingManager
-                  currentMoney={gameState.currentMoney}
-                  cashflowHistory={gameState.cashflowHistory}
-                  currentMonth={gameState.currentMonth}
-                  existingLoans={gameState.loans}
-                  onBorrow={handleBorrow}
-                />
+              <div className="mb-4 flex flex-wrap gap-4">
+                <div className="min-w-[280px] flex-1">
+                  <GigGenerator onGenerate={(gigs) => setAvailableGigs(gigs)} />
+                </div>
+                <div className="min-w-[280px] flex-1">
+                  <InvestmentGenerator
+                    onGenerate={handleGenerateInvestments}
+                    existingInvestmentIds={existingInvestmentIds}
+                  />
+                </div>
               </div>
-              <div className="flex-1">
-                <InvestmentGenerator
-                  onGenerate={handleGenerateInvestments}
-                  existingInvestmentIds={existingInvestmentIds}
-                />
-              </div>
-            </div>
+            </>
           )}
 
           <div>
@@ -2121,10 +2203,9 @@ function GamePageContent() {
                   <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
                     One-off work in software or accounting. Payment is received next month after you take the gig.
                   </p>
-                  <GigGenerator onGenerate={(gigs) => setAvailableGigs(gigs)} />
                   <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {availableGigs.map((gig) => (
-                      <GigCard key={gig.id} gig={gig} onTakeGig={handleTakeGig} />
+                      <GigCard key={gig.id} gig={gig} hoursAvailable={gameState.hoursAvailable ?? 300} onTakeGig={handleTakeGig} />
                     ))}
                   </div>
                 </div>
@@ -2168,6 +2249,7 @@ function GamePageContent() {
                           key={opportunity.id}
                           investment={opportunity}
                           availableMoney={gameState.currentMoney}
+                          hoursAvailable={gameState.hoursAvailable ?? 300}
                           onPurchase={(customAmount) => handlePurchase(opportunity, customAmount)}
                         />
                       ))}

@@ -10,9 +10,17 @@ export interface GigTemplate {
   category: GigCategory;
   amountMin: number;
   amountMax: number;
+  /** Estimated hours for a mid-level professional (optional; defaults by category if not set) */
+  estimatedHoursMin?: number;
+  estimatedHoursMax?: number;
   shortDescription: string;
   fullDescription: string;
 }
+
+const DEFAULT_HOURS: Record<GigCategory, { min: number; max: number }> = {
+  software: { min: 2, max: 8 },
+  accounting: { min: 2, max: 7 },
+};
 
 export const GIG_TEMPLATES: GigTemplate[] = [
   // Software (1,000 - 20,000)
@@ -21,6 +29,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 2000,
     amountMax: 8000,
+    estimatedHoursMin: 1,
+    estimatedHoursMax: 4,
     shortDescription: "Fix a critical bug in an existing mobile application.",
     fullDescription:
       "The client has a mobile app (React Native / Flutter) with a bug affecting login or payments. You will get access to the repo, reproduce the issue, implement a fix, and provide a short summary. Expected delivery within 1–2 weeks.",
@@ -30,6 +40,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 3000,
     amountMax: 15000,
+    estimatedHoursMin: 4,
+    estimatedHoursMax: 10,
     shortDescription: "Integrate a third-party API (e.g. payment or SMS) into an existing system.",
     fullDescription:
       "Integrate a specified third-party API into the client's backend (e.g. M-Pesa, SMS gateway, or external CRM). Includes reading docs, implementing the integration, error handling, and basic tests. Delivery and payment after successful testing.",
@@ -39,6 +51,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 1500,
     amountMax: 10000,
+    estimatedHoursMin: 3,
+    estimatedHoursMax: 7,
     shortDescription: "Add a small feature or form to an existing web application.",
     fullDescription:
       "Add one clearly scoped feature to an existing web app (e.g. a new form, report, or dashboard widget). You will work in their codebase and follow their stack. Timeline and payment agreed upfront.",
@@ -48,6 +62,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 1000,
     amountMax: 6000,
+    estimatedHoursMin: 1,
+    estimatedHoursMax: 4,
     shortDescription: "Write a one-off script or migration for data cleanup or reporting.",
     fullDescription:
       "Write a safe, documented script (e.g. SQL or a small app) to migrate data, fix inconsistencies, or generate a one-off report. Includes a short doc on how to run and roll back if needed.",
@@ -57,6 +73,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 2000,
     amountMax: 7000,
+    estimatedHoursMin: 2,
+    estimatedHoursMax: 5,
     shortDescription: "Review a backend or API codebase and provide a written report.",
     fullDescription:
       "Review a backend/API codebase (e.g. Node, Python, or .NET) for security, performance, and maintainability. Deliver a concise written report with prioritized findings and optional short call to discuss.",
@@ -66,6 +84,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 1500,
     amountMax: 9000,
+    estimatedHoursMin: 2,
+    estimatedHoursMax: 6,
     shortDescription: "Fix UI bugs or implement a small redesign for a web or mobile screen.",
     fullDescription:
       "Fix specific UI bugs or implement a small redesign (e.g. one screen or flow) in a web or mobile app. You will receive designs or a clear spec and work in their repo. Payment on acceptance.",
@@ -75,6 +95,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 1000,
     amountMax: 5000,
+    estimatedHoursMin: 2,
+    estimatedHoursMax: 5,
     shortDescription: "Write technical documentation or an operations runbook for a system.",
     fullDescription:
       "Produce clear documentation (setup, API, or runbook) for an existing system. Includes steps for running, deploying, and handling common issues. Format agreed with the client (e.g. Markdown or Confluence).",
@@ -84,6 +106,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 1000,
     amountMax: 6000,
+    estimatedHoursMin: 1,
+    estimatedHoursMax: 4,
     shortDescription: "Automate a repetitive task (e.g. file processing or reporting).",
     fullDescription:
       "Build a small script or tool to automate a defined task (e.g. file processing, report generation, or backup). Delivered with brief instructions and, if needed, a one-off handover call.",
@@ -93,6 +117,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 3000,
     amountMax: 12000,
+    estimatedHoursMin: 3,
+    estimatedHoursMax: 7,
     shortDescription: "Perform a focused security or performance assessment of an app or API.",
     fullDescription:
       "Carry out a scoped security or performance review (e.g. OWASP top 10, N+1 queries, slow endpoints). Deliver a short report with findings and practical recommendations. No full penetration test unless agreed separately.",
@@ -102,6 +128,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "software",
     amountMin: 5000,
     amountMax: 20000,
+    estimatedHoursMin: 4,
+    estimatedHoursMax: 10,
     shortDescription: "Set up or fix a CI/CD pipeline for build, test, and deploy.",
     fullDescription:
       "Set up or repair a CI/CD pipeline (e.g. GitHub Actions, GitLab CI, or Jenkins) for build, test, and deploy. Includes basic docs and a short handover. Scope and environment (staging/production) agreed upfront.",
@@ -112,6 +140,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "accounting",
     amountMin: 1500,
     amountMax: 6000,
+    estimatedHoursMin: 3,
+    estimatedHoursMax: 7,
     shortDescription: "Prepare books and reconciliations for one month for a small business.",
     fullDescription:
       "Record transactions, reconcile bank and key accounts, and produce a trial balance (and optionally management accounts) for one month. Client provides bank statements and supporting documents. Delivery within agreed deadline.",
@@ -121,6 +151,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "accounting",
     amountMin: 1000,
     amountMax: 5000,
+    estimatedHoursMin: 1,
+    estimatedHoursMax: 4,
     shortDescription: "Prepare and file a single VAT return for a small business.",
     fullDescription:
       "Prepare the VAT return from the client's records (or from provided data), reconcile to the ledger, and file the return. You may also advise on payment. Scope is one return period unless otherwise agreed.",
@@ -130,6 +162,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "accounting",
     amountMin: 500,
     amountMax: 4000,
+    estimatedHoursMin: 2,
+    estimatedHoursMax: 4,
     shortDescription: "Process one payroll run and produce payslips and summary.",
     fullDescription:
       "Process one payroll run: calculate gross and net pay, statutory deductions (e.g. PAYE, NSSF), and produce payslips and a payroll summary. Assumes employee list and rates are provided. One-off or first-month gig.",
@@ -139,6 +173,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "accounting",
     amountMin: 3000,
     amountMax: 10000,
+    estimatedHoursMin: 4,
+    estimatedHoursMax: 8,
     shortDescription: "Review one process or area (e.g. cash, inventory) and write a short report.",
     fullDescription:
       "Perform an internal audit of one process or area (e.g. cash handling, inventory, or procurement). Document process, test controls, note gaps, and deliver a short written report with recommendations. Scope agreed before starting.",
@@ -148,6 +184,8 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     category: "accounting",
     amountMin: 2000,
     amountMax: 8000,
+    estimatedHoursMin: 3,
+    estimatedHoursMax: 7,
     shortDescription: "Draft income tax computation and supporting schedules for a small entity.",
     fullDescription:
       "Prepare a draft income tax computation and key schedules from the client's accounts or records. Does not include filing or representation unless agreed. Suitable for sole traders or small companies with straightforward affairs.",
@@ -315,17 +353,24 @@ export function createGigFromTemplate(template: GigTemplate, id: number): {
   title: string;
   category: GigCategory;
   amount: number;
+  estimatedHours: number;
   shortDescription: string;
   fullDescription: string;
 } {
   const range = template.amountMax - template.amountMin;
   const amount =
     template.amountMin + Math.round(Math.random() * range);
+  const hoursRange = template.estimatedHoursMin != null && template.estimatedHoursMax != null
+    ? { min: template.estimatedHoursMin, max: template.estimatedHoursMax }
+    : DEFAULT_HOURS[template.category];
+  const hoursSpan = hoursRange.max - hoursRange.min;
+  const estimatedHours = hoursRange.min + Math.round(Math.random() * hoursSpan);
   return {
     id,
     title: template.title,
     category: template.category,
     amount,
+    estimatedHours: Math.max(1, estimatedHours),
     shortDescription: template.shortDescription,
     fullDescription: template.fullDescription,
   };

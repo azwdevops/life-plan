@@ -19,6 +19,8 @@ interface HeaderProps {
   isSidebarOpen: boolean;
   /** When set (e.g. on game page), show available cash in the header */
   availableCash?: number;
+  /** When set (e.g. on game page), show hours available this month in the header */
+  hoursAvailable?: number;
   /** When set (e.g. on game page), show portfolio value in the header */
   portfolioValue?: number;
   /** When set (e.g. on game page), show current/next month cash analysis in the header */
@@ -32,7 +34,7 @@ interface HeaderProps {
   advanceMonthLabel?: string;
 }
 
-export function Header({ onMenuClick, isSidebarOpen, availableCash, portfolioValue, cashAnalysis, onViewCurrentDetails, onViewNextDetails, onAdvanceMonth, advanceMonthLabel }: HeaderProps) {
+export function Header({ onMenuClick, isSidebarOpen, availableCash, hoursAvailable, portfolioValue, cashAnalysis, onViewCurrentDetails, onViewNextDetails, onAdvanceMonth, advanceMonthLabel }: HeaderProps) {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -128,12 +130,24 @@ export function Header({ onMenuClick, isSidebarOpen, availableCash, portfolioVal
               )}
             </div>
           )}
-          {availableCash !== undefined && (
+          {(availableCash !== undefined || hoursAvailable !== undefined) && (
             <div className="min-w-0 shrink overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-900/30">
-              <span className="block text-[11px] font-medium leading-tight text-emerald-600 dark:text-emerald-400">Cash available</span>
-              <span className="mt-0.5 block text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
-                {availableCash.toLocaleString()}
-              </span>
+              <span className="block text-[11px] font-medium leading-tight text-emerald-600 dark:text-emerald-400">Available resources</span>
+              <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                {availableCash !== undefined && (
+                  <span className="text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
+                    {availableCash.toLocaleString()} cash
+                  </span>
+                )}
+                {availableCash !== undefined && hoursAvailable !== undefined && (
+                  <span className="text-emerald-400 dark:text-emerald-500">·</span>
+                )}
+                {hoursAvailable !== undefined && (
+                  <span className="text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
+                    {(hoursAvailable ?? 300).toLocaleString()} h
+                  </span>
+                )}
+              </div>
             </div>
           )}
           {portfolioValue !== undefined && (

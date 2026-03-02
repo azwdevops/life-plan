@@ -343,6 +343,7 @@ function generateRandomInvestment(
         : template.type === "fixed_deposit"
         ? 50000
         : undefined,
+    dueDiligenceHours: 2 + Math.floor(Math.random() * 5), // 2–6 hours
     earlyCashflowDiscount,
   };
 

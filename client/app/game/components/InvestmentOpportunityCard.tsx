@@ -7,23 +7,29 @@ import type { Investment } from "../types";
 interface InvestmentOpportunityCardProps {
   investment: Investment;
   availableMoney: number;
+  hoursAvailable?: number;
   onPurchase: (customAmount?: number) => void;
 }
 
 export function InvestmentOpportunityCard({
   investment,
   availableMoney,
+  hoursAvailable = 300,
   onPurchase,
 }: InvestmentOpportunityCardProps) {
   const [customAmount, setCustomAmount] = useState<string>("");
   const [showCustomInput, setShowCustomInput] = useState(false);
   const { alert } = useDialogs();
+
+  const dueDiligenceHours = investment.dueDiligenceHours ?? 2 + ((investment.id * 7) % 5);
+  const canAffordTime = hoursAvailable >= dueDiligenceHours;
   
   const customAmountNum = customAmount ? parseInt(customAmount.replace(/,/g, ""), 10) : null;
   const effectiveAmount = investment.isFlexibleAmount && showCustomInput && customAmountNum 
     ? customAmountNum 
     : investment.initialCost;
   const canAfford = investment.initialCost === 0 || availableMoney >= effectiveAmount;
+  const canPurchase = canAfford && canAffordTime;
   
   // Cashflow-focused calculations
   const cashflowIn = investment.monthlyCashflow;
@@ -46,9 +52,16 @@ export function InvestmentOpportunityCard({
         <div className="flex items-center gap-3">
           <span className="text-3xl">{investment.icon}</span>
           <div>
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              {investment.name}
-            </h3>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                {investment.name}
+              </h3>
+              {investment.type !== "consulting" && (
+                <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                  Due diligence: ~{dueDiligenceHours} h
+                </span>
+              )}
+            </div>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
               {investment.description}
             </p>
@@ -119,6 +132,19 @@ export function InvestmentOpportunityCard({
               {investment.riskLevel === "medium" && "🟡 Medium"}
               {investment.riskLevel === "high" && "🔴 High"}
             </div>
+          </div>
+
+          {/* Due diligence */}
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div className="text-xs text-zinc-600 dark:text-zinc-400">Due diligence</div>
+            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {dueDiligenceHours} h
+            </div>
+            {!canAffordTime && (
+              <div className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
+                Need {dueDiligenceHours - hoursAvailable} h more
+              </div>
+            )}
           </div>
         </div>
 
@@ -304,6 +330,7 @@ export function InvestmentOpportunityCard({
       {investment.type !== "consulting" && (
         <button
           onClick={() => {
+            if (!canPurchase) return;
             if (investment.isFlexibleAmount && showCustomInput && customAmount) {
               const amount = parseInt(customAmount.replace(/,/g, ""), 10);
               if (!isNaN(amount) && amount >= (investment.minimumInvestment || investment.initialCost)) {
@@ -317,18 +344,20 @@ export function InvestmentOpportunityCard({
               onPurchase();
             }
           }}
-          disabled={!canAfford && (!investment.isFlexibleAmount || !showCustomInput || !customAmount)}
+          disabled={!canPurchase}
           className={`w-full rounded-lg px-4 py-2 font-semibold transition-colors ${
-            canAfford || (investment.isFlexibleAmount && showCustomInput && customAmount && parseInt(customAmount.replace(/,/g, ""), 10) <= availableMoney)
+            canPurchase
               ? "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
               : "cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
           }`}
         >
           {investment.isFlexibleAmount && showCustomInput && customAmount
             ? `Invest ${parseInt(customAmount.replace(/,/g, ""), 10).toLocaleString()}`
-            : canAfford 
-            ? `Purchase for ${investment.initialCost.toLocaleString()}`
-            : `Need ${(investment.initialCost - availableMoney).toLocaleString()} more`}
+            : !canAffordTime
+            ? `Not enough hours (need ${dueDiligenceHours} h)`
+            : !canAfford
+            ? `Need ${(investment.initialCost - availableMoney).toLocaleString()} more`
+            : `Purchase for ${investment.initialCost.toLocaleString()}`}
         </button>
       )}
     </div>

@@ -6,6 +6,7 @@ import type { Gig } from "../types";
 
 interface GigCardProps {
   gig: Gig;
+  hoursAvailable?: number;
   onTakeGig: (gig: Gig) => void;
 }
 
@@ -19,8 +20,9 @@ const CATEGORY_STYLES: Record<Gig["category"], string> = {
   accounting: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
-export function GigCard({ gig, onTakeGig }: GigCardProps) {
+export function GigCard({ gig, hoursAvailable = 300, onTakeGig }: GigCardProps) {
   const [showDescription, setShowDescription] = useState(false);
+  const canTake = hoursAvailable >= gig.estimatedHours;
 
   return (
     <>
@@ -38,11 +40,12 @@ export function GigCard({ gig, onTakeGig }: GigCardProps) {
         <p className="mb-3 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
           {gig.shortDescription}
         </p>
-        <div className="mb-3 flex items-center gap-1">
+        <div className="mb-3 flex items-center gap-2">
           <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
             {gig.amount.toLocaleString()}
           </span>
           <span className="text-xs text-zinc-500 dark:text-zinc-400">KSh</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">· ~{gig.estimatedHours} h</span>
         </div>
         <div className="mt-auto flex flex-wrap gap-2">
           <button
@@ -55,9 +58,10 @@ export function GigCard({ gig, onTakeGig }: GigCardProps) {
           <button
             type="button"
             onClick={() => onTakeGig(gig)}
-            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+            disabled={!canTake}
+            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-emerald-500 dark:hover:bg-emerald-600"
           >
-            Take gig
+            {canTake ? "Take gig" : "Not enough hours"}
           </button>
         </div>
       </div>
@@ -70,7 +74,7 @@ export function GigCard({ gig, onTakeGig }: GigCardProps) {
       >
         <div className="space-y-3">
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            {CATEGORY_LABELS[gig.category]} · {gig.amount.toLocaleString()} KSh
+            {CATEGORY_LABELS[gig.category]} · {gig.amount.toLocaleString()} KSh · ~{gig.estimatedHours} h
           </p>
           <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
             {gig.fullDescription}
@@ -80,11 +84,12 @@ export function GigCard({ gig, onTakeGig }: GigCardProps) {
               type="button"
               onClick={() => {
                 setShowDescription(false);
-                onTakeGig(gig);
+                if (canTake) onTakeGig(gig);
               }}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+              disabled={!canTake}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-emerald-500 dark:hover:bg-emerald-600"
             >
-              Take gig
+              {canTake ? "Take gig" : "Not enough hours"}
             </button>
           </div>
         </div>

@@ -10,6 +10,7 @@ export interface Gig {
   title: string;
   category: GigCategory;
   amount: number;
+  estimatedHours: number;
   shortDescription: string;
   fullDescription: string;
 }
@@ -18,6 +19,7 @@ export interface PendingGig {
   id: number;
   title: string;
   amount: number;
+  estimatedHours: number;
   dueMonth: number;
 }
 
@@ -96,6 +98,8 @@ export interface Investment {
   maximumInvestment?: number; // Maximum investment amount
   // Correlation for diversification
   correlationGroup?: string; // Investments in same group are correlated
+  // Due diligence hours (2–6) before purchasing
+  dueDiligenceHours?: number;
 }
 
 export interface Invoice {
@@ -197,6 +201,7 @@ export interface GameState {
   previousMonthCashIn: number; // Cash received last month
   previousMonthCashOut: number; // Cash spent last month
   pendingGigs: PendingGig[]; // Gigs taken; payment in dueMonth
+  hoursAvailable: number; // Hours left this month (reset to 300 at start of each month)
 }
 
 export interface Expense {
