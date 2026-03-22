@@ -29,32 +29,32 @@ pipeline {
                         cd client
 
                         echo "🔧 Loading NVM"
-                        export NVM_DIR="$HOME/.nvm"
-                        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || {
+                        export NVM_DIR="\$HOME/.nvm"
+                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" || {
                             echo "⚠️ Direct NVM load failed, trying profile..."
-                            [ -s "$HOME/.bashrc" ] && source "$HOME/.bashrc" || true
-                            [ -s "$HOME/.profile" ] && source "$HOME/.profile" || true
-                            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || {
+                            [ -s "\$HOME/.bashrc" ] && source "\$HOME/.bashrc" || true
+                            [ -s "\$HOME/.profile" ] && source "\$HOME/.profile" || true
+                            [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" || {
                                 echo "❌ Failed to load NVM"
                                 exit 1
                             }
                         }
 
                         # Make sure Node 20 exists
-                        if [ ! -d "$NVM_DIR/versions/node/v20.20.0" ]; then
+                        if [ ! -d "\$NVM_DIR/versions/node/v20.20.0" ]; then
                             echo "❌ Node 20 not installed. Installing..."
                             nvm install 20
                         fi
 
                         # Explicitly activate Node 20
-                        export PATH="$NVM_DIR/versions/node/v20.20.0/bin:$PATH"
+                        export PATH="\$NVM_DIR/versions/node/v20.20.0/bin:\$PATH"
 
                         # Verify
                         echo "🔍 Node versions"
                         node -v
                         npm -v
-                        echo "Node path: $(which node)"
-                        echo "NPM path: $(which npm)"
+                        echo "Node path: \$(which node)"
+                        echo "NPM path: \$(which npm)"
 
                         # Install all deps including dev (needed for next build; NODE_ENV=production skips devDependencies)
                         npm install --include=dev
@@ -81,6 +81,7 @@ pipeline {
 
                         echo "🎉 Deployment completed successfully"
 
+EOF
                     """
                 }
             }
