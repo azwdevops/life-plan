@@ -5,7 +5,7 @@ Run from repo root: python scripts/add_admin.py user@example.com
 import sys
 import os
 
-# Ensure server directory is on path (pesa-plan/server)
+# Ensure server directory is on path (life-plan/server)
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _server_dir = os.path.join(_root, "server")
 if _server_dir not in sys.path:

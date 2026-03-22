@@ -7,8 +7,8 @@ export function handleApiResponse(response: Response): boolean {
   if (response.status === 401) {
     // Clear auth data from localStorage
     if (typeof window !== "undefined") {
-      localStorage.removeItem("pesa_plan_token");
-      localStorage.removeItem("pesa_plan_user");
+      localStorage.removeItem("life_plan_token");
+      localStorage.removeItem("life_plan_user");
       // Redirect to login page
       window.location.href = "/login";
     }

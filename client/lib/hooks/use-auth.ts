@@ -5,8 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { signup, login, getCurrentUser, UserResponse } from "@/lib/api/auth";
 import type { SignupRequest, LoginRequest } from "@/lib/api/auth";
 
-const TOKEN_KEY = "pesa_plan_token";
-const USER_KEY = "pesa_plan_user";
+const TOKEN_KEY = "life_plan_token";
+const USER_KEY = "life_plan_user";
 
 // Helper function to read from localStorage synchronously (client-side only)
 function getStoredAuth() {

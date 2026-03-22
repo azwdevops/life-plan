@@ -1,6 +1,6 @@
 import type { GameState } from "../types";
 
-const GAME_STORAGE_KEY = "pesa-plan-game-state";
+const GAME_STORAGE_KEY = "life-plan-game-state";
 
 export function saveGame(gameState: GameState): void {
   try {

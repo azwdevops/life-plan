@@ -9,7 +9,7 @@ pipeline {
                 script {
                     def remoteUser = "ubuntu"
                     def remoteHost = "185.113.249.234"
-                    def repoPath  = "/home/ubuntu/pesa_plan"
+                    def repoPath  = "/home/ubuntu/life_plan"
 
                     sh """
                         ssh -i /var/lib/jenkins/.ssh/jenkins_to_truehost_server \
@@ -76,7 +76,7 @@ pipeline {
 
                         echo "🔁 Restarting services"
                         sudo supervisorctl restart nginx-main
-                        sudo supervisorctl restart uvi-pesa-plan
+                        sudo supervisorctl restart uvi-life-plan
 
                         echo "🎉 Deployment completed successfully"
 

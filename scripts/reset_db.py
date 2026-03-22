@@ -15,7 +15,7 @@ from decouple import config, Config, RepositoryEnv
 
 def get_db_config():
     """Get database configuration from DATABASE_URL environment variable."""
-    # Get the project root directory (pesa-plan folder)
+    # Get the project root directory (life-plan folder)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.join(script_dir, "..")
     env_file = os.path.join(project_root, ".env")
@@ -24,27 +24,27 @@ def get_db_config():
     env_config = Config(RepositoryEnv(env_file))
 
     try:
-        database_url = env_config("PESA_PLAN_DATABASE_URL")
+        database_url = env_config("LIFE_PLAN_DATABASE_URL")
         if not database_url or not isinstance(database_url, str):
-            raise ValueError("PESA_PLAN_DATABASE_URL is not set or is not a valid string")
+            raise ValueError("LIFE_PLAN_DATABASE_URL is not set or is not a valid string")
 
         # Parse the database URL
         parsed = urlparse(str(database_url))
 
         # Validate required components
         if not parsed.hostname:
-            raise ValueError("PESA_PLAN_DATABASE_URL is missing hostname")
+            raise ValueError("LIFE_PLAN_DATABASE_URL is missing hostname")
         if not parsed.port:
-            raise ValueError("PESA_PLAN_DATABASE_URL is missing port")
+            raise ValueError("LIFE_PLAN_DATABASE_URL is missing port")
         if not parsed.username:
-            raise ValueError("PESA_PLAN_DATABASE_URL is missing username")
+            raise ValueError("LIFE_PLAN_DATABASE_URL is missing username")
         if parsed.password is None:
-            raise ValueError("PESA_PLAN_DATABASE_URL is missing password")
+            raise ValueError("LIFE_PLAN_DATABASE_URL is missing password")
 
         # Extract database name (remove leading slash)
         database = parsed.path.lstrip("/")
         if not database:
-            raise ValueError("PESA_PLAN_DATABASE_URL is missing database name")
+            raise ValueError("LIFE_PLAN_DATABASE_URL is missing database name")
 
         return {
             "host": parsed.hostname,
@@ -55,7 +55,7 @@ def get_db_config():
         }
     except Exception as e:
         print(f"Error reading database configuration: {e}")
-        print("Make sure PESA_PLAN_DATABASE_URL is set in .env")
+        print("Make sure LIFE_PLAN_DATABASE_URL is set in .env")
         print("Format: postgresql://user:password@host:port/database_name")
         sys.exit(1)
 

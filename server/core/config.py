@@ -2,7 +2,7 @@ import os
 from decouple import config, Config, RepositoryEnv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Get the project root directory (pesa-plan folder)
+# Get the project root directory (life-plan folder)
 _project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 _env_file = os.path.join(_project_root, ".env")
 
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",  # Ignore extra environment variables that don't match field names
     )
 
-    DATABASE_URL: str = _env_config("PESA_PLAN_DATABASE_URL")
+    DATABASE_URL: str = _env_config("LIFE_PLAN_DATABASE_URL")
     OPENROUTER_API_KEY: str = _env_config("OPENROUTER_API_KEY")
 
 
