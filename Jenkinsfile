@@ -58,6 +58,11 @@ pipeline {
 
                         # Install all deps including dev (needed for next build; NODE_ENV=production skips devDependencies)
                         npm install --include=dev
+
+                        # Cap Node heap and webpack parallelism on small VPS (reduces OOM / exit 137)
+                        export NODE_OPTIONS="--max-old-space-size=2048"
+                        export NEXT_WEBPACK_PARALLELISM=1
+
                         npm run build
 
                         echo "🚀 Restarting PM2"
