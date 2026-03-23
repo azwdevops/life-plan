@@ -35,7 +35,7 @@ export default function Home() {
             <p className="mx-auto max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
               Know exactly where your money comes from, where it goes, and how
               it moves between your accounts. Take control of your finances with
-              Pesa Plan.
+              Life Plan.
             </p>
           </div>
 

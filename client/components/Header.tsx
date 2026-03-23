@@ -91,7 +91,7 @@ export function Header({ onMenuClick, isSidebarOpen, availableCash, hoursAvailab
             className="text-xl font-bold transition-colors hover:opacity-80"
           >
             <span className="bg-gradient-to-r from-blue-600 via-green-600 to-purple-600 bg-clip-text text-transparent">
-              Pesa Plan
+              Life Plan
             </span>
           </button>
         </div>

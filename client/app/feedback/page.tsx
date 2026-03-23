@@ -134,7 +134,7 @@ export default function FeedbackPage() {
               Feedback & Support
             </h1>
             <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-              Request a feature or report a bug to help us improve Pesa Plan
+              Request a feature or report a bug to help us improve Life Plan
             </p>
           </div>
 
