@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
+import { FitnessProfileModal } from "@/components/FitnessProfileModal";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user, token, applyUser } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
+  const [metricsOpen, setMetricsOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -44,19 +46,41 @@ export default function SettingsPage() {
             Settings
           </h1>
 
-          <div className="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="text-center py-12">
-              <div className="mb-4 text-6xl">⚙️</div>
-              <h2 className="mb-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                Settings Coming Soon
+          <div className="space-y-6">
+            <div className="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+                Exercise metrics
               </h2>
-              <p className="text-zinc-600 dark:text-zinc-400">
-                Settings page is under development. Check back later for configuration options.
+              <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+                Configure saved weight, height, age, sex, and live-run refresh
+                timing used for exercise estimates.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMetricsOpen(true)}
+                  className="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                >
+                  Edit exercise metrics…
+                </button>
+              </div>
+              <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                Values stay saved to your account until you change them.
               </p>
             </div>
           </div>
         </div>
       </main>
+
+      {token && (
+        <FitnessProfileModal
+          isOpen={metricsOpen}
+          onClose={() => setMetricsOpen(false)}
+          token={token}
+          user={user}
+          onSaved={applyUser}
+        />
+      )}
     </div>
   );
 }

@@ -61,11 +61,12 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       items: [{ icon: "📈", label: "Reports", href: "/reports", type: "link" }],
     },
     {
-      label: "Learning & practice",
+      label: "Personal growth",
       items: [
         { icon: "🎮", label: "Investment Game", href: "/game", type: "link" },
         ...(isAdmin
           ? [
+              { icon: "🏃", label: "Exercise", href: "/exercise", type: "link" as const },
               { icon: "✨", label: "Self Discovery", href: "/game/self-discovery", type: "link" as const },
               { icon: "📚", label: "Developer Revision", href: "/game/revision", type: "link" as const },
             ]

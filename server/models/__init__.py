@@ -12,6 +12,7 @@ from models.finance import (
     UpcomingExpense,
 )
 from models.feedback import Feedback, FeedbackType
+from models.run_session import RunSession
 
 __all__ = [
     "User",
@@ -28,4 +29,5 @@ __all__ = [
     "UpcomingExpense",
     "Feedback",
     "FeedbackType",
+    "RunSession",
 ]

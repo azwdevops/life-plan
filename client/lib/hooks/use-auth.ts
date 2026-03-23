@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { signup, login, getCurrentUser, UserResponse } from "@/lib/api/auth";
 import type { SignupRequest, LoginRequest } from "@/lib/api/auth";
+import { clearActiveRun } from "@/lib/active-run-storage";
 
 const TOKEN_KEY = "life_plan_token";
 const USER_KEY = "life_plan_user";
@@ -83,6 +84,7 @@ export function useAuth() {
   });
 
   const logout = () => {
+    clearActiveRun();
     setUser(null);
     setToken(null);
     localStorage.removeItem(TOKEN_KEY);
@@ -97,6 +99,16 @@ export function useAuth() {
     return loginMutation.mutateAsync(data);
   };
 
+  /** Persist updated user from API (e.g. after saving fitness profile). */
+  const applyUser = useCallback((next: UserResponse) => {
+    const normalized: UserResponse = {
+      ...next,
+      groups: Array.isArray(next.groups) ? next.groups : [],
+    };
+    setUser(normalized);
+    localStorage.setItem(USER_KEY, JSON.stringify(normalized));
+  }, []);
+
   return {
     user,
     token,
@@ -105,6 +117,7 @@ export function useAuth() {
     signup: handleSignup,
     login: handleLogin,
     logout,
+    applyUser,
     isSigningUp: signupMutation.isPending,
     isLoggingIn: loginMutation.isPending,
     signupError: signupMutation.error,

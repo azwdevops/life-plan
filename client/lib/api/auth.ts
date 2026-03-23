@@ -26,6 +26,20 @@ export interface UserResponse {
   first_name: string;
   is_active: boolean;
   groups: string[];
+  weight_kg?: number | null;
+  age?: number | null;
+  sex?: "male" | "female" | "other" | null;
+  height_cm?: number | null;
+  /** Live run stats refresh period (seconds); null → client uses 3. */
+  stats_refresh_interval_seconds?: number | null;
+}
+
+export interface UserFitnessProfile {
+  weight_kg: number | null;
+  age: number | null;
+  sex: "male" | "female" | "other" | null;
+  height_cm: number | null;
+  stats_refresh_interval_seconds: number | null;
 }
 
 export async function signup(data: SignupRequest): Promise<UserResponse> {
@@ -75,6 +89,35 @@ export async function getCurrentUser(token: string): Promise<UserResponse> {
     throw new Error("Failed to get user");
   }
 
+  return response.json();
+}
+
+export async function putUserFitnessProfile(
+  token: string,
+  body: UserFitnessProfile
+): Promise<UserResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/me/fitness-profile`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const detail = err.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail
+              .map((d: { msg?: string }) => d.msg)
+              .filter(Boolean)
+              .join("; ")
+          : "Failed to save exercise metrics";
+    throw new Error(message || "Failed to save exercise metrics");
+  }
   return response.json();
 }
 

@@ -14,10 +14,28 @@ from schemas.auth import (
     UserSignup,
     UserLogin,
     UserResponse,
+    UserFitnessProfilePut,
     Token,
     GroupResponse,
     SetUserGroupsRequest,
 )
+
+
+def user_to_response(user: User, db: Session) -> UserResponse:
+    db.refresh(user, ["groups"])
+    sex_val = user.sex if user.sex in ("male", "female", "other") else None
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        is_active=user.is_active,
+        groups=[g.name for g in user.groups],
+        weight_kg=float(user.weight_kg) if user.weight_kg is not None else None,
+        age=user.age,
+        sex=sex_val,
+        height_cm=float(user.height_cm) if user.height_cm is not None else None,
+        stats_refresh_interval_seconds=user.stats_refresh_interval_seconds,
+    )
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -83,13 +101,7 @@ async def signup(user_data: UserSignup, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_user, ["groups"])
 
-    return UserResponse(
-        id=new_user.id,
-        email=new_user.email,
-        first_name=new_user.first_name,
-        is_active=new_user.is_active,
-        groups=[g.name for g in new_user.groups],
-    )
+    return user_to_response(new_user, db)
 
 
 @router.post("/login", response_model=Token)
@@ -175,14 +187,24 @@ async def get_current_user_info(
     db: Session = Depends(get_db),
 ):
     """Get current user information including group names."""
-    db.refresh(current_user, ["groups"])
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        is_active=current_user.is_active,
-        groups=[g.name for g in current_user.groups],
-    )
+    return user_to_response(current_user, db)
+
+
+@router.put("/me/fitness-profile", response_model=UserResponse)
+async def put_fitness_profile(
+    body: UserFitnessProfilePut,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Save exercise metrics (weight, age, sex, height, stats refresh) for estimates."""
+    current_user.weight_kg = body.weight_kg
+    current_user.age = body.age
+    current_user.sex = body.sex
+    current_user.height_cm = body.height_cm
+    current_user.stats_refresh_interval_seconds = body.stats_refresh_interval_seconds
+    db.commit()
+    db.refresh(current_user)
+    return user_to_response(current_user, db)
 
 
 # --- Groups (admin) ---
@@ -209,16 +231,7 @@ async def list_users_admin(
         .order_by(User.email)
         .all()
     )
-    return [
-        UserResponse(
-            id=u.id,
-            email=u.email,
-            first_name=u.first_name,
-            is_active=u.is_active,
-            groups=[g.name for g in u.groups],
-        )
-        for u in users
-    ]
+    return [user_to_response(u, db) for u in users]
 
 
 @router.put("/admin/users/{user_id}/groups", response_model=UserResponse)
@@ -251,11 +264,5 @@ async def set_user_groups(
     db.refresh(user)
     db.refresh(user, ["groups"])
 
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        is_active=user.is_active,
-        groups=[g.name for g in user.groups],
-    )
+    return user_to_response(user, db)
 
