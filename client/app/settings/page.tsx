@@ -52,7 +52,7 @@ export default function SettingsPage() {
                 Exercise metrics
               </h2>
               <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-                Configure saved weight, height, age, sex, and live-run refresh
+                Configure saved weight, height, age, sex, MET, and live-run refresh
                 timing used for exercise estimates.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">

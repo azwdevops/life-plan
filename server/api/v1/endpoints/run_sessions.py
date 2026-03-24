@@ -88,10 +88,11 @@ async def complete_run_session(
         )
 
     w = float(current_user.weight_kg)
+    met = float(current_user.running_met) if current_user.running_met is not None else 1.0
     dur = float(body.duration_seconds)
     speed = float(row.speed_kmh)
     dist = distance_km_from_speed(speed, dur)
-    kcal = kcal_running_mass_distance(w, dist)
+    kcal = kcal_running_mass_distance(w, dist, met=met)
     fat_kg = fat_equiv_kg_from_kcal(kcal)
 
     row.duration_seconds = body.duration_seconds

@@ -23,6 +23,7 @@ export function FitnessProfileModal({
   const [age, setAge] = useState("");
   const [sex, setSex] = useState<"" | "male" | "female" | "other">("");
   const [height, setHeight] = useState("");
+  const [runningMet, setRunningMet] = useState("");
   const [statsRefreshSec, setStatsRefreshSec] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,6 +40,7 @@ export function FitnessProfileModal({
         : ""
     );
     setHeight(user.height_cm != null ? String(user.height_cm) : "");
+    setRunningMet(user.running_met != null ? String(user.running_met) : "");
     setStatsRefreshSec(
       user.stats_refresh_interval_seconds != null
         ? String(user.stats_refresh_interval_seconds)
@@ -52,6 +54,10 @@ export function FitnessProfileModal({
     const ageVal = age.trim() === "" ? null : Number.parseInt(age, 10);
     const height_cm =
       height.trim() === "" ? null : Number.parseFloat(height.replace(",", "."));
+    const running_met =
+      runningMet.trim() === ""
+        ? null
+        : Number.parseFloat(runningMet.replace(",", "."));
 
     if (weight_kg != null && Number.isNaN(weight_kg)) {
       throw new Error("Weight must be a number (kg).");
@@ -61,6 +67,9 @@ export function FitnessProfileModal({
     }
     if (height_cm != null && Number.isNaN(height_cm)) {
       throw new Error("Height must be a number (cm).");
+    }
+    if (running_met != null && Number.isNaN(running_met)) {
+      throw new Error("Running MET must be a number.");
     }
 
     let stats_refresh_interval_seconds: number | null = null;
@@ -81,6 +90,7 @@ export function FitnessProfileModal({
       age: ageVal,
       sex: sex === "" ? null : sex,
       height_cm,
+      running_met,
       stats_refresh_interval_seconds,
     };
   };
@@ -156,6 +166,24 @@ export function FitnessProfileModal({
             placeholder="e.g. 35"
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Running MET multiplier
+          </label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={runningMet}
+            onChange={(e) => setRunningMet(e.target.value)}
+            placeholder="Default 1.0"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+          />
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            kcal estimate uses weight × distance × MET. Typical running values are
+            around 0.9–1.1.
+          </p>
         </div>
 
         <div>

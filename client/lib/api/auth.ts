@@ -30,6 +30,8 @@ export interface UserResponse {
   age?: number | null;
   sex?: "male" | "female" | "other" | null;
   height_cm?: number | null;
+  /** MET multiplier used in kcal estimate: weight × distance × MET. */
+  running_met?: number | null;
   /** Live run stats refresh period (seconds); null → client uses 3. */
   stats_refresh_interval_seconds?: number | null;
 }
@@ -39,6 +41,7 @@ export interface UserFitnessProfile {
   age: number | null;
   sex: "male" | "female" | "other" | null;
   height_cm: number | null;
+  running_met: number | null;
   stats_refresh_interval_seconds: number | null;
 }
 

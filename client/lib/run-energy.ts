@@ -7,9 +7,10 @@ export const KCAL_PER_KG_KM_RUNNING = 1.0;
 
 export function kcalRunningMassDistance(
   weightKg: number,
-  distanceKm: number
+  distanceKm: number,
+  met: number = KCAL_PER_KG_KM_RUNNING
 ): number {
-  return weightKg * distanceKm * KCAL_PER_KG_KM_RUNNING;
+  return weightKg * distanceKm * met;
 }
 
 export function fatEquivKgFromKcal(kcal: number): number {

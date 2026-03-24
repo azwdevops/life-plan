@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { Dialog } from "@/components/Dialog";
+import { FitnessProfileModal } from "@/components/FitnessProfileModal";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
@@ -410,6 +411,7 @@ function activeRunElapsedSeconds(
 
 function snapshotLiveActive(
   weightKg: number,
+  met: number,
   speedKmh: number,
   startedAtMs: number,
   accumulatedPauseMs: number,
@@ -423,7 +425,7 @@ function snapshotLiveActive(
     nowMs
   );
   const distanceKm = distanceKmFromSpeed(speedKmh, sec);
-  const kcal = kcalRunningMassDistance(weightKg, distanceKm);
+  const kcal = kcalRunningMassDistance(weightKg, distanceKm, met);
   return {
     elapsedSec: sec,
     distanceKm,
@@ -434,7 +436,7 @@ function snapshotLiveActive(
 
 export default function ExercisePage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading, user, token } = useAuth();
+  const { isAuthenticated, isLoading, user, token, applyUser } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const isAdmin = user?.groups?.includes("admin");
 
@@ -461,6 +463,7 @@ export default function ExercisePage() {
   const [manualSaveError, setManualSaveError] = useState<string | null>(null);
   const [manualIsSaving, setManualIsSaving] = useState(false);
   const [manualSavedDialogOpen, setManualSavedDialogOpen] = useState(false);
+  const [metricsModalOpen, setMetricsModalOpen] = useState(false);
   const [isRunActive, setIsRunActive] = useState(false);
   const [isRunPaused, setIsRunPaused] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -500,6 +503,11 @@ export default function ExercisePage() {
     () => clampStatsRefreshSec(user?.stats_refresh_interval_seconds),
     [user?.stats_refresh_interval_seconds]
   );
+  const effectiveRunningMet = useMemo(() => {
+    const m = user?.running_met;
+    if (m == null || !Number.isFinite(m)) return 1;
+    return Math.max(0.1, Math.min(20, m));
+  }, [user?.running_met]);
 
   const totals = useMemo(() => {
     if (runSessions.length === 0) return null;
@@ -719,6 +727,7 @@ export default function ExercisePage() {
     setSpeedKmhInput(String(saved.speedKmh));
     const snap = snapshotLiveActive(
       w,
+      effectiveRunningMet,
       saved.speedKmh,
       saved.startedAtMs,
       saved.accumulatedPauseMs,
@@ -729,7 +738,7 @@ export default function ExercisePage() {
     setLiveKcal(snap.kcal);
     setLiveFatKg(snap.fatKg);
     setIsRunActive(true);
-  }, [isAdmin, user, isRunActive]);
+  }, [effectiveRunningMet, isAdmin, user, isRunActive]);
 
   useEffect(() => {
     if (!isRunActive || user?.weight_kg == null || isRunPaused) return;
@@ -741,6 +750,7 @@ export default function ExercisePage() {
       if (t0 == null) return;
       const snap = snapshotLiveActive(
         weightKg,
+        effectiveRunningMet,
         runSpeedKmhRef.current,
         t0,
         accumulatedPauseMsRef.current,
@@ -769,7 +779,7 @@ export default function ExercisePage() {
       clearInterval(idStats);
       clearInterval(idClock);
     };
-  }, [isRunActive, user?.weight_kg, isRunPaused]);
+  }, [effectiveRunningMet, isRunActive, user?.weight_kg, isRunPaused]);
 
   if (!isAuthenticated && !isLoading) {
     return null;
@@ -843,7 +853,11 @@ export default function ExercisePage() {
     if (Number.isNaN(start.getTime())) return null;
     const durationSeconds = Math.max(1, Math.round(seconds));
     const distanceKm = distanceKmFromSpeed(speed, durationSeconds);
-    const kcal = kcalRunningMassDistance(user.weight_kg, distanceKm);
+    const kcal = kcalRunningMassDistance(
+      user.weight_kg,
+      distanceKm,
+      effectiveRunningMet
+    );
     return {
       speed,
       durationSeconds,
@@ -853,7 +867,13 @@ export default function ExercisePage() {
       kcal,
       fatKg: fatEquivKgFromKcal(kcal),
     };
-  }, [manualDurationSecInput, manualSpeedKmhInput, manualStartLocalInput, user]);
+  }, [
+    effectiveRunningMet,
+    manualDurationSecInput,
+    manualSpeedKmhInput,
+    manualStartLocalInput,
+    user,
+  ]);
 
   const handleStartRun = async () => {
     setRunSaveError(null);
@@ -1076,16 +1096,27 @@ export default function ExercisePage() {
               <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
                 Exercise
               </h1>
-              <button
-                type="button"
-                onClick={() => {
-                  setManualSaveError(null);
-                  setManualDialogOpen(true);
-                }}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
-              >
-                Manual entry
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {token && (
+                  <button
+                    type="button"
+                    onClick={() => setMetricsModalOpen(true)}
+                    className="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                  >
+                    Edit exercise metrics…
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualSaveError(null);
+                    setManualDialogOpen(true);
+                  }}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
+                >
+                  Manual entry
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1659,6 +1690,16 @@ export default function ExercisePage() {
         </div>
       </main>
 
+      {token && (
+        <FitnessProfileModal
+          isOpen={metricsModalOpen}
+          onClose={() => setMetricsModalOpen(false)}
+          token={token}
+          user={user}
+          onSaved={applyUser}
+        />
+      )}
+
       <Dialog
         isOpen={manualDialogOpen}
         onClose={() => {
@@ -1680,7 +1721,9 @@ export default function ExercisePage() {
               Speed (km/h)
             </span>
             <input
-              type="text"
+              type="number"
+              min="0"
+              step="0.1"
               inputMode="decimal"
               value={manualSpeedKmhInput}
               onChange={(e) => setManualSpeedKmhInput(e.target.value)}

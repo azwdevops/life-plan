@@ -34,6 +34,7 @@ def user_to_response(user: User, db: Session) -> UserResponse:
         age=user.age,
         sex=sex_val,
         height_cm=float(user.height_cm) if user.height_cm is not None else None,
+        running_met=float(user.running_met) if user.running_met is not None else None,
         stats_refresh_interval_seconds=user.stats_refresh_interval_seconds,
     )
 
@@ -196,11 +197,12 @@ async def put_fitness_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Save exercise metrics (weight, age, sex, height, stats refresh) for estimates."""
+    """Save exercise metrics (weight, age, sex, height, MET, stats refresh) for estimates."""
     current_user.weight_kg = body.weight_kg
     current_user.age = body.age
     current_user.sex = body.sex
     current_user.height_cm = body.height_cm
+    current_user.running_met = body.running_met
     current_user.stats_refresh_interval_seconds = body.stats_refresh_interval_seconds
     db.commit()
     db.refresh(current_user)

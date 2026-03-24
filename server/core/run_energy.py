@@ -8,8 +8,10 @@ KCAL_PER_KG_FAT_THEORY = 7700.0
 KCAL_PER_KG_KM_RUNNING = 1.0
 
 
-def kcal_running_mass_distance(weight_kg: float, distance_km: float) -> float:
-    return weight_kg * distance_km * KCAL_PER_KG_KM_RUNNING
+def kcal_running_mass_distance(
+    weight_kg: float, distance_km: float, met: float = KCAL_PER_KG_KM_RUNNING
+) -> float:
+    return weight_kg * distance_km * met
 
 
 def fat_equiv_kg_from_kcal(kcal: float) -> float:

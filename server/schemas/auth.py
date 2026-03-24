@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     age: Optional[int] = None
     sex: Optional[Literal["male", "female", "other"]] = None
     height_cm: Optional[float] = None
+    running_met: Optional[float] = None
     stats_refresh_interval_seconds: Optional[int] = None
 
     class Config:
@@ -38,6 +39,7 @@ class UserFitnessProfilePut(BaseModel):
     age: Optional[int] = None
     sex: Optional[Literal["male", "female", "other"]] = None
     height_cm: Optional[float] = None
+    running_met: Optional[float] = None
     stats_refresh_interval_seconds: Optional[int] = None
 
     @field_validator("weight_kg")
@@ -65,6 +67,15 @@ class UserFitnessProfilePut(BaseModel):
             return v
         if not (50 <= v <= 250):
             raise ValueError("height_cm must be between 50 and 250")
+        return v
+
+    @field_validator("running_met")
+    @classmethod
+    def running_met_range(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if not (0.1 <= v <= 20):
+            raise ValueError("running_met must be between 0.1 and 20")
         return v
 
     @field_validator("stats_refresh_interval_seconds")

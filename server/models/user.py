@@ -19,6 +19,8 @@ class User(Base):
     age = Column(Integer, nullable=True)
     sex = Column(String(16), nullable=True)  # male | female | other
     height_cm = Column(Numeric(5, 2), nullable=True)
+    # Running MET multiplier for kcal estimates; optional, defaults to 1.0 in calculations.
+    running_met = Column(Numeric(4, 2), nullable=True)
     # How often live run stats refresh (seconds); optional, client defaults to 3.
     stats_refresh_interval_seconds = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
