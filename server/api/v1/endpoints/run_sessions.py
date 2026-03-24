@@ -53,6 +53,8 @@ async def start_run_session(
         fat_equiv_kg=Decimal("0"),
         is_completed=False,
     )
+    if body.started_at is not None:
+        row.created_at = body.started_at
     db.add(row)
     db.commit()
     db.refresh(row)

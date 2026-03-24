@@ -6,6 +6,7 @@ if (!API_BASE_URL) {
 export interface RunSessionStartRequest {
   speed_kmh: number;
   tick_interval_seconds?: number;
+  started_at?: string;
 }
 
 export interface RunSessionCompleteRequest {
@@ -56,6 +57,7 @@ export async function startRunSession(
     body: JSON.stringify({
       speed_kmh: body.speed_kmh,
       tick_interval_seconds: body.tick_interval_seconds ?? 3,
+      started_at: body.started_at,
     }),
   });
   if (!response.ok) {

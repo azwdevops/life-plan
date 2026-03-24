@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class RunSessionStart(BaseModel):
     speed_kmh: float = Field(gt=0, le=80)
     tick_interval_seconds: int = Field(default=3, ge=1, le=300)
+    started_at: datetime | None = None
 
 
 class RunSessionComplete(BaseModel):

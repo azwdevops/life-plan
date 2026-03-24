@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -53,6 +55,17 @@ type WeekRow = {
   distanceKm: number;
   activeMinutes: number;
   kcal: number;
+};
+
+type DaySessionPoint = {
+  id: number;
+  timeLabel: string;
+  startTimeLabel: string;
+  distanceKm: number;
+  kcal: number;
+  durationSeconds: number;
+  fatKg: number;
+  durationLongLabel: string;
 };
 
 type PeriodMode = "week" | "month" | "custom";
@@ -261,6 +274,101 @@ function formatNumber(n: number, decimals: number): string {
   });
 }
 
+function formatDurationLong(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  return `${m}m ${sec}s`;
+}
+
+function renderDaySessionBarShape(props: {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  payload?: DaySessionPoint;
+}) {
+  const { x, y, width, height, fill, payload } = props;
+  if (
+    x == null ||
+    y == null ||
+    width == null ||
+    height == null ||
+    !payload
+  )
+    return null;
+  const cx = x + width / 2;
+  const blockWidth = Math.max(140, width * 0.9);
+  const leftX = cx - blockWidth / 2;
+  const colGap = 14;
+  const colWidth = (blockWidth - colGap) / 2;
+  const rightX = leftX + colWidth + colGap;
+  const lineGap = 26;
+  const startY = y + 16;
+  const altA = "#fde68a";
+  const altB = "#ffffff";
+  const leftCol: { text: string; color: string }[] = [
+    { text: `Start: ${payload.startTimeLabel}`, color: altA },
+    { text: `Duration: ${payload.durationLongLabel}`, color: altA },
+    { text: `Fat: ${formatNumber(payload.fatKg, 4)} kg`, color: altA },
+  ];
+  const rightCol: { text: string; color: string }[] = [
+    { text: `Energy: ${Math.round(payload.kcal).toLocaleString()} kcal`, color: altB },
+    { text: `Distance: ${formatNumber(payload.distanceKm, 3)} km`, color: altB },
+  ];
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={6} ry={6} fill={fill ?? CHART_LINE} />
+      <text
+        x={leftX}
+        y={startY}
+        textAnchor="start"
+        fill="#ffffff"
+        fontSize={10}
+        fontWeight={700}
+        stroke="#0f172a"
+        strokeWidth={0.45}
+        paintOrder="stroke"
+      >
+        {leftCol.map((line, i) => (
+          <tspan key={`${payload.id}-l-${i}`} x={leftX} dy={i === 0 ? 0 : lineGap}>
+            <tspan fill={line.color}>{line.text}</tspan>
+          </tspan>
+        ))}
+      </text>
+      <text
+        x={rightX}
+        y={startY}
+        textAnchor="start"
+        fill="#ffffff"
+        fontSize={10}
+        fontWeight={700}
+        stroke="#0f172a"
+        strokeWidth={0.45}
+        paintOrder="stroke"
+      >
+        {rightCol.map((line, i) => (
+          <tspan key={`${payload.id}-r-${i}`} x={rightX} dy={i === 0 ? 0 : lineGap}>
+            <tspan fill={line.color}>{line.text}</tspan>
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
+}
+
+function toDateTimeLocalInputValue(d: Date): string {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${mo}-${da}T${hh}:${mm}`;
+}
+
 const CHART_AXIS = "#71717a";
 const CHART_LINE = "#2563eb";
 const CHART_GRID = "#d4d4d8";
@@ -335,6 +443,7 @@ export default function ExercisePage() {
   const [selectedMonthKey, setSelectedMonthKey] = useState("");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
 
   const [runSessions, setRunSessions] = useState<RunSessionResponse[]>([]);
   const [runSessionsError, setRunSessionsError] = useState<string | null>(null);
@@ -343,6 +452,15 @@ export default function ExercisePage() {
     null
   );
   const [speedKmhInput, setSpeedKmhInput] = useState("");
+  const [manualSpeedKmhInput, setManualSpeedKmhInput] = useState("");
+  const [manualDurationSecInput, setManualDurationSecInput] = useState("");
+  const [manualStartLocalInput, setManualStartLocalInput] = useState(
+    toDateTimeLocalInputValue(new Date())
+  );
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [manualSaveError, setManualSaveError] = useState<string | null>(null);
+  const [manualIsSaving, setManualIsSaving] = useState(false);
+  const [manualSavedDialogOpen, setManualSavedDialogOpen] = useState(false);
   const [isRunActive, setIsRunActive] = useState(false);
   const [isRunPaused, setIsRunPaused] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -355,12 +473,14 @@ export default function ExercisePage() {
     null
   );
   const [deleteSavedError, setDeleteSavedError] = useState<string | null>(null);
+  const [openRunMenuId, setOpenRunMenuId] = useState<number | null>(null);
 
   const runStartedAtRef = useRef<number | null>(null);
   const runSpeedKmhRef = useRef(0);
   const runTickSecRef = useRef(DEFAULT_STATS_REFRESH_SEC);
   const accumulatedPauseMsRef = useRef(0);
   const pauseStartedAtRef = useRef<number | null>(null);
+  const manualStartInputRef = useRef<HTMLInputElement | null>(null);
   const serverSessionIdRef = useRef<number | null>(null);
   const weekPickerInitRef = useRef(false);
 
@@ -446,6 +566,39 @@ export default function ExercisePage() {
     [filteredDaily]
   );
 
+  const selectedDaySessionSeries = useMemo<DaySessionPoint[]>(() => {
+    if (!selectedDayIso) return [];
+    return runSessions
+      .filter((row) => sessionLocalDate(row.created_at) === selectedDayIso)
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+      .map((row) => {
+        const when = new Date(row.created_at);
+        const duration = row.duration_seconds;
+        const kcal = row.calories_kcal;
+        const fatKg = row.fat_equiv_kg;
+        return {
+          id: row.id,
+          timeLabel: when.toLocaleTimeString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          startTimeLabel: when.toLocaleTimeString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+          distanceKm: row.distance_km,
+          kcal,
+          durationSeconds: duration,
+          fatKg,
+          durationLongLabel: formatDurationLong(duration),
+        };
+      });
+  }, [runSessions, selectedDayIso]);
+
   const periodSummaryLabel = useMemo(() => {
     if (filteredDaily.length === 0) return "";
     const first = filteredDaily[0].date;
@@ -492,6 +645,22 @@ export default function ExercisePage() {
       return e;
     });
   }, [dataBounds]);
+
+  useEffect(() => {
+    if (lineSeries.length === 0) {
+      setSelectedDayIso(null);
+      return;
+    }
+    const hasSelected = selectedDayIso
+      ? lineSeries.some((d) => d.date === selectedDayIso)
+      : false;
+    if (!hasSelected) {
+      const preferred =
+        [...lineSeries].reverse().find((d) => d.sessions > 0) ??
+        lineSeries[lineSeries.length - 1];
+      setSelectedDayIso(preferred?.date ?? null);
+    }
+  }, [lineSeries, selectedDayIso]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -663,6 +832,29 @@ export default function ExercisePage() {
     return `${m}:${String(sec).padStart(2, "0")}`;
   }
 
+  const manualPreview = useMemo(() => {
+    if (!user?.weight_kg) return null;
+    const speed = Number.parseFloat(manualSpeedKmhInput.replace(",", "."));
+    const seconds = Number.parseFloat(manualDurationSecInput.replace(",", "."));
+    const start = new Date(manualStartLocalInput);
+    if (!Number.isFinite(speed) || speed <= 0 || speed > 80) return null;
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 86400 * 7)
+      return null;
+    if (Number.isNaN(start.getTime())) return null;
+    const durationSeconds = Math.max(1, Math.round(seconds));
+    const distanceKm = distanceKmFromSpeed(speed, durationSeconds);
+    const kcal = kcalRunningMassDistance(user.weight_kg, distanceKm);
+    return {
+      speed,
+      durationSeconds,
+      startIso: start.toISOString(),
+      endLocal: new Date(start.getTime() + durationSeconds * 1000),
+      distanceKm,
+      kcal,
+      fatKg: fatEquivKgFromKcal(kcal),
+    };
+  }, [manualDurationSecInput, manualSpeedKmhInput, manualStartLocalInput, user]);
+
   const handleStartRun = async () => {
     setRunSaveError(null);
     if (!hasCompleteExerciseMetrics(user)) {
@@ -774,6 +966,7 @@ export default function ExercisePage() {
     try {
       await deleteRunSession(token, deleteSavedSessionId);
       setDeleteSavedSessionId(null);
+      setOpenRunMenuId(null);
       const rows = await listRunSessions(token);
       setRunSessions(rows);
     } catch (e) {
@@ -812,6 +1005,49 @@ export default function ExercisePage() {
     }
   };
 
+  const handleSaveManualRun = async () => {
+    setManualSaveError(null);
+    if (!token) {
+      setManualSaveError("You must be signed in to save a manual run.");
+      return;
+    }
+    if (!hasCompleteExerciseMetrics(user)) {
+      setManualSaveError(
+        "Set all exercise metrics (weight, height, age, sex) in Settings before saving runs."
+      );
+      return;
+    }
+    if (!manualPreview) {
+      setManualSaveError("Enter valid speed, duration, and start time.");
+      return;
+    }
+    setManualIsSaving(true);
+    try {
+      const started = await startRunSession(token, {
+        speed_kmh: manualPreview.speed,
+        tick_interval_seconds: effectiveStatsRefreshSec,
+        started_at: manualPreview.startIso,
+      });
+      await completeRunSession(token, started.id, {
+        duration_seconds: manualPreview.durationSeconds,
+        tick_interval_seconds: effectiveStatsRefreshSec,
+      });
+      const rows = await listRunSessions(token);
+      setRunSessions(rows);
+      setManualDurationSecInput("");
+      setManualSpeedKmhInput("");
+      setManualStartLocalInput(toDateTimeLocalInputValue(new Date()));
+      setManualDialogOpen(false);
+      setManualSavedDialogOpen(true);
+    } catch (e) {
+      setManualSaveError(
+        e instanceof Error ? e.message : "Could not save manual run."
+      );
+    } finally {
+      setManualIsSaving(false);
+    }
+  };
+
   const liveRunPhase: "idle" | "running" | "paused" = !isRunActive
     ? "idle"
     : isRunPaused
@@ -836,9 +1072,21 @@ export default function ExercisePage() {
       >
         <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
           <div className="mb-4">
-            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-              Exercise
-            </h1>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
+                Exercise
+              </h1>
+              <button
+                type="button"
+                onClick={() => {
+                  setManualSaveError(null);
+                  setManualDialogOpen(true);
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                Manual entry
+              </button>
+            </div>
           </div>
 
           <section className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -882,7 +1130,7 @@ export default function ExercisePage() {
                   onChange={(e) => setSpeedKmhInput(e.target.value)}
                   disabled={isRunActive}
                   placeholder="e.g. 8.5"
-                  className="w-full min-w-[8rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 sm:w-40"
+                  className="w-full min-w-32 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 sm:w-40"
                 />
               </label>
               <div className="flex flex-wrap gap-2">
@@ -1120,58 +1368,139 @@ export default function ExercisePage() {
                 </p>
               )}
 
-              <div className="mt-6">
-                <h3 className="mb-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                  Daily distance (km)
-                </h3>
-                <div className="h-72 w-full min-w-0 max-w-4xl">
-                  {lineSeries.length === 0 ? (
-                    <p className="text-sm text-zinc-500">No days in range.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={lineSeries}
-                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke={CHART_GRID}
-                          className="dark:opacity-30"
-                        />
-                        <XAxis
-                          dataKey="dayLabel"
-                          tick={{ fontSize: 11, fill: CHART_AXIS }}
-                          interval="preserveStartEnd"
-                        />
-                        <YAxis
-                          tick={{ fontSize: 11, fill: CHART_AXIS }}
-                          width={36}
-                          domain={[0, "auto"]}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            borderRadius: 8,
-                            border: "1px solid #e4e4e7",
+              <div className="mt-6 grid gap-6 lg:grid-cols-2">
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                    Daily distance (km)
+                  </h3>
+                  <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    Click a day to inspect that day&apos;s sessions.
+                  </p>
+                  <div className="h-96 w-full min-w-0">
+                    {lineSeries.length === 0 ? (
+                      <p className="text-sm text-zinc-500">No days in range.</p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={lineSeries}
+                          margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                          onClick={(state) => {
+                            const label = state?.activeLabel;
+                            if (typeof label !== "string") return;
+                            const hit = lineSeries.find((d) => d.dayLabel === label);
+                            if (hit) setSelectedDayIso(hit.date);
                           }}
-                          formatter={(value) => [
-                            `${formatNumber(Number(value ?? 0), 2)} km`,
-                            "Distance",
-                          ]}
-                          labelFormatter={(_, payload) =>
-                            payload?.[0]?.payload?.date ?? ""
-                          }
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="distanceKm"
-                          stroke={CHART_LINE}
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                          connectNulls
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke={CHART_GRID}
+                            className="dark:opacity-30"
+                          />
+                          <XAxis
+                            dataKey="dayLabel"
+                            tick={{ fontSize: 11, fill: CHART_AXIS }}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: CHART_AXIS }}
+                            width={36}
+                            domain={[0, "auto"]}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              borderRadius: 8,
+                              border: "1px solid #e4e4e7",
+                            }}
+                            formatter={(value) => [
+                              `${formatNumber(Number(value ?? 0), 2)} km`,
+                              "Distance",
+                            ]}
+                            labelFormatter={(_, payload) =>
+                              payload?.[0]?.payload?.date ?? ""
+                            }
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="distanceKm"
+                            stroke={CHART_LINE}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                            connectNulls
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                    Sessions for {selectedDayIso ? formatAxisDate(selectedDayIso) : "day"}
+                  </h3>
+                  <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    Bar height is distance. Labels show duration and energy.
+                  </p>
+                  <div className="h-72 w-full min-w-0">
+                    {selectedDayIso == null ? (
+                      <p className="text-sm text-zinc-500">
+                        Select a day on the left chart.
+                      </p>
+                    ) : selectedDaySessionSeries.length === 0 ? (
+                      <p className="text-sm text-zinc-500">
+                        No sessions were saved on this day.
+                      </p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={selectedDaySessionSeries}
+                          margin={{ top: 12, right: 8, left: 0, bottom: 0 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke={CHART_GRID}
+                            className="dark:opacity-30"
+                          />
+                          <XAxis
+                            dataKey="timeLabel"
+                            tick={{ fontSize: 11, fill: CHART_AXIS }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: CHART_AXIS }}
+                            width={36}
+                            domain={[0, "auto"]}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              borderRadius: 8,
+                              border: "1px solid #e4e4e7",
+                            }}
+                            formatter={(value, name, payload) => {
+                              const p = payload?.payload as DaySessionPoint | undefined;
+                              if (name === "distanceKm")
+                                return [`${formatNumber(Number(value ?? 0), 2)} km`, "Distance"];
+                              if (name === "kcal")
+                                return [`${Math.round(Number(value ?? 0)).toLocaleString()} kcal`, "Est. energy"];
+                              if (name === "fatKg")
+                                return [`${formatNumber(Number(value ?? 0), 4)} kg`, "Theor. fat equiv."];
+                              if (name === "durationSeconds")
+                                return [formatElapsed(Number(value ?? p?.durationSeconds ?? 0)), "Duration"];
+                              return [String(value ?? ""), String(name ?? "")];
+                            }}
+                          />
+                          <Bar
+                            dataKey="distanceKm"
+                            stroke={CHART_LINE}
+                            fill={CHART_LINE}
+                            minPointSize={72}
+                            shape={(props) =>
+                              renderDaySessionBarShape(props as never)
+                            }
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -1207,7 +1536,7 @@ export default function ExercisePage() {
                         <th className="pb-3 text-right"> </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody onClick={() => setOpenRunMenuId(null)}>
                       {runSessions.map((row) => {
                         const when = new Date(row.created_at);
                         return (
@@ -1239,17 +1568,38 @@ export default function ExercisePage() {
                             <td className="py-3 pr-4 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
                               {formatNumber(row.fat_equiv_kg, 4)}
                             </td>
-                            <td className="py-3 text-right">
+                            <td className="relative py-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setDeleteSavedError(null);
-                                  setDeleteSavedSessionId(row.id);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenRunMenuId((current) =>
+                                    current === row.id ? null : row.id
+                                  );
                                 }}
-                                className="rounded-md border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-800 transition-colors hover:bg-rose-50 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-950/50"
+                                className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                aria-label="Open actions menu"
                               >
-                                Delete
+                                ⋯
                               </button>
+                              {openRunMenuId === row.id && (
+                                <div
+                                  className="absolute right-0 z-10 mt-1 min-w-28 rounded-md border border-zinc-200 bg-white p-1 shadow-md dark:border-zinc-700 dark:bg-zinc-900"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDeleteSavedError(null);
+                                      setDeleteSavedSessionId(row.id);
+                                      setOpenRunMenuId(null);
+                                    }}
+                                    className="block w-full rounded px-2 py-1.5 text-left text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1308,6 +1658,156 @@ export default function ExercisePage() {
           </section>
         </div>
       </main>
+
+      <Dialog
+        isOpen={manualDialogOpen}
+        onClose={() => {
+          if (manualIsSaving) return;
+          setManualDialogOpen(false);
+          setManualSaveError(null);
+        }}
+        title="Manual entry"
+        size="lg"
+      >
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Input speed, duration, and start time, then review the computed preview
+          before saving.
+        </p>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Speed (km/h)
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={manualSpeedKmhInput}
+              onChange={(e) => setManualSpeedKmhInput(e.target.value)}
+              placeholder="e.g. 8.5"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Duration (seconds)
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={manualDurationSecInput}
+              onChange={(e) => setManualDurationSecInput(e.target.value)}
+              placeholder="e.g. 2520"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Start time
+            </span>
+            <input
+              ref={manualStartInputRef}
+              type="datetime-local"
+              value={manualStartLocalInput}
+              onChange={(e) => setManualStartLocalInput(e.target.value)}
+              onFocus={() => manualStartInputRef.current?.showPicker?.()}
+              onClick={() => manualStartInputRef.current?.showPicker?.()}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </label>
+        </div>
+
+        {manualSaveError && (
+          <p className="mt-3 text-sm text-rose-700 dark:text-rose-300">
+            {manualSaveError}
+          </p>
+        )}
+        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+          <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            Preview
+          </p>
+          {manualPreview ? (
+            <div className="mt-2 grid gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:grid-cols-2 lg:grid-cols-4">
+              <p>
+                Duration:{" "}
+                <span className="font-semibold">
+                  {formatElapsed(manualPreview.durationSeconds)}
+                </span>
+              </p>
+              <p>
+                Distance:{" "}
+                <span className="font-semibold">
+                  {formatNumber(manualPreview.distanceKm, 3)} km
+                </span>
+              </p>
+              <p>
+                Est. energy:{" "}
+                <span className="font-semibold">
+                  {Math.round(manualPreview.kcal).toLocaleString()} kcal
+                </span>
+              </p>
+              <p>
+                Theor. fat equiv.:{" "}
+                <span className="font-semibold">
+                  {formatNumber(manualPreview.fatKg, 4)} kg
+                </span>
+              </p>
+              <p className="sm:col-span-2 lg:col-span-4">
+                End time:{" "}
+                <span className="font-semibold">
+                  {manualPreview.endLocal.toLocaleString()}
+                </span>
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Enter valid values to see computed output before saving.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (manualIsSaving) return;
+              setManualDialogOpen(false);
+              setManualSaveError(null);
+            }}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSaveManualRun()}
+            disabled={!manualPreview || manualIsSaving || isRunActive}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500"
+          >
+            {manualIsSaving ? "Saving..." : "Save manual run"}
+          </button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        isOpen={manualSavedDialogOpen}
+        onClose={() => setManualSavedDialogOpen(false)}
+        title="Run saved"
+        size="sm"
+      >
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Manual run was saved successfully.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setManualSavedDialogOpen(false)}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            OK
+          </button>
+        </div>
+      </Dialog>
 
       <Dialog
         isOpen={deleteSavedSessionId != null}
