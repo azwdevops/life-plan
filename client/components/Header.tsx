@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -17,6 +17,10 @@ export interface CashAnalysisSummary {
 interface HeaderProps {
   onMenuClick: () => void;
   isSidebarOpen: boolean;
+  /** Optional inline center content shown in main header row */
+  centerContent?: ReactNode;
+  /** Optional second row content shown below main header row */
+  subHeaderContent?: ReactNode;
   /** When set (e.g. on game page), show available cash in the header */
   availableCash?: number;
   /** When set (e.g. on game page), show hours available this month in the header */
@@ -34,7 +38,7 @@ interface HeaderProps {
   advanceMonthLabel?: string;
 }
 
-export function Header({ onMenuClick, isSidebarOpen, availableCash, hoursAvailable, portfolioValue, cashAnalysis, onViewCurrentDetails, onViewNextDetails, onAdvanceMonth, advanceMonthLabel }: HeaderProps) {
+export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderContent, availableCash, hoursAvailable, portfolioValue, cashAnalysis, onViewCurrentDetails, onViewNextDetails, onAdvanceMonth, advanceMonthLabel }: HeaderProps) {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -61,7 +65,7 @@ export function Header({ onMenuClick, isSidebarOpen, availableCash, hoursAvailab
 
   return (
     <header className="sticky top-0 z-50 w-full border-b-2 border-zinc-400 bg-white/80 shadow-[0_1px_0_0_rgba(0,0,0,0.08)] backdrop-blur-sm dark:border-zinc-500 dark:bg-zinc-900/80 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.1)]">
-      <div className="flex h-16 items-center justify-between px-4 md:px-6">
+      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <div className="flex items-center gap-4">
           {isAuthenticated && (
             <button
@@ -95,6 +99,11 @@ export function Header({ onMenuClick, isSidebarOpen, availableCash, hoursAvailab
             </span>
           </button>
         </div>
+        {centerContent && (
+          <div className="flex min-w-0 flex-1 items-center justify-center overflow-hidden px-1 sm:px-0">
+            {centerContent}
+          </div>
+        )}
         <div className="flex items-center gap-4">
           {cashAnalysis !== undefined && (
             <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 pl-2 pr-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
@@ -294,6 +303,11 @@ export function Header({ onMenuClick, isSidebarOpen, availableCash, hoursAvailab
           )}
         </div>
       </div>
+      {subHeaderContent && (
+        <div className="border-t border-zinc-200/80 dark:border-zinc-700/80">
+          <div className="px-4 py-2 md:px-6">{subHeaderContent}</div>
+        </div>
+      )}
     </header>
   );
 }

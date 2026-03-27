@@ -1,6 +1,6 @@
 import json
 import re
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, status
@@ -44,6 +44,32 @@ class AnalyzeRequest(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     analysis: str
+
+
+class PostingLedger(BaseModel):
+    id: int
+    name: str
+
+
+class PostingSuggestionRequest(BaseModel):
+    description: str
+    ledgers: List[PostingLedger]
+    api: Optional[str] = "openrouter"
+    model: Optional[str] = None
+
+
+class PostingSuggestionEntry(BaseModel):
+    ledger_id: int
+    entry_type: Literal["DEBIT", "CREDIT"]
+    amount: float
+    note: Optional[str] = None
+
+
+class PostingSuggestionResponse(BaseModel):
+    transaction_type: Literal["MONEY_RECEIVED", "MONEY_PAID", "JOURNAL"]
+    transaction_date: Optional[str] = None
+    reference: Optional[str] = None
+    entries: List[PostingSuggestionEntry]
 
 
 def _call_openrouter(messages: list, model: Optional[str] = None, max_tokens: int = 4096) -> str:
@@ -102,6 +128,67 @@ def _parse_questions_json(raw: str) -> List[GameQuestion]:
             if q:
                 out.append(GameQuestion(question=q, options=options or [QuestionOption(key="a", text="")]))
     return out
+
+
+def _parse_posting_suggestion_json(raw: str, allowed_ledger_ids: set[int]) -> PostingSuggestionResponse:
+    raw = raw.strip()
+    code_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+    if code_block:
+        raw = code_block.group(1).strip()
+
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("LLM did not return a valid posting object")
+
+    entries_raw = data.get("entries", [])
+    if not isinstance(entries_raw, list) or not entries_raw:
+        raise ValueError("LLM did not return any posting entries")
+
+    entries: List[PostingSuggestionEntry] = []
+    for entry in entries_raw:
+        if not isinstance(entry, dict):
+            continue
+        ledger_id = int(entry.get("ledger_id", 0))
+        entry_type = str(entry.get("entry_type", "")).upper()
+        amount = float(entry.get("amount", 0))
+        if ledger_id not in allowed_ledger_ids:
+            continue
+        if entry_type not in {"DEBIT", "CREDIT"}:
+            continue
+        if amount <= 0:
+            continue
+        entries.append(
+            PostingSuggestionEntry(
+                ledger_id=ledger_id,
+                entry_type=entry_type,  # type: ignore[arg-type]
+                amount=amount,
+                note=entry.get("note"),
+            )
+        )
+
+    if not entries:
+        raise ValueError("LLM did not return usable posting entries")
+
+    transaction_type = str(data.get("transaction_type", "JOURNAL")).upper()
+    if transaction_type not in {"MONEY_RECEIVED", "MONEY_PAID", "JOURNAL"}:
+        transaction_type = "JOURNAL"
+
+    transaction_date = data.get("transaction_date")
+    if transaction_date is not None:
+        transaction_date = str(transaction_date).strip() or None
+        if transaction_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", transaction_date):
+            transaction_date = None
+
+    reference = data.get("reference")
+    if reference is not None:
+        reference = str(reference).strip() or None
+
+    return PostingSuggestionResponse(
+        transaction_type=transaction_type,  # type: ignore[arg-type]
+        transaction_date=transaction_date,
+        reference=reference,
+        entries=entries,
+    )
 
 
 @router.post("/generate-questions", response_model=GenerateQuestionsResponse)
@@ -303,6 +390,64 @@ async def analyze(body: AnalyzeRequest):
             max_tokens=1024,
         )
         return AnalyzeResponse(analysis=analysis_text or "No analysis generated.")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"OpenRouter error: {e.response.text}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+
+@router.post("/suggest-posting", response_model=PostingSuggestionResponse)
+async def suggest_posting(body: PostingSuggestionRequest):
+    if body.api != "openrouter":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'openrouter' API is supported for now",
+        )
+    if not body.description.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Description is required")
+    if not body.ledgers:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ledgers are required")
+
+    ledger_lines = "\n".join([f"- id={l.id}, name={l.name}" for l in body.ledgers])
+    prompt = (
+        "You are an accounting assistant. Based on the user's activity description and available ledgers, "
+        "propose a double-entry posting suggestion.\n\n"
+        "Rules:\n"
+        "1. Use ONLY provided ledger IDs.\n"
+        "2. Return balanced entries (total debits must equal total credits).\n"
+        "3. Amounts must be positive numbers.\n"
+        "4. If uncertain, choose transaction_type JOURNAL.\n"
+        "5. Include a concise reference/narration when possible.\n\n"
+        "Return ONLY a JSON object with this exact shape:\n"
+        '{\n'
+        '  "transaction_type": "MONEY_RECEIVED" | "MONEY_PAID" | "JOURNAL",\n'
+        '  "transaction_date": "YYYY-MM-DD" | null,\n'
+        '  "reference": string | null,\n'
+        '  "entries": [\n'
+        '    { "ledger_id": number, "entry_type": "DEBIT" | "CREDIT", "amount": number, "note": string | null }\n'
+        "  ]\n"
+        "}\n\n"
+        f"Available ledgers:\n{ledger_lines}\n\n"
+        f"User description:\n{body.description.strip()}"
+    )
+
+    try:
+        content = _call_openrouter(
+            [
+                {"role": "system", "content": "You output only valid JSON. No markdown code fences or extra text."},
+                {"role": "user", "content": prompt},
+            ],
+            model=body.model,
+            max_tokens=1200,
+        )
+        response = _parse_posting_suggestion_json(content, {l.id for l in body.ledgers})
+        return response
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

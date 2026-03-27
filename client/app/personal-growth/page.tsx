@@ -6,29 +6,38 @@ import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
-import CurrentAssetsPage from "@/app/assets/current/page";
-import FixedAssetsPage from "@/app/assets/fixed/page";
+import ExercisePage from "@/app/exercise/page";
+import SelfDiscoveryListPage from "@/app/game/self-discovery/page";
 
-type AssetsTab = "current" | "fixed";
+type PersonalGrowthTab = "exercise" | "self-discovery";
 
-const TAB_CONFIG: Array<{ id: AssetsTab; label: string }> = [
-  { id: "current", label: "Current Assets" },
-  { id: "fixed", label: "Fixed Assets" },
+const TAB_CONFIG: Array<{ id: PersonalGrowthTab; label: string; path: string }> = [
+  { id: "exercise", label: "Exercise", path: "/exercise" },
+  { id: "self-discovery", label: "Self Discovery", path: "/game/self-discovery" },
 ];
 
-export default function AssetsPage() {
+export default function PersonalGrowthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
+  const isAdmin = user?.groups?.includes("admin");
 
-  const activeTab = useMemo<AssetsTab>(() => {
+  const activeTab = useMemo<PersonalGrowthTab>(() => {
     const requested = searchParams.get("tab");
-    return requested === "fixed" ? "fixed" : "current";
+    if (requested === "exercise" || requested === "self-discovery") {
+      return requested;
+    }
+    return "exercise";
   }, [searchParams]);
 
   if (!isAuthenticated && !isLoading) {
     router.push("/login");
+    return null;
+  }
+
+  if (isAuthenticated && !isLoading && !isAdmin) {
+    router.push("/dashboard");
     return null;
   }
 
@@ -40,17 +49,17 @@ export default function AssetsPage() {
         centerContent={
           <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
             <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
-              Assets
+              Personal Growth
             </h1>
-            <label className="sr-only" htmlFor="assets-tab-select">
-              Assets section
+            <label className="sr-only" htmlFor="personal-growth-tab-select">
+              Personal growth section
             </label>
             <select
-              id="assets-tab-select"
+              id="personal-growth-tab-select"
               value={activeTab}
               onChange={(e) => {
-                const next = e.target.value as AssetsTab;
-                router.replace(`/assets?tab=${next}`);
+                const next = e.target.value as PersonalGrowthTab;
+                router.replace(`/personal-growth?tab=${next}`);
               }}
               className="md:hidden w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             >
@@ -67,7 +76,7 @@ export default function AssetsPage() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => router.replace(`/assets?tab=${tab.id}`)}
+                    onClick={() => router.replace(`/personal-growth?tab=${tab.id}`)}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                       selected
                         ? "bg-blue-600 text-white dark:bg-blue-500"
@@ -88,7 +97,7 @@ export default function AssetsPage() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        {activeTab === "current" ? <CurrentAssetsPage /> : <FixedAssetsPage />}
+        {activeTab === "exercise" ? <ExercisePage /> : <SelfDiscoveryListPage />}
       </main>
     </div>
   );

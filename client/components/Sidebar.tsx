@@ -18,14 +18,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
 
   const [expandedMenus, setExpandedMenus] = useState<string[]>(() => {
     // Auto-expand menus if we're on their pages
-    const expanded: string[] = [];
-    if (pathname === "/loans" || pathname === "/liabilities/short-term") {
-      expanded.push("liabilities");
-    }
-    if (pathname === "/assets/current" || pathname === "/assets/fixed") {
-      expanded.push("assets");
-    }
-    return expanded;
+    return [];
   });
   
   type NavItem =
@@ -43,17 +36,14 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
     {
       label: "Money flow",
       items: [
-        { icon: "💰", label: "Income", href: "/income", type: "link" },
-        { icon: "💸", label: "Expenses", href: "/expenses", type: "link" },
-        { icon: "🔄", label: "Transfers", href: "/transfers", type: "link" },
-        { icon: "📝", label: "Journal", href: "/journal", type: "link" },
+        { icon: "💱", label: "Money Flow", href: "/money-flow", type: "link" },
       ],
     },
     {
       label: "Balance sheet",
       items: [
-        { icon: "🏢", label: "Assets", href: null, type: "expandable", subMenuKey: "assets" },
-        { icon: "📋", label: "Liabilities", href: null, type: "expandable", subMenuKey: "liabilities" },
+        { icon: "🏢", label: "Assets", href: "/assets", type: "link" },
+        { icon: "📋", label: "Liabilities", href: "/liabilities", type: "link" },
       ],
     },
     {
@@ -63,11 +53,10 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
     {
       label: "Personal growth",
       items: [
-        { icon: "🎮", label: "Investment Game", href: "/game", type: "link" },
+        { icon: "💼", label: "Investments", href: "/investments", type: "link" },
         ...(isAdmin
           ? [
-              { icon: "🏃", label: "Exercise", href: "/exercise", type: "link" as const },
-              { icon: "✨", label: "Self Discovery", href: "/game/self-discovery", type: "link" as const },
+              { icon: "🌱", label: "Personal Growth", href: "/personal-growth", type: "link" as const },
               { icon: "📚", label: "Developer Revision", href: "/game/revision", type: "link" as const },
             ]
           : []),
@@ -76,24 +65,13 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
     {
       label: "Support & settings",
       items: [
-        ...(isAdmin
-          ? [{ icon: "👥", label: "Manage users", href: "/admin/users", type: "link" as const }]
-          : []),
-        { icon: "💬", label: "Feedback", href: "/feedback", type: "link" },
-        { icon: "⚙️", label: "Settings", href: "/settings", type: "link" },
+        { icon: "🛠️", label: "Support & Settings", href: "/support-settings", type: "link" },
       ],
     },
   ];
 
   const subMenuItems = {
-    assets: [
-      { icon: "📦", label: "Current Assets", href: "/assets/current" },
-      { icon: "🏗️", label: "Fixed Assets", href: "/assets/fixed" },
-    ],
-    liabilities: [
-      { icon: "💳", label: "Long Term", href: "/loans" },
-      { icon: "📅", label: "Short Term", href: "/liabilities/short-term" },
-    ],
+    liabilities: [] as Array<{ icon: string; label: string; href: string }>,
   };
 
   const toggleMenu = (menuKey: string) => {
@@ -131,11 +109,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                 <ul className="space-y-1">
                   {section.items.map((item) => {
                     if (item.type === "expandable" && item.subMenuKey) {
-                      const isActive =
-                        (item.subMenuKey === "liabilities" &&
-                          (pathname === "/loans" || pathname === "/liabilities/short-term")) ||
-                        (item.subMenuKey === "assets" &&
-                          (pathname === "/assets/current" || pathname === "/assets/fixed"));
+                      const isActive = false;
                       return (
                         <li key={item.label}>
                           <button

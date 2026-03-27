@@ -44,6 +44,8 @@ export function SearchableSelect({
   const listRef = useRef<HTMLUListElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  /** Below sidebar (z-40) and header (z-50) on normal pages; above dialog shell when inside a modal */
+  const [dropdownZClass, setDropdownZClass] = useState("z-30");
 
   // Get selected option label
   const selectedOption = options.find((opt) => opt.value === value);
@@ -66,6 +68,9 @@ export function SearchableSelect({
   // Update dropdown position when opened
   useEffect(() => {
     if (isOpen && containerRef.current) {
+      const inDialog = !!containerRef.current.closest('[role="dialog"]');
+      setDropdownZClass(inDialog ? "z-[60]" : "z-30");
+
       const updatePosition = () => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (rect) {
@@ -76,11 +81,11 @@ export function SearchableSelect({
           });
         }
       };
-      
+
       updatePosition();
       window.addEventListener("scroll", updatePosition, true);
       window.addEventListener("resize", updatePosition);
-      
+
       return () => {
         window.removeEventListener("scroll", updatePosition, true);
         window.removeEventListener("resize", updatePosition);
@@ -198,7 +203,7 @@ export function SearchableSelect({
   const canClear = allowClear && !required && selectedOption && !disabled;
 
   return (
-    <div ref={containerRef} className={`relative z-[99999] ${className}`}>
+    <div ref={containerRef} className={`relative z-0 ${className}`}>
       {/* Trigger Button */}
       <button
         type="button"
@@ -258,7 +263,7 @@ export function SearchableSelect({
       {isOpen && typeof document !== "undefined" && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed z-[99999] rounded-lg border border-zinc-300 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-800"
+          className={`fixed rounded-lg border border-zinc-300 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-800 ${dropdownZClass}`}
           style={{
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,

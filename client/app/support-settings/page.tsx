@@ -6,26 +6,36 @@ import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
-import CurrentAssetsPage from "@/app/assets/current/page";
-import FixedAssetsPage from "@/app/assets/fixed/page";
+import FeedbackPage from "@/app/feedback/page";
+import SettingsPage from "@/app/settings/page";
+import AdminUsersPage from "@/app/admin/users/page";
 
-type AssetsTab = "current" | "fixed";
+type SupportSettingsTab = "users" | "feedback" | "settings";
 
-const TAB_CONFIG: Array<{ id: AssetsTab; label: string }> = [
-  { id: "current", label: "Current Assets" },
-  { id: "fixed", label: "Fixed Assets" },
-];
-
-export default function AssetsPage() {
+export default function SupportSettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
+  const isAdmin = user?.groups?.includes("admin");
 
-  const activeTab = useMemo<AssetsTab>(() => {
+  const availableTabs = useMemo<Array<{ id: SupportSettingsTab; label: string }>>(() => {
+    const base: Array<{ id: SupportSettingsTab; label: string }> = [
+      { id: "feedback", label: "Feedback" },
+      { id: "settings", label: "Settings" },
+    ];
+    if (isAdmin) {
+      base.unshift({ id: "users", label: "Users" });
+    }
+    return base;
+  }, [isAdmin]);
+
+  const activeTab = useMemo<SupportSettingsTab>(() => {
     const requested = searchParams.get("tab");
-    return requested === "fixed" ? "fixed" : "current";
-  }, [searchParams]);
+    if (requested === "users" && isAdmin) return "users";
+    if (requested === "settings") return "settings";
+    return "feedback";
+  }, [searchParams, isAdmin]);
 
   if (!isAuthenticated && !isLoading) {
     router.push("/login");
@@ -40,34 +50,34 @@ export default function AssetsPage() {
         centerContent={
           <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
             <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
-              Assets
+              Support & Settings
             </h1>
-            <label className="sr-only" htmlFor="assets-tab-select">
-              Assets section
+            <label className="sr-only" htmlFor="support-settings-tab-select">
+              Support and settings section
             </label>
             <select
-              id="assets-tab-select"
+              id="support-settings-tab-select"
               value={activeTab}
               onChange={(e) => {
-                const next = e.target.value as AssetsTab;
-                router.replace(`/assets?tab=${next}`);
+                const next = e.target.value as SupportSettingsTab;
+                router.replace(`/support-settings?tab=${next}`);
               }}
               className="md:hidden w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             >
-              {TAB_CONFIG.map((tab) => (
+              {availableTabs.map((tab) => (
                 <option key={tab.id} value={tab.id}>
                   {tab.label}
                 </option>
               ))}
             </select>
             <div className="hidden gap-2 md:flex">
-              {TAB_CONFIG.map((tab) => {
+              {availableTabs.map((tab) => {
                 const selected = tab.id === activeTab;
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => router.replace(`/assets?tab=${tab.id}`)}
+                    onClick={() => router.replace(`/support-settings?tab=${tab.id}`)}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                       selected
                         ? "bg-blue-600 text-white dark:bg-blue-500"
@@ -88,7 +98,9 @@ export default function AssetsPage() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        {activeTab === "current" ? <CurrentAssetsPage /> : <FixedAssetsPage />}
+        {activeTab === "users" && isAdmin && <AdminUsersPage />}
+        {activeTab === "feedback" && <FeedbackPage />}
+        {activeTab === "settings" && <SettingsPage />}
       </main>
     </div>
   );

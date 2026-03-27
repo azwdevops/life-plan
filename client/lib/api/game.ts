@@ -40,6 +40,25 @@ export interface AnalyzeResponse {
   analysis: string;
 }
 
+export interface PostingLedger {
+  id: number;
+  name: string;
+}
+
+export interface PostingSuggestionEntry {
+  ledger_id: number;
+  entry_type: "DEBIT" | "CREDIT";
+  amount: number;
+  note?: string | null;
+}
+
+export interface PostingSuggestionResponse {
+  transaction_type: "MONEY_RECEIVED" | "MONEY_PAID" | "JOURNAL";
+  transaction_date?: string | null;
+  reference?: string | null;
+  entries: PostingSuggestionEntry[];
+}
+
 export async function analyze(
   testId: string,
   questions: { question: string; options: { key: string; text: string }[] }[],
@@ -61,6 +80,29 @@ export async function analyze(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Failed to get analysis");
+  }
+  return res.json();
+}
+
+export async function suggestPosting(
+  description: string,
+  ledgers: PostingLedger[],
+  api: GameApiProvider = "openrouter",
+  model?: string
+): Promise<PostingSuggestionResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/game/suggest-posting`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      description,
+      ledgers,
+      api,
+      model: model || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || "Failed to generate posting suggestion");
   }
   return res.json();
 }

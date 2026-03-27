@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { FitnessProfileModal } from "@/components/FitnessProfileModal";
@@ -10,7 +10,10 @@ import { useSidebar } from "@/contexts/SidebarContext";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, user, token, applyUser } = useAuth();
+  const isEmbedded = searchParams.get("embedded") === "1" || pathname === "/support-settings";
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const [metricsOpen, setMetricsOpen] = useState(false);
 
@@ -27,19 +30,27 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
-      <Header
-        onMenuClick={toggleSidebar}
-        isSidebarOpen={isSidebarOpen}
-      />
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        isLoggedIn={isAuthenticated}
-      />
+      {!isEmbedded && (
+        <Header
+          onMenuClick={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
+        />
+      )}
+      {!isEmbedded && (
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isLoggedIn={isAuthenticated}
+        />
+      )}
       <main
-        className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
-        }`}
+        className={
+          isEmbedded
+            ? "flex-1"
+            : `flex-1 transition-all duration-300 ${
+                isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+              }`
+        }
       >
         <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
           <h1 className="mb-8 text-3xl font-bold text-zinc-900 dark:text-zinc-100">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Header } from "@/components/Header";
@@ -456,7 +456,10 @@ const INVESTMENT_OPPORTUNITIES: Investment[] = [
 
 function GamePageContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
+  const isEmbedded = searchParams.get("embedded") === "1" || pathname === "/investments";
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const { alert, confirm, prompt } = useDialogs();
 
@@ -1946,25 +1949,27 @@ function GamePageContent() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
-      <Header
-              onMenuClick={toggleSidebar}
-              isSidebarOpen={isSidebarOpen}
-              availableCash={gameState.currentMoney}
-              hoursAvailable={gameState.hoursAvailable ?? 300}
-              portfolioValue={totalPortfolioValue}
-              cashAnalysis={{
-                currentMonthLabel: formatMonthYear(currentDate),
-                nextMonthLabel: formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1)),
-                currentIn: gameState.monthlyCashIn || 0,
-                currentOut: gameState.monthlyCashOut || 0,
-                nextIn: nextMonthExpected.cashIn,
-                nextOut: nextMonthExpected.cashOut,
-              }}
-              onViewCurrentDetails={() => setCashDetailsView("current")}
-              onViewNextDetails={() => setCashDetailsView("next")}
-              onAdvanceMonth={!gameState.gameOver ? handleAdvanceMonth : undefined}
-              advanceMonthLabel={!gameState.gameOver ? formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1)) : undefined}
-            />
+      {!isEmbedded && (
+        <Header
+          onMenuClick={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
+          availableCash={gameState.currentMoney}
+          hoursAvailable={gameState.hoursAvailable ?? 300}
+          portfolioValue={totalPortfolioValue}
+          cashAnalysis={{
+            currentMonthLabel: formatMonthYear(currentDate),
+            nextMonthLabel: formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1)),
+            currentIn: gameState.monthlyCashIn || 0,
+            currentOut: gameState.monthlyCashOut || 0,
+            nextIn: nextMonthExpected.cashIn,
+            nextOut: nextMonthExpected.cashOut,
+          }}
+          onViewCurrentDetails={() => setCashDetailsView("current")}
+          onViewNextDetails={() => setCashDetailsView("next")}
+          onAdvanceMonth={!gameState.gameOver ? handleAdvanceMonth : undefined}
+          advanceMonthLabel={!gameState.gameOver ? formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1)) : undefined}
+        />
+      )}
       <Dialog
             isOpen={cashDetailsView !== null}
             onClose={() => setCashDetailsView(null)}
@@ -2042,15 +2047,21 @@ function GamePageContent() {
               </div>
             )}
           </Dialog>
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        isLoggedIn={isAuthenticated}
-      />
+      {!isEmbedded && (
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isLoggedIn={isAuthenticated}
+        />
+      )}
       <main
-        className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
-        }`}
+        className={
+          isEmbedded
+            ? "flex-1"
+            : `flex-1 transition-all duration-300 ${
+                isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+              }`
+        }
       >
         <div className="mx-auto w-full max-w-[98%] px-2 py-3 md:px-3 md:py-4 lg:px-4 lg:py-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

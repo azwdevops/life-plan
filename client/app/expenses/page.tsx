@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -30,7 +30,10 @@ type PeriodType = "month" | "custom";
 
 export default function ExpensesPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
+  const isEmbedded = searchParams.get("embedded") === "1" || pathname === "/money-flow";
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const { data: ledgers = [], isLoading: ledgersLoading, refetch: refetchLedgers } = useLedgers();
   const { data: groups = [] } = useLedgerGroups();
@@ -620,19 +623,27 @@ export default function ExpensesPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
-      <Header
-        onMenuClick={toggleSidebar}
-        isSidebarOpen={isSidebarOpen}
-      />
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        isLoggedIn={isAuthenticated}
-      />
+      {!isEmbedded && (
+        <Header
+          onMenuClick={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
+        />
+      )}
+      {!isEmbedded && (
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isLoggedIn={isAuthenticated}
+        />
+      )}
       <main
-        className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
-        }`}
+        className={
+          isEmbedded
+            ? "flex-1"
+            : `flex-1 transition-all duration-300 ${
+                isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+              }`
+        }
       >
         <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

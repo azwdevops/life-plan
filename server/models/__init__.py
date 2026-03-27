@@ -10,6 +10,8 @@ from models.finance import (
     TransactionType,
     EntryType,
     UpcomingExpense,
+    PlotProspectStage,
+    PlotProspect,
 )
 from models.feedback import Feedback, FeedbackType
 from models.run_session import RunSession
@@ -27,6 +29,8 @@ __all__ = [
     "TransactionType",
     "EntryType",
     "UpcomingExpense",
+    "PlotProspectStage",
+    "PlotProspect",
     "Feedback",
     "FeedbackType",
     "RunSession",

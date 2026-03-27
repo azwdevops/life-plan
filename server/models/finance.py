@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Enum, Boolean, Numeric, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, Boolean, Numeric, Date, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import DateTime
@@ -129,3 +129,35 @@ class UpcomingExpense(Base):
     due_date = Column(Date, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class PlotProspectStage(Base):
+    __tablename__ = "plot_prospect_stages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    prospects = relationship("PlotProspect", back_populates="stage")
+
+
+class PlotProspect(Base):
+    __tablename__ = "plot_prospects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    stage_id = Column(Integer, ForeignKey("plot_prospect_stages.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    phones_json = Column(Text, nullable=False)  # JSON-encoded list[str]
+    dealer_name = Column(String, nullable=True)
+    location = Column(String, nullable=False)
+    map_pin = Column(String, nullable=True)
+    plot_size = Column(String, nullable=True)
+    price = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    stage = relationship("PlotProspectStage", back_populates="prospects")

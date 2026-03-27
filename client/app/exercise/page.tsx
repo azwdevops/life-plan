@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -436,8 +436,11 @@ function snapshotLiveActive(
 
 export default function ExercisePage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, user, token, applyUser } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
+  const isEmbedded = searchParams.get("embedded") === "1" || pathname === "/personal-growth";
   const isAdmin = user?.groups?.includes("admin");
 
   const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
@@ -1079,16 +1082,22 @@ export default function ExercisePage() {
       className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950"
       suppressHydrationWarning
     >
-      <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        isLoggedIn={isAuthenticated}
-      />
+      {!isEmbedded && <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />}
+      {!isEmbedded && (
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isLoggedIn={isAuthenticated}
+        />
+      )}
       <main
-        className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
-        }`}
+        className={
+          isEmbedded
+            ? "flex-1"
+            : `flex-1 transition-all duration-300 ${
+                isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+              }`
+        }
       >
         <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
           <div className="mb-4">
