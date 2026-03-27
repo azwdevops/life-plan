@@ -1,0 +1,31 @@
+.resume-rich-editor[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: rgb(113 113 122);
+  pointer-events: none;
+}
+
+.dark .resume-rich-editor[data-placeholder]:empty::before {
+  color: rgb(161 161 170);
+}
+
+.resume-rich-editor ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.resume-rich-editor ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.resume-rich-editor h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.25rem 0;
+}
+
+.resume-rich-editor p {
+  margin: 0.25rem 0;
+}

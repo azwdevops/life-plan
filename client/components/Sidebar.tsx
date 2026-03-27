@@ -57,7 +57,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
         ...(isAdmin
           ? [
               { icon: "🌱", label: "Personal Growth", href: "/personal-growth", type: "link" as const },
-              { icon: "📚", label: "Developer Revision", href: "/game/revision", type: "link" as const },
+              { icon: "📚", label: "Developer Growth", href: "/developer-growth", type: "link" as const },
             ]
           : []),
       ],
@@ -87,6 +87,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       {/* Overlay for mobile */}
       {isOpen && (
         <div
+          data-app-sidebar-backdrop
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={onClose}
           aria-hidden="true"
@@ -95,6 +96,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
+        id="app-site-sidebar"
         className={`fixed left-0 top-16 bottom-0 z-40 w-64 transform border-r border-zinc-200 bg-white transition-transform duration-300 ease-in-out dark:border-zinc-800 dark:bg-zinc-900 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -161,7 +163,11 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                       );
                     } else if (item.type === "link") {
                       const href = item.href;
-                      const isActive = pathname === href;
+                      const isActive =
+                        pathname === href ||
+                        (href === "/developer-growth" &&
+                          (pathname.startsWith("/game/revision") ||
+                            pathname.startsWith("/developer-growth/")));
                       return (
                         <li key={item.label}>
                           <Link

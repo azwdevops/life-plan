@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -22,6 +22,12 @@ function PersonalGrowthContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const isAdmin = user?.groups?.includes("admin");
+
+  useEffect(() => {
+    if (searchParams.get("tab") === "revision") {
+      router.replace("/developer-growth?tab=revision");
+    }
+  }, [searchParams, router]);
 
   const activeTab = useMemo<PersonalGrowthTab>(() => {
     const requested = searchParams.get("tab");
@@ -47,7 +53,7 @@ function PersonalGrowthContent() {
         onMenuClick={toggleSidebar}
         isSidebarOpen={isSidebarOpen}
         centerContent={
-          <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-2 md:flex-row md:items-center md:justify-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
             <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
               Personal Growth
             </h1>
@@ -97,7 +103,8 @@ function PersonalGrowthContent() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        {activeTab === "exercise" ? <ExercisePage /> : <SelfDiscoveryListPage />}
+        {activeTab === "exercise" && <ExercisePage />}
+        {activeTab === "self-discovery" && <SelfDiscoveryListPage />}
       </main>
     </div>
   );

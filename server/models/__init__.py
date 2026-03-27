@@ -15,6 +15,7 @@ from models.finance import (
 )
 from models.feedback import Feedback, FeedbackType
 from models.run_session import RunSession
+from models.resume_document import ResumeDocument
 
 __all__ = [
     "User",
@@ -34,4 +35,5 @@ __all__ = [
     "Feedback",
     "FeedbackType",
     "RunSession",
+    "ResumeDocument",
 ]

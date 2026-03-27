@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -24,8 +24,10 @@ import {
 
 export default function RevisionListPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, toggleSidebar, setIsSidebarOpen } = useSidebar();
+  const isEmbedded = pathname === "/developer-growth";
   const isAdmin = user?.groups?.includes("admin");
   const [api, setApi] = useState<RevisionApiProvider>("openrouter");
   const [model, setModel] = useState<string>(() => MODELS_BY_PROVIDER.openrouter[0].value);
@@ -95,8 +97,8 @@ export default function RevisionListPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
-      <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
-      {isAuthenticated && (
+      {!isEmbedded && <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />}
+      {!isEmbedded && isAuthenticated && (
         <Sidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
@@ -104,18 +106,28 @@ export default function RevisionListPage() {
         />
       )}
       <main
-        className={`flex-1 transition-all duration-300 ${isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"}`}
+        className={
+          isEmbedded
+            ? "flex-1"
+            : `flex-1 transition-all duration-300 ${isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"}`
+        }
       >
         <div className="container mx-auto px-4 py-6 md:px-6 md:py-8">
-          <div className="mb-8 flex flex-col gap-6 lg:flex-row lg:flex-nowrap lg:items-center lg:justify-between">
-            <div className="min-w-0 shrink-0">
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 md:text-3xl">
-                Developer Revision
-              </h1>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                Add revision kits by category and language. Answer 10 questions and get a summary of areas to work on.
-              </p>
-            </div>
+          <div
+            className={`mb-8 flex flex-col gap-6 ${
+              isEmbedded ? "" : "lg:flex-row lg:flex-nowrap lg:items-center lg:justify-between"
+            }`}
+          >
+            {!isEmbedded && (
+              <div className="min-w-0 shrink-0">
+                <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 md:text-3xl">
+                  Developer Revision
+                </h1>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  Add revision kits by category and language. Answer 10 questions and get a summary of areas to work on.
+                </p>
+              </div>
+            )}
             <div className="flex min-w-0 flex-wrap items-end gap-3 sm:gap-4">
               <div className="flex min-w-0 shrink-0 flex-col gap-1.5 sm:w-36">
                 <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">API</span>

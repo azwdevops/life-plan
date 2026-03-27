@@ -1,0 +1,76 @@
+/*
+ * Resume/PDF print: hide app chrome + editor UI via [data-resume-no-print].
+ * Avoid generic class names (rich text could echo classes). :has() scopes to this flow.
+ * Fallback: visibility so #resume-print-root still paints if a hide rule misfires.
+ */
+@page {
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    background: white !important;
+  }
+
+  body:has(#resume-print-root) #app-site-header,
+  body:has(#resume-print-root) #app-site-sidebar,
+  body:has(#resume-print-root) [data-app-sidebar-backdrop] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body:has(#resume-print-root) .min-h-screen {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  body:has(#resume-print-root) main {
+    margin-left: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(#resume-print-root) [data-resume-no-print] {
+    display: none !important;
+  }
+
+  footer,
+  [role="contentinfo"] {
+    display: none !important;
+  }
+
+  body:has(#resume-print-root) {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body:has(#resume-print-root) * {
+    visibility: hidden;
+  }
+
+  body:has(#resume-print-root) #resume-print-root,
+  body:has(#resume-print-root) #resume-print-root * {
+    visibility: visible !important;
+  }
+
+  body:has(#resume-print-root) #resume-print-root {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: #171717 !important;
+    break-after: auto;
+  }
+}

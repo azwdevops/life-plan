@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -17,6 +17,8 @@ import {
 } from "../constants";
 
 type Phase = "loading" | "quiz" | "submitting" | "results";
+
+const REVISION_LIST_HREF = "/developer-growth?tab=revision";
 
 export default function RevisionSessionPage() {
   const router = useRouter();
@@ -43,7 +45,7 @@ export default function RevisionSessionPage() {
 
   useEffect(() => {
     if (!sessionId) {
-      router.replace("/game/revision");
+      router.replace(REVISION_LIST_HREF);
       return;
     }
     if (initialized.current) return;
@@ -51,7 +53,7 @@ export default function RevisionSessionPage() {
 
     const data = loadRevisionSession(sessionId);
     if (!data) {
-      router.replace("/game/revision");
+      router.replace(REVISION_LIST_HREF);
       return;
     }
 
@@ -149,7 +151,7 @@ export default function RevisionSessionPage() {
         <div className="container mx-auto px-4 py-6 md:px-6 md:py-8">
           <div className="mb-6 flex items-center gap-4">
             <Link
-              href="/game/revision"
+              href={REVISION_LIST_HREF}
               className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
             >
               ← Back to revision kits
@@ -234,7 +236,7 @@ export default function RevisionSessionPage() {
                 </div>
               </div>
               <Link
-                href="/game/revision"
+                href={REVISION_LIST_HREF}
                 className="inline-block rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:focus:ring-offset-zinc-900"
               >
                 Back to revision kits

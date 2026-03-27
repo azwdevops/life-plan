@@ -64,7 +64,10 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b-2 border-zinc-400 bg-white/80 shadow-[0_1px_0_0_rgba(0,0,0,0.08)] backdrop-blur-sm dark:border-zinc-500 dark:bg-zinc-900/80 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.1)]">
+    <header
+      id="app-site-header"
+      className="sticky top-0 z-50 w-full border-b-2 border-zinc-400 bg-white/80 shadow-[0_1px_0_0_rgba(0,0,0,0.08)] backdrop-blur-sm dark:border-zinc-500 dark:bg-zinc-900/80 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.1)]"
+    >
       <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <div className="flex items-center gap-4">
           {isAuthenticated && (

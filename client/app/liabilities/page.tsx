@@ -38,7 +38,7 @@ function LiabilitiesContent() {
         onMenuClick={toggleSidebar}
         isSidebarOpen={isSidebarOpen}
         centerContent={
-          <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-2 md:flex-row md:items-center md:justify-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
             <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
               Liabilities
             </h1>
