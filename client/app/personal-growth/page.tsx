@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -16,7 +16,7 @@ const TAB_CONFIG: Array<{ id: PersonalGrowthTab; label: string; path: string }> 
   { id: "self-discovery", label: "Self Discovery", path: "/game/self-discovery" },
 ];
 
-export default function PersonalGrowthPage() {
+function PersonalGrowthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -100,5 +100,19 @@ export default function PersonalGrowthPage() {
         {activeTab === "exercise" ? <ExercisePage /> : <SelfDiscoveryListPage />}
       </main>
     </div>
+  );
+}
+
+const personalGrowthSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function PersonalGrowthPage() {
+  return (
+    <Suspense fallback={personalGrowthSuspenseFallback}>
+      <PersonalGrowthContent />
+    </Suspense>
   );
 }

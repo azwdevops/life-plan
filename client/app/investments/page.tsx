@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -16,7 +16,7 @@ const TAB_CONFIG: Array<{ id: InvestmentsTab; label: string }> = [
   { id: "plots", label: "Plot Prospects" },
 ];
 
-export default function InvestmentsPage() {
+function InvestmentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
@@ -91,5 +91,19 @@ export default function InvestmentsPage() {
         {activeTab === "game" ? <GamePage /> : <PlotProspectsTab />}
       </main>
     </div>
+  );
+}
+
+const investmentsSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function InvestmentsPage() {
+  return (
+    <Suspense fallback={investmentsSuspenseFallback}>
+      <InvestmentsContent />
+    </Suspense>
   );
 }

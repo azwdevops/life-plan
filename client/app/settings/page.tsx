@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -8,7 +8,7 @@ import { FitnessProfileModal } from "@/components/FitnessProfileModal";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -96,3 +96,16 @@ export default function SettingsPage() {
   );
 }
 
+const settingsSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={settingsSuspenseFallback}>
+      <SettingsContent />
+    </Suspense>
+  );
+}

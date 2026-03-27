@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -18,7 +18,7 @@ import {
   loadSession,
 } from "./constants";
 
-export default function SelfDiscoveryListPage() {
+function SelfDiscoveryListContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -182,5 +182,19 @@ export default function SelfDiscoveryListPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+const selfDiscoverySuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function SelfDiscoveryListPage() {
+  return (
+    <Suspense fallback={selfDiscoverySuspenseFallback}>
+      <SelfDiscoveryListContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -16,7 +16,7 @@ const TAB_CONFIG: Array<{ id: LiabilitiesTab; label: string }> = [
   { id: "short-term", label: "Short Term" },
 ];
 
-export default function LiabilitiesPage() {
+function LiabilitiesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
@@ -91,5 +91,19 @@ export default function LiabilitiesPage() {
         {activeTab === "long-term" ? <LoansPage /> : <ShortTermLiabilitiesPage />}
       </main>
     </div>
+  );
+}
+
+const liabilitiesSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function LiabilitiesPage() {
+  return (
+    <Suspense fallback={liabilitiesSuspenseFallback}>
+      <LiabilitiesContent />
+    </Suspense>
   );
 }

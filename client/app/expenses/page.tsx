@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
@@ -28,7 +28,7 @@ import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
 type PeriodType = "month" | "custom";
 
-export default function ExpensesPage() {
+function ExpensesContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1621,3 +1621,16 @@ export default function ExpensesPage() {
   );
 }
 
+const expensesSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function ExpensesPage() {
+  return (
+    <Suspense fallback={expensesSuspenseFallback}>
+      <ExpensesContent />
+    </Suspense>
+  );
+}

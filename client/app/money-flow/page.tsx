@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -22,7 +22,7 @@ const TAB_CONFIG: Array<{ id: MoneyFlowTab; label: string }> = [
   { id: "ai-posting", label: "AI Posting" },
 ];
 
-export default function MoneyFlowPage() {
+function MoneyFlowContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
@@ -110,5 +110,19 @@ export default function MoneyFlowPage() {
         {activeTab === "ai-posting" && <AIPostingTab />}
       </main>
     </div>
+  );
+}
+
+const moneyFlowSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function MoneyFlowPage() {
+  return (
+    <Suspense fallback={moneyFlowSuspenseFallback}>
+      <MoneyFlowContent />
+    </Suspense>
   );
 }

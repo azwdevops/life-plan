@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -10,7 +10,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { useCreateFeedback, useFeedback, useUpdateFeedback } from "@/lib/hooks/use-feedback";
 import type { FeedbackType, FeedbackStatusFilter } from "@/lib/api/feedback";
 
-export default function FeedbackPage() {
+function FeedbackContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -395,3 +395,16 @@ export default function FeedbackPage() {
   );
 }
 
+const feedbackSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function FeedbackPage() {
+  return (
+    <Suspense fallback={feedbackSuspenseFallback}>
+      <FeedbackContent />
+    </Suspense>
+  );
+}

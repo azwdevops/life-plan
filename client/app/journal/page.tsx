@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
@@ -29,7 +29,7 @@ interface JournalItem {
   credit_amount: string;
 }
 
-export default function JournalPage() {
+function JournalContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -848,3 +848,16 @@ export default function JournalPage() {
   );
 }
 
+const journalSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function JournalPage() {
+  return (
+    <Suspense fallback={journalSuspenseFallback}>
+      <JournalContent />
+    </Suspense>
+  );
+}

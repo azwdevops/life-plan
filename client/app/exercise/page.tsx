@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bar,
@@ -434,7 +434,7 @@ function snapshotLiveActive(
   };
 }
 
-export default function ExercisePage() {
+function ExerciseContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1943,3 +1943,18 @@ export default function ExercisePage() {
     </div>
   );
 }
+
+const exerciseSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function ExercisePage() {
+  return (
+    <Suspense fallback={exerciseSuspenseFallback}>
+      <ExerciseContent />
+    </Suspense>
+  );
+}
+

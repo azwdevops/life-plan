@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -8,11 +8,11 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import FeedbackPage from "@/app/feedback/page";
 import SettingsPage from "@/app/settings/page";
-import AdminUsersPage from "@/app/admin/users/page";
+import AdminUsersPage from "@/app/admin/users/AdminUsersClient";
 
 type SupportSettingsTab = "users" | "feedback" | "settings";
 
-export default function SupportSettingsPage() {
+function SupportSettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -103,5 +103,19 @@ export default function SupportSettingsPage() {
         {activeTab === "settings" && <SettingsPage />}
       </main>
     </div>
+  );
+}
+
+const supportSettingsSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
+export default function SupportSettingsPage() {
+  return (
+    <Suspense fallback={supportSettingsSuspenseFallback}>
+      <SupportSettingsContent />
+    </Suspense>
   );
 }

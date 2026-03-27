@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { Suspense, useState, useMemo, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -2387,10 +2387,18 @@ function GamePageContent() {
   );
 }
 
+const gamePageSuspenseFallback = (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading…</p>
+  </div>
+);
+
 export default function GamePage() {
   return (
     <DialogProvider>
-      <GamePageContent />
+      <Suspense fallback={gamePageSuspenseFallback}>
+        <GamePageContent />
+      </Suspense>
     </DialogProvider>
   );
 }
