@@ -18,6 +18,12 @@ from models.run_session import RunSession
 from models.resume_document import ResumeDocument
 from models.time_tracker_entry import TimeTrackerEntry
 from models.feasibility import FeasibilityProject, FeasibilityLineItem
+from models.reading_library import (
+    ReadingAuthor,
+    ReadingBook,
+    ReadingCategory,
+    reading_book_categories,
+)
 
 __all__ = [
     "User",
@@ -41,4 +47,8 @@ __all__ = [
     "TimeTrackerEntry",
     "FeasibilityProject",
     "FeasibilityLineItem",
+    "ReadingAuthor",
+    "ReadingBook",
+    "ReadingCategory",
+    "reading_book_categories",
 ]

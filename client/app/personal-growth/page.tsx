@@ -8,12 +8,14 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import ExercisePage from "@/app/exercise/page";
 import SelfDiscoveryListPage from "@/app/game/self-discovery/page";
+import { ReadingTrackingTab } from "@/components/reading-tracking/ReadingTrackingTab";
 
-type PersonalGrowthTab = "exercise" | "self-discovery";
+type PersonalGrowthTab = "exercise" | "self-discovery" | "reading";
 
 const TAB_CONFIG: Array<{ id: PersonalGrowthTab; label: string; path: string }> = [
   { id: "exercise", label: "Exercise", path: "/exercise" },
   { id: "self-discovery", label: "Self Discovery", path: "/game/self-discovery" },
+  { id: "reading", label: "Reading", path: "/personal-growth?tab=reading" },
 ];
 
 function PersonalGrowthContent() {
@@ -31,7 +33,7 @@ function PersonalGrowthContent() {
 
   const activeTab = useMemo<PersonalGrowthTab>(() => {
     const requested = searchParams.get("tab");
-    if (requested === "exercise" || requested === "self-discovery") {
+    if (requested === "exercise" || requested === "self-discovery" || requested === "reading") {
       return requested;
     }
     return "exercise";
@@ -99,12 +101,13 @@ function PersonalGrowthContent() {
       />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} isLoggedIn={isAuthenticated} />
       <main
-        className={`flex-1 transition-all duration-300 ${
+        className={`flex min-h-0 flex-1 flex-col transition-all duration-300 ${
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
         {activeTab === "exercise" && <ExercisePage />}
         {activeTab === "self-discovery" && <SelfDiscoveryListPage />}
+        {activeTab === "reading" && <ReadingTrackingTab embedded />}
       </main>
     </div>
   );

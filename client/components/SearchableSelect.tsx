@@ -9,6 +9,10 @@ interface SearchableSelectOption {
   searchText?: string; // Optional additional text to search in
 }
 
+function optionValuesEqual(a: string | number, b: string | number): boolean {
+  return String(a) === String(b);
+}
+
 interface SearchableSelectProps {
   options: SearchableSelectOption[];
   value: string | number;
@@ -21,6 +25,11 @@ interface SearchableSelectProps {
   onCreateNew?: (searchTerm: string) => void; // Callback when "Create new" option is clicked
   createNewLabel?: (searchTerm: string) => string; // Custom label for create new option
   allowClear?: boolean; // Allow clearing the selected value
+  /**
+   * when-no-results: show Create only if the filter matches nothing (default).
+   * when-no-exact-match: show Create when the typed text is non-empty and no option label equals it (case-insensitive), even if there are partial matches.
+   */
+  creatableMode?: "when-no-results" | "when-no-exact-match";
 }
 
 export function SearchableSelect({
@@ -35,6 +44,7 @@ export function SearchableSelect({
   onCreateNew,
   createNewLabel,
   allowClear = false,
+  creatableMode = "when-no-results",
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,8 +57,8 @@ export function SearchableSelect({
   /** Below sidebar (z-40) and header (z-50) on normal pages; above dialog shell when inside a modal */
   const [dropdownZClass, setDropdownZClass] = useState("z-30");
 
-  // Get selected option label
-  const selectedOption = options.find((opt) => opt.value === value);
+  // Get selected option label (String compare so uuid string matches option values reliably)
+  const selectedOption = options.find((opt) => optionValuesEqual(opt.value, value));
   const displayValue = selectedOption ? selectedOption.label : placeholder;
 
   // Filter options based on search term
@@ -62,8 +72,17 @@ export function SearchableSelect({
     return labelMatch || searchTextMatch;
   });
 
-  // Show "Create new" option if no matches found and onCreateNew is provided
-  const showCreateNew = onCreateNew && searchTerm && filteredOptions.length === 0;
+  const trimmedSearch = searchTerm.trim();
+  const exactLabelMatch =
+    trimmedSearch.length > 0 &&
+    options.some((o) => o.label.toLowerCase() === trimmedSearch.toLowerCase());
+
+  const showCreateNew =
+    !!onCreateNew &&
+    trimmedSearch.length > 0 &&
+    (creatableMode === "when-no-exact-match"
+      ? !exactLabelMatch
+      : filteredOptions.length === 0);
 
   // Update dropdown position when opened
   useEffect(() => {
@@ -300,13 +319,13 @@ export function SearchableSelect({
               <>
                 {filteredOptions.map((option, index) => (
                   <li
-                    key={option.value}
+                    key={String(option.value)}
                     role="option"
-                    aria-selected={value === option.value}
+                    aria-selected={optionValuesEqual(value, option.value)}
                     onClick={() => handleSelect(option.value)}
                     onMouseEnter={() => setFocusedIndex(index)}
                     className={`cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
-                      value === option.value
+                      optionValuesEqual(value, option.value)
                         ? "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-100"
                         : focusedIndex === index
                         ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-100"
