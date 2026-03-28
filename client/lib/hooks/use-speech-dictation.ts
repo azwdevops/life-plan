@@ -20,6 +20,9 @@ export type SpeechDictationHandlers = {
   onInterim: (text: string) => void;
 };
 
+/** Delay before restarting recognition; avoids InvalidStateError after onend (Chrome). */
+const RESTART_MS = 120;
+
 export function useSpeechDictation(handlers: SpeechDictationHandlers) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
@@ -27,25 +30,20 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const listeningRef = useRef(false);
+  const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** True from user Start until user Stop — browser onend alone must not turn dictation off. */
+  const sessionActiveRef = useRef(false);
 
-  const stop = useCallback(() => {
-    listeningRef.current = false;
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      /* ignore */
+  const clearRestartTimeout = useCallback(() => {
+    if (restartTimeoutRef.current != null) {
+      clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
     }
   }, []);
 
-  const start = useCallback(() => {
+  const startOneSegment = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) {
-      setError("Voice input is not supported in this browser.");
-      return;
-    }
-    if (listeningRef.current) return;
-    setError(null);
+    if (!Ctor || !sessionActiveRef.current) return;
 
     const rec = new Ctor();
     rec.continuous = true;
@@ -71,42 +69,82 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === "aborted" || e.error === "no-speech") return;
+      if (e.error === "aborted") return;
       if (e.error === "not-allowed") {
+        clearRestartTimeout();
+        sessionActiveRef.current = false;
+        setListening(false);
+        handlersRef.current.onInterim("");
         setError("Microphone permission denied. Allow the mic to use voice input.");
+        return;
+      }
+      if (e.error === "no-speech") {
         return;
       }
       setError(e.message || e.error || "Speech recognition error.");
     };
 
     rec.onend = () => {
-      listeningRef.current = false;
-      setListening(false);
-      handlersRef.current.onInterim("");
       recognitionRef.current = null;
+      if (!sessionActiveRef.current) {
+        setListening(false);
+        handlersRef.current.onInterim("");
+        return;
+      }
+      clearRestartTimeout();
+      restartTimeoutRef.current = setTimeout(() => {
+        restartTimeoutRef.current = null;
+        if (sessionActiveRef.current) {
+          startOneSegment();
+        }
+      }, RESTART_MS);
     };
 
     recognitionRef.current = rec;
-    listeningRef.current = true;
-    setListening(true);
     try {
       rec.start();
     } catch {
-      listeningRef.current = false;
+      sessionActiveRef.current = false;
       setListening(false);
+      handlersRef.current.onInterim("");
       setError("Could not start the microphone.");
     }
-  }, []);
+  }, [clearRestartTimeout]);
+
+  const stop = useCallback(() => {
+    clearRestartTimeout();
+    sessionActiveRef.current = false;
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+  }, [clearRestartTimeout]);
+
+  const start = useCallback(() => {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      setError("Voice input is not supported in this browser.");
+      return;
+    }
+    if (sessionActiveRef.current) return;
+    setError(null);
+    sessionActiveRef.current = true;
+    setListening(true);
+    startOneSegment();
+  }, [startOneSegment]);
 
   useEffect(() => {
     return () => {
+      clearRestartTimeout();
+      sessionActiveRef.current = false;
       try {
         recognitionRef.current?.stop();
       } catch {
         /* ignore */
       }
     };
-  }, []);
+  }, [clearRestartTimeout]);
 
   const [supported, setSupported] = useState(false);
   useEffect(() => {
