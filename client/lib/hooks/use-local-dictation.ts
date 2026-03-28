@@ -3,13 +3,12 @@
 /**
  * Local (frontend-only) dictation for AI posting.
  *
- * 1) **Vosk** — WASM + **Web Worker** (`vosk-browser`), one continuous `getUserMedia`
- *    stream until Stop (no Web Speech segment restarts). Add a Vosk `.tar.gz` to
- *    `public/vosk-model-en-small.tar.gz` or set `NEXT_PUBLIC_VOSK_MODEL_URL`.
- * 2) **Web Speech API** — if the model is missing, fails to load, or
+ * 1) **Vosk** — WASM + Web Worker (`vosk-browser`), continuous `getUserMedia` until Stop.
+ *    Model: `public/vosk-model-en-small.tar.gz` or `NEXT_PUBLIC_VOSK_MODEL_URL`.
+ * 2) **Web Speech API** — if the model is missing, unreachable, times out, or
  *    `NEXT_PUBLIC_DISABLE_VOSK=1`.
  *
- * `SpeechRecognition` is not available inside workers; Vosk runs ASR in a worker instead.
+ * We probe the model URL (HEAD) before loading so a missing file does not hang `createModel`.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +19,7 @@ import {
 } from "@/lib/hooks/use-speech-dictation";
 
 const DEFAULT_MODEL_PATH = "/vosk-model-en-small.tar.gz";
+const MODEL_LOAD_TIMEOUT_MS = 45_000;
 
 function modelUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_VOSK_MODEL_URL;
@@ -37,6 +37,25 @@ function hasGetUserMedia(): boolean {
     typeof navigator !== "undefined" &&
     typeof navigator.mediaDevices?.getUserMedia === "function"
   );
+}
+
+/** Avoid calling createModel when the file is missing (can hang on bad responses). */
+async function isVoskModelReachable(): Promise<boolean> {
+  if (typeof fetch === "undefined") return false;
+  const url = modelUrl();
+  try {
+    let r = await fetch(url, { method: "HEAD", cache: "no-store" });
+    if (r.status === 405 || r.status === 501) {
+      r = await fetch(url, { method: "GET", cache: "no-store", headers: { Range: "bytes=0-0" } });
+    }
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+function rejectAfter<T>(ms: number, message: string): Promise<T> {
+  return new Promise((_, rej) => setTimeout(() => rej(new Error(message)), ms));
 }
 
 export function useLocalDictation(handlers: SpeechDictationHandlers) {
@@ -99,6 +118,16 @@ export function useLocalDictation(handlers: SpeechDictationHandlers) {
     }
   }, []);
 
+  const resetVoskModelState = useCallback(() => {
+    try {
+      modelRef.current?.terminate();
+    } catch {
+      /* ignore */
+    }
+    modelRef.current = null;
+    modelPromiseRef.current = null;
+  }, []);
+
   const stopVosk = useCallback(() => {
     teardownVoskAudio();
     setVoskOn(false);
@@ -108,105 +137,142 @@ export function useLocalDictation(handlers: SpeechDictationHandlers) {
     if (modelRef.current?.ready) return modelRef.current;
     if (!modelPromiseRef.current) {
       const { createModel } = await import("vosk-browser");
-      modelPromiseRef.current = createModel(modelUrl()).then((m) => {
-        modelRef.current = m;
-        return m;
-      });
+      modelPromiseRef.current = createModel(modelUrl())
+        .then((m) => {
+          modelRef.current = m;
+          return m;
+        })
+        .catch((e) => {
+          modelPromiseRef.current = null;
+          throw e;
+        });
     }
     return modelPromiseRef.current;
   }, []);
 
-  const startVosk = useCallback(async () => {
-    setLocalError(null);
-    const model = await ensureModelLoaded();
-    if (!model.ready) {
-      throw new Error("Vosk model is not ready.");
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        channelCount: 1,
-        sampleRate: { ideal: 16000 },
-      },
-      video: false,
-    });
-    mediaStreamRef.current = stream;
-
-    const audioContext = new AudioContext({ sampleRate: 16000 });
-    audioContextRef.current = audioContext;
-    if (audioContext.state === "suspended") {
-      await audioContext.resume();
-    }
-
-    const sampleRate = audioContext.sampleRate;
-    const RecognizerCtor = model.KaldiRecognizer;
-    const recognizer = new RecognizerCtor(sampleRate);
-    recognizerRef.current = recognizer;
-
-    recognizer.on("result", (msg: unknown) => {
-      const m = msg as { result?: { text?: string } };
-      const text = m?.result?.text?.trim() ?? "";
-      if (text) handlersRef.current.onFinal(text);
-    });
-
-    recognizer.on("partialresult", (msg: unknown) => {
-      const m = msg as { result?: { partial?: string } };
-      const partial = m?.result?.partial?.trim() ?? "";
-      handlersRef.current.onInterim(partial);
-    });
-
-    const bufferSize = 4096;
-    const processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
-    processorRef.current = processor;
-
-    processor.onaudioprocess = (event) => {
-      try {
-        recognizer.acceptWaveform(event.inputBuffer);
-      } catch {
-        /* ignore frame errors */
+  const startVoskWithModel = useCallback(
+    async (model: Model) => {
+      if (!model.ready) {
+        throw new Error("Vosk model is not ready.");
       }
-    };
 
-    const source = audioContext.createMediaStreamSource(stream);
-    sourceRef.current = source;
-    const gain = audioContext.createGain();
-    gain.gain.value = 0;
-    gainRef.current = gain;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1,
+          sampleRate: { ideal: 16000 },
+        },
+        video: false,
+      });
+      mediaStreamRef.current = stream;
 
-    source.connect(processor);
-    processor.connect(gain);
-    gain.connect(audioContext.destination);
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
 
-    setVoskOn(true);
-  }, [ensureModelLoaded]);
+      const sampleRate = audioContext.sampleRate;
+      const RecognizerCtor = model.KaldiRecognizer;
+      const recognizer = new RecognizerCtor(sampleRate);
+      recognizerRef.current = recognizer;
+
+      recognizer.on("result", (msg: unknown) => {
+        const m = msg as { result?: { text?: string } };
+        const text = m?.result?.text?.trim() ?? "";
+        if (text) handlersRef.current.onFinal(text);
+      });
+
+      recognizer.on("partialresult", (msg: unknown) => {
+        const m = msg as { result?: { partial?: string } };
+        const partial = m?.result?.partial?.trim() ?? "";
+        handlersRef.current.onInterim(partial);
+      });
+
+      const bufferSize = 4096;
+      const processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (event) => {
+        try {
+          recognizer.acceptWaveform(event.inputBuffer);
+        } catch {
+          /* ignore frame errors */
+        }
+      };
+
+      const source = audioContext.createMediaStreamSource(stream);
+      sourceRef.current = source;
+      const gain = audioContext.createGain();
+      gain.gain.value = 0;
+      gainRef.current = gain;
+
+      source.connect(processor);
+      processor.connect(gain);
+      gain.connect(audioContext.destination);
+
+      setVoskOn(true);
+    },
+    []
+  );
 
   const start = useCallback(() => {
     if (listening || starting || startBusyRef.current) return;
+
+    if (
+      typeof window !== "undefined" &&
+      !window.isSecureContext &&
+      !/^localhost$|^127\.0\.0\.1$/i.test(window.location.hostname || "")
+    ) {
+      setLocalError("Microphone and speech need HTTPS (or localhost).");
+      return;
+    }
+
     startBusyRef.current = true;
     setLocalError(null);
+
     void (async () => {
       try {
+        setStarting(true);
+
         if (tryVoskRef.current) {
-          try {
-            setStarting(true);
-            await startVosk();
-            setStarting(false);
-            startBusyRef.current = false;
-            return;
-          } catch {
-            setStarting(false);
+          const reachable = await isVoskModelReachable();
+          if (!reachable) {
             tryVoskRef.current = false;
+          } else {
+            try {
+              const model = await Promise.race([
+                ensureModelLoaded(),
+                rejectAfter<Model>(MODEL_LOAD_TIMEOUT_MS, "Vosk model load timed out."),
+              ]);
+              await startVoskWithModel(model);
+              return;
+            } catch {
+              teardownVoskAudio();
+              resetVoskModelState();
+              tryVoskRef.current = false;
+            }
           }
         }
+
         webSpeech.start();
+      } catch (e) {
+        setLocalError(e instanceof Error ? e.message : "Dictation failed to start.");
       } finally {
         startBusyRef.current = false;
         setStarting(false);
       }
     })();
-  }, [listening, starting, startVosk, webSpeech]);
+  }, [
+    ensureModelLoaded,
+    listening,
+    resetVoskModelState,
+    startVoskWithModel,
+    starting,
+    teardownVoskAudio,
+    webSpeech,
+  ]);
 
   const stop = useCallback(() => {
     stopVosk();
