@@ -20,8 +20,19 @@ export type SpeechDictationHandlers = {
   onInterim: (text: string) => void;
 };
 
-/** Delay before restarting recognition; avoids InvalidStateError after onend (Chrome). */
-const RESTART_MS = 120;
+/** Min time after onend before starting a new segment (Chrome needs a gap; longer = less jarring). */
+const RESTART_AFTER_END_MS = 720;
+
+/** Drop a final if it matches the previous final within this window (browser echo / segment overlap). */
+const DUPLICATE_FINAL_WINDOW_MS = 1400;
+
+function normalizeForDedupe(s: string): string {
+  return s
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.,!?;:]+$/g, "")
+    .toLowerCase();
+}
 
 export function useSpeechDictation(handlers: SpeechDictationHandlers) {
   const handlersRef = useRef(handlers);
@@ -33,12 +44,37 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
   const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** True from user Start until user Stop — browser onend alone must not turn dictation off. */
   const sessionActiveRef = useRef(false);
+  const lastFinalNormRef = useRef<string | null>(null);
+  const lastFinalAtRef = useRef<number>(0);
+
+  const resetDedupe = useCallback(() => {
+    lastFinalNormRef.current = null;
+    lastFinalAtRef.current = 0;
+  }, []);
 
   const clearRestartTimeout = useCallback(() => {
     if (restartTimeoutRef.current != null) {
       clearTimeout(restartTimeoutRef.current);
       restartTimeoutRef.current = null;
     }
+  }, []);
+
+  const emitFinalIfNotDuplicate = useCallback((raw: string) => {
+    const t = raw.replace(/\s+/g, " ").trim();
+    if (!t) return;
+    const norm = normalizeForDedupe(t);
+    if (!norm) return;
+    const now = Date.now();
+    if (
+      lastFinalNormRef.current !== null &&
+      norm === lastFinalNormRef.current &&
+      now - lastFinalAtRef.current < DUPLICATE_FINAL_WINDOW_MS
+    ) {
+      return;
+    }
+    lastFinalNormRef.current = norm;
+    lastFinalAtRef.current = now;
+    handlersRef.current.onFinal(t);
   }, []);
 
   const startOneSegment = useCallback(() => {
@@ -62,8 +98,8 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
         else interim += r[0].transcript;
       }
       if (finals.length) {
-        const t = finals.join("").trim();
-        if (t) handlersRef.current.onFinal(t);
+        const combined = finals.map((x) => x.trim()).filter(Boolean).join(" ");
+        if (combined) emitFinalIfNotDuplicate(combined);
       }
       handlersRef.current.onInterim(interim.trim());
     };
@@ -75,6 +111,7 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
         sessionActiveRef.current = false;
         setListening(false);
         handlersRef.current.onInterim("");
+        resetDedupe();
         setError("Microphone permission denied. Allow the mic to use voice input.");
         return;
       }
@@ -97,7 +134,7 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
         if (sessionActiveRef.current) {
           startOneSegment();
         }
-      }, RESTART_MS);
+      }, RESTART_AFTER_END_MS);
     };
 
     recognitionRef.current = rec;
@@ -107,19 +144,21 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
       sessionActiveRef.current = false;
       setListening(false);
       handlersRef.current.onInterim("");
+      resetDedupe();
       setError("Could not start the microphone.");
     }
-  }, [clearRestartTimeout]);
+  }, [clearRestartTimeout, emitFinalIfNotDuplicate, resetDedupe]);
 
   const stop = useCallback(() => {
     clearRestartTimeout();
     sessionActiveRef.current = false;
+    resetDedupe();
     try {
       recognitionRef.current?.stop();
     } catch {
       /* ignore */
     }
-  }, [clearRestartTimeout]);
+  }, [clearRestartTimeout, resetDedupe]);
 
   const start = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
@@ -129,10 +168,11 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
     }
     if (sessionActiveRef.current) return;
     setError(null);
+    resetDedupe();
     sessionActiveRef.current = true;
     setListening(true);
     startOneSegment();
-  }, [startOneSegment]);
+  }, [resetDedupe, startOneSegment]);
 
   useEffect(() => {
     return () => {
