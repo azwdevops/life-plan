@@ -30,6 +30,21 @@ import {
 } from "@/components/time-tracker/SearchableSelectPicker";
 import { registerTrackerPresetHandler } from "@/lib/time-tracker-preset-bridge";
 
+/** Dedicated worker so 1s ticks are less aggressively throttled than main-thread timers in background tabs. */
+const TIMER_TICK_WORKER_SOURCE = `
+let id = null;
+self.onmessage = function (e) {
+  if (e.data === "start") {
+    if (id != null) clearInterval(id);
+    id = setInterval(function () { self.postMessage(0); }, 1000);
+  }
+  if (e.data === "stop") {
+    if (id != null) clearInterval(id);
+    id = null;
+  }
+};
+`;
+
 function IconPlay({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -359,8 +374,56 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   useEffect(() => {
     if (!session) return;
     if (session.pauseStartedAt) return;
-    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
-    return () => window.clearInterval(id);
+    if (typeof window === "undefined") return;
+
+    const bump = () => setTick((t) => t + 1);
+
+    let backupId: number | null = null;
+    const syncHiddenBackup = () => {
+      if (!document.hidden) {
+        bump();
+        if (backupId != null) {
+          clearInterval(backupId);
+          backupId = null;
+        }
+      } else if (backupId == null) {
+        backupId = window.setInterval(bump, 10_000);
+      }
+    };
+
+    const onFocus = () => bump();
+
+    document.addEventListener("visibilitychange", syncHiddenBackup);
+    window.addEventListener("focus", onFocus);
+    if (document.hidden) {
+      backupId = window.setInterval(bump, 10_000);
+    }
+
+    let stopWorker: () => void;
+    try {
+      const blob = new Blob([TIMER_TICK_WORKER_SOURCE], {
+        type: "application/javascript",
+      });
+      const url = URL.createObjectURL(blob);
+      const worker = new Worker(url);
+      worker.onmessage = () => bump();
+      worker.postMessage("start");
+      stopWorker = () => {
+        worker.postMessage("stop");
+        worker.terminate();
+        URL.revokeObjectURL(url);
+      };
+    } catch {
+      const mainId = window.setInterval(bump, 1000);
+      stopWorker = () => window.clearInterval(mainId);
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncHiddenBackup);
+      window.removeEventListener("focus", onFocus);
+      if (backupId != null) clearInterval(backupId);
+      stopWorker();
+    };
   }, [session]);
 
   useEffect(() => {
