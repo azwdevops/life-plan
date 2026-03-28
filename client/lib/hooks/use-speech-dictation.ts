@@ -23,8 +23,14 @@ export type SpeechDictationHandlers = {
 /** Min time after onend before starting a new segment (Chrome needs a gap; longer = less jarring). */
 const RESTART_AFTER_END_MS = 720;
 
-/** Drop a final if it matches the previous final within this window (browser echo / segment overlap). */
-const DUPLICATE_FINAL_WINDOW_MS = 1400;
+/** Same normalized phrase as the immediately previous final within this window → skip. */
+const DUPLICATE_FINAL_WINDOW_MS = 5200;
+
+/**
+ * Same full phrase (normalized) must not be emitted again within this window,
+ * even if other text was finalized in between (common after segment restarts).
+ */
+const SAME_PHRASE_COOLDOWN_MS = 6500;
 
 function normalizeForDedupe(s: string): string {
   return s
@@ -32,6 +38,50 @@ function normalizeForDedupe(s: string): string {
     .replace(/\s+/g, " ")
     .replace(/[.,!?;:]+$/g, "")
     .toLowerCase();
+}
+
+/** Collapse consecutive duplicate segments inside one `onresult` batch. */
+function joinFinalsDeduped(parts: string[]): string {
+  const trimmed = parts.map((x) => x.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const v of trimmed) {
+    const n = normalizeForDedupe(v);
+    if (!n) continue;
+    if (out.length) {
+      const prevN = normalizeForDedupe(out[out.length - 1]!);
+      if (n === prevN) continue;
+    }
+    out.push(v);
+  }
+  return out.join(" ");
+}
+
+/**
+ * Browser often re-finalizes only the tail of the last phrase after a segment restart.
+ */
+function isTrailingEchoOfLast(candidate: string, lastRaw: string): boolean {
+  const c = candidate.trim().toLowerCase();
+  const l = lastRaw.trim().toLowerCase();
+  if (c.length < 2 || l.length < c.length) return false;
+  if (c === l) return false;
+  if (l.endsWith(c)) return true;
+  if (l.endsWith(` ${c}`)) return true;
+  const cw = c.split(/\s+/).filter(Boolean);
+  const lw = l.split(/\s+/).filter(Boolean);
+  if (cw.length === 0 || cw.length >= lw.length) return false;
+  for (let i = 0; i < cw.length; i++) {
+    if (lw[lw.length - cw.length + i] !== cw[i]) return false;
+  }
+  return true;
+}
+
+/** Segment restart may re-finalize the start of a phrase already in the last emission. */
+function isPrefixEchoOfLast(candidate: string, lastRaw: string): boolean {
+  const c = candidate.trim().toLowerCase();
+  const l = lastRaw.trim().toLowerCase();
+  if (c.length < 5 || c.length >= l.length) return false;
+  if (l.startsWith(`${c} `) || l.startsWith(`${c},`)) return true;
+  return false;
 }
 
 export function useSpeechDictation(handlers: SpeechDictationHandlers) {
@@ -45,11 +95,16 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
   /** True from user Start until user Stop — browser onend alone must not turn dictation off. */
   const sessionActiveRef = useRef(false);
   const lastFinalNormRef = useRef<string | null>(null);
+  const lastFinalRawRef = useRef<string | null>(null);
   const lastFinalAtRef = useRef<number>(0);
+  /** norm → last emit time; suppresses the same full phrase echoing soon after. */
+  const phraseCooldownRef = useRef<Map<string, number>>(new Map());
 
   const resetDedupe = useCallback(() => {
     lastFinalNormRef.current = null;
+    lastFinalRawRef.current = null;
     lastFinalAtRef.current = 0;
+    phraseCooldownRef.current.clear();
   }, []);
 
   const clearRestartTimeout = useCallback(() => {
@@ -65,6 +120,7 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
     const norm = normalizeForDedupe(t);
     if (!norm) return;
     const now = Date.now();
+
     if (
       lastFinalNormRef.current !== null &&
       norm === lastFinalNormRef.current &&
@@ -72,8 +128,30 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
     ) {
       return;
     }
+
+    const lastRaw = lastFinalRawRef.current;
+    if (lastRaw !== null && isTrailingEchoOfLast(t, lastRaw)) {
+      return;
+    }
+    if (lastRaw !== null && isPrefixEchoOfLast(t, lastRaw)) {
+      return;
+    }
+
+    const lastSamePhrase = phraseCooldownRef.current.get(norm) ?? 0;
+    if (lastSamePhrase > 0 && now - lastSamePhrase < SAME_PHRASE_COOLDOWN_MS) {
+      return;
+    }
+
+    if (phraseCooldownRef.current.size > 40) {
+      for (const [k, at] of phraseCooldownRef.current) {
+        if (now - at > 15000) phraseCooldownRef.current.delete(k);
+      }
+    }
+
     lastFinalNormRef.current = norm;
+    lastFinalRawRef.current = t;
     lastFinalAtRef.current = now;
+    phraseCooldownRef.current.set(norm, now);
     handlersRef.current.onFinal(t);
   }, []);
 
@@ -98,7 +176,7 @@ export function useSpeechDictation(handlers: SpeechDictationHandlers) {
         else interim += r[0].transcript;
       }
       if (finals.length) {
-        const combined = finals.map((x) => x.trim()).filter(Boolean).join(" ");
+        const combined = joinFinalsDeduped(finals);
         if (combined) emitFinalIfNotDuplicate(combined);
       }
       handlersRef.current.onInterim(interim.trim());
