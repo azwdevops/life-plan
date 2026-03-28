@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
+import { DropdownMenu } from "@/components/DropdownMenu";
 import { RichTextEditor } from "./RichTextEditor";
 import "./print-preview.css";
 import {
@@ -32,7 +34,14 @@ import {
   saveResumeBuilderState,
 } from "@/lib/resume-builder-storage";
 
-export function ResumeCoverLetterEditor({ documentId }: { documentId: string }) {
+export function ResumeCoverLetterEditor({
+  documentId,
+  resumeNameHeaderContainer = null,
+}: {
+  documentId: string;
+  /** When set, the list-only resume name field is rendered here (e.g. next to “Edit resume” in the app header). */
+  resumeNameHeaderContainer?: HTMLElement | null;
+}) {
   const router = useRouter();
   const { token, user } = useAuth();
   const isAdmin = user?.groups?.includes("admin") ?? false;
@@ -245,6 +254,26 @@ export function ResumeCoverLetterEditor({ documentId }: { documentId: string }) 
     }));
   }, [documentId]);
 
+  const editorMenuItems = useMemo(
+    () => [
+      { label: "Duplicate", onClick: () => duplicateActive() },
+      {
+        label: "Delete",
+        onClick: () => void deleteActive(),
+        danger: true,
+      },
+      { label: "Save", onClick: () => void handleSaveClick() },
+      {
+        label: "Print / PDF",
+        onClick: () => window.print(),
+        title:
+          "In the print dialog, disable Headers and footers to remove the URL, date, and page title from the margins.",
+      },
+      { label: "Export JSON", onClick: () => exportJson() },
+    ],
+    [duplicateActive, deleteActive, handleSaveClick, exportJson]
+  );
+
   const docToggle = (
     <div className="inline-flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-600">
       <button
@@ -274,6 +303,17 @@ export function ResumeCoverLetterEditor({ documentId }: { documentId: string }) 
     </div>
   );
 
+  const onResumeNameChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => setActiveDocumentName(e.target.value),
+    [setActiveDocumentName]
+  );
+
+  const resumeNameInputHeaderClass =
+    "min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-semibold text-zinc-900 shadow-sm outline-none placeholder:font-normal placeholder:text-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-500 dark:focus:ring-blue-500";
+
+  const resumeNameInputToolbarClass =
+    "min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-base font-semibold text-zinc-900 outline-none transition-colors placeholder:font-normal placeholder:text-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-500 dark:focus:ring-blue-500 sm:text-lg";
+
   if (!hydrated) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
@@ -282,8 +322,40 @@ export function ResumeCoverLetterEditor({ documentId }: { documentId: string }) 
     );
   }
 
+  const resumeHeaderToolbarPortal =
+    resumeNameHeaderContainer != null ? (
+      createPortal(
+        <div className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
+          <input
+            type="text"
+            value={activeNamed?.name ?? ""}
+            onChange={onResumeNameChange}
+            className={`${resumeNameInputHeaderClass} w-44 shrink-0 sm:w-56`}
+            placeholder="List name"
+            aria-label="Resume name shown in your resume list"
+          />
+          <DropdownMenu
+            menuButtonAriaLabel="Resume actions"
+            className="shrink-0"
+            overlayOnBody
+            items={editorMenuItems}
+          />
+          {saveMessage ? (
+            <span
+              className="hidden max-w-[7rem] truncate text-xs font-medium text-emerald-600 sm:inline md:max-w-[12rem] dark:text-emerald-400"
+              title={saveMessage}
+            >
+              {saveMessage}
+            </span>
+          ) : null}
+        </div>,
+        resumeNameHeaderContainer
+      )
+    ) : null;
+
   return (
     <div className="container mx-auto px-4 py-6 md:px-6 md:py-8 print:max-w-none print:px-0 print:py-0">
+      {resumeHeaderToolbarPortal}
       <div className="mb-6 space-y-4" data-resume-no-print>
         <div>
           <Link
@@ -292,75 +364,47 @@ export function ResumeCoverLetterEditor({ documentId }: { documentId: string }) 
           >
             ← All resumes
           </Link>
+          {resumeNameHeaderContainer != null && saveMessage ? (
+            <p className="mt-2 text-sm font-medium text-emerald-600 sm:hidden dark:text-emerald-400">
+              {saveMessage}
+            </p>
+          ) : null}
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="min-w-0">
-            <FieldLabel>Resume name (list only)</FieldLabel>
+
+        {resumeNameHeaderContainer == null ? (
+          <header className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:gap-4">
             <input
               type="text"
               value={activeNamed?.name ?? ""}
-              onChange={(e) => setActiveDocumentName(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="e.g. Backend — fintech"
+              onChange={onResumeNameChange}
+              className={resumeNameInputToolbarClass}
+              placeholder="Resume name (list only)"
               aria-label="Resume name shown in your resume list"
             />
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              This label appears on the resumes list page. It is not printed on the resume
-              PDF unless you add it in the body.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={duplicateActive}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-              >
-                Duplicate
-              </button>
-              <button
-                type="button"
-                onClick={() => void deleteActive()}
-                className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300 dark:hover:bg-red-950/40"
-              >
-                Delete
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveClick()}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                Save
-              </button>
+            <div className="flex shrink-0 items-center justify-end gap-3 sm:ml-auto sm:justify-start">
               {saveMessage ? (
                 <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                   {saveMessage}
                 </span>
               ) : null}
+              <DropdownMenu
+                menuButtonAriaLabel="Resume actions"
+                items={editorMenuItems}
+              />
             </div>
-          </div>
-        </div>
+          </header>
+        ) : null}
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          This name appears on the resumes list only; it is not printed on the PDF unless
+          you add it in the body.
+        </p>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Edits stay in this page until you click Save (localStorage in this browser).
+            Edits stay in this page until you use Save in the menu (localStorage in this
+            browser).
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {docToggle}
-            <button
-              type="button"
-              onClick={() => window.print()}
-              title="In the print dialog, disable Headers and footers to remove the URL, date, and page title from the margins."
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              Print / PDF
-            </button>
-            <button
-              type="button"
-              onClick={exportJson}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              Export JSON
-            </button>
-          </div>
+          <div className="flex flex-wrap items-center gap-2">{docToggle}</div>
         </div>
       </div>
 

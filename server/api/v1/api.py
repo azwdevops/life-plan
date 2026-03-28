@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, resumes
+from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, resumes, time_entries
 
 api_router = APIRouter()
 api_router.include_router(test.router, prefix="/test", tags=["test"])
@@ -14,4 +14,5 @@ api_router.include_router(game.router, prefix="/game", tags=["game"])
 api_router.include_router(run_sessions.router, prefix="/run-sessions", tags=["run-sessions"])
 api_router.include_router(investments.router, prefix="/investments", tags=["investments"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
+api_router.include_router(time_entries.router, prefix="/time-entries", tags=["time-entries"])
 

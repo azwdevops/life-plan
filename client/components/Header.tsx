@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useTheme } from "@/contexts/ThemeContext";
+import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 
 export interface CashAnalysisSummary {
   currentMonthLabel: string;
@@ -68,8 +69,8 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
       id="app-site-header"
       className="sticky top-0 z-50 w-full border-b-2 border-zinc-400 bg-white/80 shadow-[0_1px_0_0_rgba(0,0,0,0.08)] backdrop-blur-sm dark:border-zinc-500 dark:bg-zinc-900/80 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.1)]"
     >
-      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
-        <div className="flex items-center gap-4">
+      <div className="flex h-16 items-center gap-3 px-4 md:px-6">
+        <div className="flex shrink-0 items-center gap-4">
           {isAuthenticated && (
             <button
               onClick={onMenuClick}
@@ -95,19 +96,22 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
           )}
           <button
             onClick={() => router.push("/")}
-            className="text-xl font-bold transition-colors hover:opacity-80"
+            className="shrink-0 text-xl font-bold transition-colors hover:opacity-80"
           >
             <span className="bg-gradient-to-r from-blue-600 via-green-600 to-purple-600 bg-clip-text text-transparent">
               Life Plan
             </span>
           </button>
         </div>
-        {centerContent && (
-          <div className="flex min-w-0 flex-1 items-center justify-center overflow-hidden px-1 sm:px-0">
-            {centerContent}
+        <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 md:gap-x-5">
+            {isAuthenticated ? <HeaderTimeTracker inline /> : null}
+            {centerContent ? (
+              <div className="flex min-w-0 justify-center">{centerContent}</div>
+            ) : null}
           </div>
-        )}
-        <div className="flex items-center gap-4">
+        </div>
+        <div className="flex shrink-0 items-center gap-4">
           {cashAnalysis !== undefined && (
             <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 pl-2 pr-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
               <span className="shrink-0 rounded-md bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">

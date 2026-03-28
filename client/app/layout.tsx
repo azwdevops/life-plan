@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Life Plan",
   description: "Life Plan Application",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: "/icon.svg",
+    shortcut: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -21,7 +21,7 @@ import {
 
 function formatListDate(iso: string): string {
   const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "—";
+  if (Number.isNaN(t)) return "-";
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",

@@ -365,7 +365,7 @@ export function PlotProspectsTab() {
                         <span className="max-md:max-w-[65%] max-md:text-right md:inline">{p.phones.join(", ")}</span>
                       </td>
                       <td data-label="Dealer" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:text-right md:inline">{p.dealer_name || "—"}</span>
+                        <span className="max-md:text-right md:inline">{p.dealer_name || "-"}</span>
                       </td>
                       <td data-label="Location" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
                         <span className="max-md:max-w-[65%] max-md:text-right md:inline">
@@ -383,7 +383,7 @@ export function PlotProspectsTab() {
                         </span>
                       </td>
                       <td data-label="Size" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:text-right md:inline">{p.plot_size || "—"}</span>
+                        <span className="max-md:text-right md:inline">{p.plot_size || "-"}</span>
                       </td>
                       <td data-label="Price" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
                         <span className="max-md:text-right md:inline">{p.price}</span>

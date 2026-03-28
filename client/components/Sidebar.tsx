@@ -31,6 +31,16 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       items: [
         { icon: "📊", label: "Dashboard", href: "/dashboard", type: "link" },
         { icon: "🏦", label: "Accounts", href: "/accounts", type: "link" },
+        ...(isLoggedIn
+          ? [
+              {
+                icon: "⏱️",
+                label: "Time tracking",
+                href: "/time-tracking",
+                type: "link" as const,
+              },
+            ]
+          : []),
       ],
     },
     {

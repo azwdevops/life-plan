@@ -801,25 +801,25 @@ function ExerciseContent() {
     {
       key: "sessions",
       prefix: "This week",
-      value: totals ? String(totals.thisWeekSessions) : "—",
+      value: totals ? String(totals.thisWeekSessions) : "-",
       suffix: "sessions",
     },
     {
       key: "dist",
       prefix: "Total distance",
-      value: totals ? `${formatNumber(totals.distanceKm, 1)} km` : "—",
+      value: totals ? `${formatNumber(totals.distanceKm, 1)} km` : "-",
       suffix: "",
     },
     {
       key: "time",
       prefix: "Active time",
-      value: totals ? formatMinutes(totals.activeMinutes) : "—",
+      value: totals ? formatMinutes(totals.activeMinutes) : "-",
       suffix: "",
     },
     {
       key: "kcal",
       prefix: "Est. energy",
-      value: totals ? `${Math.round(totals.kcal).toLocaleString()} kcal` : "—",
+      value: totals ? `${Math.round(totals.kcal).toLocaleString()} kcal` : "-",
       suffix: "",
     },
     {
@@ -827,7 +827,7 @@ function ExerciseContent() {
       prefix: "Theor. fat equiv.",
       value: totals
         ? `${formatNumber(Number(totals.kcal) / KCAL_PER_KG_FAT_THEORY, 2)} kg`
-        : "—",
+        : "-",
       suffix: "",
       title:
         "Illustrative only: total est. kcal ÷ ~7,700 kcal per kg body fat. Not actual weight change; energy balance over time dominates.",

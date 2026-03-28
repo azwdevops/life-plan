@@ -120,7 +120,7 @@ export function ResumePreview({ resume }: { resume: ResumeData }) {
                 <li key={e.id} className="text-sm">
                   <div className="font-semibold text-zinc-900">
                     {[e.degree, e.field].filter(Boolean).join(", ")}
-                    {e.institution ? ` — ${e.institution}` : ""}
+                    {e.institution ? ` - ${e.institution}` : ""}
                   </div>
                   {dateRange ? (
                     <div className="text-xs text-zinc-500">{dateRange}</div>

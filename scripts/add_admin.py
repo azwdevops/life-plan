@@ -28,7 +28,7 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        # Ensure admin (and member) groups exist — create if missing (migration doesn't seed them)
+        # Ensure admin (and member) groups exist - create if missing (migration doesn't seed them)
         for name in ("admin", "member"):
             if db.query(Group).filter(Group.name == name).first() is None:
                 db.add(Group(name=name))

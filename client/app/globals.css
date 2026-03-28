@@ -38,6 +38,12 @@ body {
   display: none;
 }
 
+/* Above CreateGoalModal / other high z-index overlays */
+.react-datepicker-popper-create-goal-modal {
+  z-index: 10100 !important;
+  pointer-events: auto !important;
+}
+
 /* Ensure datepicker doesn't block background */
 .react-datepicker__portal {
   pointer-events: none !important;

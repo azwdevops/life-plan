@@ -1973,7 +1973,7 @@ function GamePageContent() {
       <Dialog
             isOpen={cashDetailsView !== null}
             onClose={() => setCashDetailsView(null)}
-            title={cashDetailsView === "current" ? `Current month — ${formatMonthYear(currentDate)}` : cashDetailsView === "next" ? `Expected next month — ${formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1))}` : "Cash flow details"}
+            title={cashDetailsView === "current" ? `Current month - ${formatMonthYear(currentDate)}` : cashDetailsView === "next" ? `Expected next month - ${formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1))}` : "Cash flow details"}
             size="lg"
           >
             {cashDetailsView === "current" && (
@@ -1989,7 +1989,7 @@ function GamePageContent() {
                               <span>{item.amount.toLocaleString()}</span>
                             </li>
                           ))
-                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                        : <li className="text-zinc-500 dark:text-zinc-400">-</li>}
                     </ul>
                   </div>
                   <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
@@ -2002,7 +2002,7 @@ function GamePageContent() {
                               <span>{item.amount.toLocaleString()}</span>
                             </li>
                           ))
-                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                        : <li className="text-zinc-500 dark:text-zinc-400">-</li>}
                     </ul>
                   </div>
                 </div>
@@ -2024,7 +2024,7 @@ function GamePageContent() {
                               <span>{item.amount.toLocaleString()}</span>
                             </li>
                           ))
-                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                        : <li className="text-zinc-500 dark:text-zinc-400">-</li>}
                     </ul>
                   </div>
                   <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
@@ -2037,7 +2037,7 @@ function GamePageContent() {
                               <span>{item.amount.toLocaleString()}</span>
                             </li>
                           ))
-                        : <li className="text-zinc-500 dark:text-zinc-400">—</li>}
+                        : <li className="text-zinc-500 dark:text-zinc-400">-</li>}
                     </ul>
                   </div>
                 </div>
@@ -2146,7 +2146,7 @@ function GamePageContent() {
           {/* Game Stats */}
           <GameStats gameState={gameState} currentDate={currentDate} />
 
-          {/* Monthly Expenses, Borrowing Options, Portfolio diversification, Opportunity cost — one flex row */}
+          {/* Monthly Expenses, Borrowing Options, Portfolio diversification, Opportunity cost - one flex row */}
           {!gameState.gameOver && (
             <>
               <div className="mb-4 flex flex-wrap gap-4">
@@ -2175,7 +2175,7 @@ function GamePageContent() {
                         Portfolio Diversification
                       </span>
                       <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
-                        {gameState.portfolio.length > 0 ? `${(gameState.diversificationScore * 100).toFixed(0)}%` : "—"}
+                        {gameState.portfolio.length > 0 ? `${(gameState.diversificationScore * 100).toFixed(0)}%` : "-"}
                       </span>
                     </div>
                     {gameState.portfolio.length > 0 ? (

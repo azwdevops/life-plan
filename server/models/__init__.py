@@ -16,6 +16,7 @@ from models.finance import (
 from models.feedback import Feedback, FeedbackType
 from models.run_session import RunSession
 from models.resume_document import ResumeDocument
+from models.time_tracker_entry import TimeTrackerEntry
 
 __all__ = [
     "User",
@@ -36,4 +37,5 @@ __all__ = [
     "FeedbackType",
     "RunSession",
     "ResumeDocument",
+    "TimeTrackerEntry",
 ]
