@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useSpeechDictation } from "@/lib/hooks/use-speech-dictation";
+import { useLocalDictation } from "@/lib/hooks/use-local-dictation";
 import { Dialog } from "@/components/Dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import {
@@ -46,11 +46,17 @@ export function AIPostingTab() {
     });
   }, []);
 
-  const { listening: voiceListening, error: voiceError, start: startVoice, stop: stopVoice, supported: voiceSupported } =
-    useSpeechDictation({
-      onFinal: appendFinalTranscript,
-      onInterim: setInterimTranscript,
-    });
+  const {
+    listening: voiceListening,
+    error: voiceError,
+    start: startVoice,
+    stop: stopVoice,
+    supported: voiceSupported,
+    starting: voiceStarting,
+  } = useLocalDictation({
+    onFinal: appendFinalTranscript,
+    onInterim: setInterimTranscript,
+  });
 
   const commitInterimToDescription = useCallback(() => {
     setInterimTranscript((interim) => {
@@ -360,7 +366,7 @@ export function AIPostingTab() {
                     </>
                   )}
                 </svg>
-                {voiceListening ? "Stop" : "Dictate"}
+                {voiceStarting ? "…" : voiceListening ? "Stop" : "Dictate"}
               </button>
             </div>
             <textarea
@@ -376,8 +382,9 @@ export function AIPostingTab() {
             />
             {voiceListening ? (
               <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                Listening… speak clearly. Recognized phrases are appended to the box; unfinished words appear at the
-                end until you pause.
+                Listening… speak clearly. Stop when you are done. If you added a Vosk model under{" "}
+                <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">public/</code>, the mic stays open until
+                Stop; otherwise the browser speech engine is used.
               </p>
             ) : null}
             {voiceError ? (

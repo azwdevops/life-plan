@@ -491,9 +491,9 @@ export function FeasibilityAnalysisTab() {
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Feasibility analysis
-            </h2>
+          <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Feasibility analysis
+          </h2>
             <button
               type="button"
               onClick={openCreateProject}
@@ -586,7 +586,7 @@ export function FeasibilityAnalysisTab() {
             })}
           </div>
         ) : null}
-      </div>
+        </div>
 
       <Dialog
         isOpen={projectDialogOpen}
@@ -597,17 +597,17 @@ export function FeasibilityAnalysisTab() {
         <div className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Investment / project name
-            </label>
-            <input
-              type="text"
+            Investment / project name
+          </label>
+          <input
+            type="text"
               value={draftProjectName}
               onChange={(e) => setDraftProjectName(e.target.value)}
               placeholder="e.g. Residential house, Phase 1"
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
               autoFocus
-            />
-          </div>
+          />
+        </div>
           <div className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
             <button
               type="button"
@@ -616,8 +616,8 @@ export function FeasibilityAnalysisTab() {
             >
               Cancel
             </button>
-            <button
-              type="button"
+              <button
+                type="button"
               onClick={saveProjectDialog}
               disabled={
                 (projectDialogMode === "create" && !draftProjectName.trim()) ||
@@ -626,7 +626,7 @@ export function FeasibilityAnalysisTab() {
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
               {projectDialogMode === "create" ? "Create" : "Save"}
-            </button>
+              </button>
           </div>
         </div>
       </Dialog>
@@ -658,21 +658,21 @@ export function FeasibilityAnalysisTab() {
             ) : (
               <div className="overflow-x-auto">
                 <div className="hidden min-w-[520px] gap-2 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400 md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.75fr)_minmax(0,0.95fr)_minmax(0,0.65fr)_auto] md:items-center md:gap-2">
-                  <span>Item</span>
-                  <span>Unit cost</span>
+            <span>Item</span>
+            <span>Unit cost</span>
                   <span className="text-center">Qty</span>
                   <span className="text-right">Line</span>
-                  <span className="w-10" aria-hidden />
-                </div>
+            <span className="w-10" aria-hidden />
+          </div>
                 <ul className="mt-2 space-y-3">
                   {itemsListProject.items.map((item) => {
-                    const total = lineTotal(item);
+              const total = lineTotal(item);
                     const displayLabel =
                       item.label.trim() || "Untitled item";
                     const pid = itemsListProject.id;
-                    return (
-                      <li
-                        key={item.id}
+              return (
+                <li
+                  key={item.id}
                         className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700 md:border-0 md:p-0 md:pb-2 md:not-last:border-b md:dark:not-last:border-zinc-800"
                       >
                         <div className="grid grid-cols-1 gap-3 md:min-w-[520px] md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.75fr)_minmax(0,0.95fr)_minmax(0,0.65fr)_auto] md:items-center md:gap-2">
@@ -683,39 +683,39 @@ export function FeasibilityAnalysisTab() {
                             <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                               {displayLabel}
                             </p>
-                          </div>
-                          <div>
+                    </div>
+                    <div>
                             <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 md:hidden">
-                              Unit cost
+                        Unit cost
                             </span>
                             <p className="font-mono text-sm tabular-nums text-zinc-800 dark:text-zinc-200">
                               {formatMoney(item.unitCost)}
                             </p>
-                          </div>
-                          <div>
+                    </div>
+                    <div>
                             <span className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 md:sr-only">
-                              Quantity
+                        Quantity
                             </span>
                             <div className="flex items-center justify-center gap-1 md:justify-center">
-                              <button
-                                type="button"
-                                aria-label="Decrease quantity"
+                        <button
+                          type="button"
+                          aria-label="Decrease quantity"
                                 onClick={() =>
                                   bumpQuantity(pid, item.id, -1)
                                 }
                                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-base font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                                disabled={item.quantity <= 1}
-                              >
-                                −
-                              </button>
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                step={1}
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  const v = parseInt(e.target.value, 10);
+                          disabled={item.quantity <= 1}
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          step={1}
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
                                   updateItemQuantity(
                                     pid,
                                     item.id,
@@ -723,26 +723,26 @@ export function FeasibilityAnalysisTab() {
                                   );
                                 }}
                                 className="w-12 rounded-lg border border-zinc-300 bg-white py-1.5 text-center text-sm font-medium text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                              />
-                              <button
-                                type="button"
-                                aria-label="Increase quantity"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Increase quantity"
                                 onClick={() => bumpQuantity(pid, item.id, 1)}
                                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-base font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                           <div className="flex items-center justify-between md:justify-end">
-                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 md:hidden">
-                              Line total
-                            </span>
-                            <span className="font-mono text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-                              {formatMoney(total)}
-                            </span>
-                          </div>
-                          <div className="flex justify-end md:justify-center">
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 md:hidden">
+                        Line total
+                      </span>
+                      <span className="font-mono text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+                        {formatMoney(total)}
+                      </span>
+                    </div>
+                    <div className="flex justify-end md:justify-center">
                             <DropdownMenu
                               overlayOnBody
                               menuButtonAriaLabel="Line item actions"
@@ -760,18 +760,18 @@ export function FeasibilityAnalysisTab() {
                                 },
                               ]}
                             />
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
               </div>
             )}
             <div className="flex flex-col items-stretch gap-1 border-t border-zinc-200 pt-4 dark:border-zinc-700 sm:flex-row sm:items-center sm:justify-end">
-              <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
                 Total
-              </span>
+            </span>
               <span className="font-mono text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-100 sm:min-w-40 sm:text-right">
                 {formatMoney(
                   itemsListProject.items.reduce(
@@ -779,7 +779,7 @@ export function FeasibilityAnalysisTab() {
                     0
                   )
                 )}
-              </span>
+            </span>
             </div>
           </div>
         ) : null}
