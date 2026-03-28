@@ -16,8 +16,7 @@
     "react-datepicker": "^9.1.0",
     "react-dom": "19.2.3",
     "recharts": "^3.7.0",
-    "typescript": "^5",
-    "vosk-browser": "^0.0.8"
+    "typescript": "^5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useLocalDictation } from "@/lib/hooks/use-local-dictation";
+import { useSpeechDictation } from "@/lib/hooks/use-speech-dictation";
 import { Dialog } from "@/components/Dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import {
@@ -52,8 +52,7 @@ export function AIPostingTab() {
     start: startVoice,
     stop: stopVoice,
     supported: voiceSupported,
-    starting: voiceStarting,
-  } = useLocalDictation({
+  } = useSpeechDictation({
     onFinal: appendFinalTranscript,
     onInterim: setInterimTranscript,
   });
@@ -337,7 +336,7 @@ export function AIPostingTab() {
                     ? "Voice input is not supported in this browser (try Chrome or Edge)."
                     : voiceListening
                       ? "Stop dictation"
-                      : "Dictate with microphone"
+                      : "Dictate with microphone (browser speech)"
                 }
                 aria-pressed={voiceListening}
                 aria-label={voiceListening ? "Stop voice dictation" : "Start voice dictation"}
@@ -366,7 +365,7 @@ export function AIPostingTab() {
                     </>
                   )}
                 </svg>
-                {voiceStarting ? "…" : voiceListening ? "Stop" : "Dictate"}
+                {voiceListening ? "Stop" : "Dictate"}
               </button>
             </div>
             <textarea
@@ -382,9 +381,8 @@ export function AIPostingTab() {
             />
             {voiceListening ? (
               <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                Listening… speak clearly. Stop when you are done. If you added a Vosk model under{" "}
-                <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">public/</code>, the mic stays open until
-                Stop; otherwise the browser speech engine is used.
+                Listening… speak clearly. The browser may pause between phrases; press Stop when finished. Duplicate
+                phrases right after each other are filtered when possible.
               </p>
             ) : null}
             {voiceError ? (
