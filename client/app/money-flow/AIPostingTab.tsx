@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useSpeechDictation } from "@/lib/hooks/use-speech-dictation";
 import { Dialog } from "@/components/Dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import {
@@ -35,6 +36,47 @@ export function AIPostingTab() {
   const createLedgerGroupMutation = useCreateLedgerGroup();
 
   const [description, setDescription] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+
+  const appendFinalTranscript = useCallback((text: string) => {
+    setDescription((prev) => {
+      if (!text) return prev;
+      if (!prev) return text;
+      return /\s$/.test(prev) ? prev + text : `${prev} ${text}`;
+    });
+  }, []);
+
+  const { listening: voiceListening, error: voiceError, start: startVoice, stop: stopVoice, supported: voiceSupported } =
+    useSpeechDictation({
+      onFinal: appendFinalTranscript,
+      onInterim: setInterimTranscript,
+    });
+
+  const commitInterimToDescription = useCallback(() => {
+    setInterimTranscript((interim) => {
+      if (interim) {
+        setDescription((prev) => {
+          if (!prev) return interim;
+          return /\s$/.test(prev) ? prev + interim : `${prev} ${interim}`;
+        });
+      }
+      return "";
+    });
+  }, []);
+
+  const toggleVoiceInput = () => {
+    if (voiceListening) {
+      commitInterimToDescription();
+      stopVoice();
+    } else {
+      startVoice();
+    }
+  };
+
+  const descriptionDisplay =
+    interimTranscript === ""
+      ? description
+      : `${description}${description && !/\s$/.test(description) ? " " : ""}${interimTranscript}`;
   const [api, setApi] = useState<GameApiProvider>("openrouter");
   const [model, setModel] = useState<string>(() => MODELS_BY_PROVIDER.openrouter[0].value);
   const [date, setDate] = useState(todayISO());
@@ -47,7 +89,9 @@ export function AIPostingTab() {
   const [postSuccessDialogOpen, setPostSuccessDialogOpen] = useState(false);
 
   const resetPostingForm = () => {
+    stopVoice();
     setDescription("");
+    setInterimTranscript("");
     setApi("openrouter");
     setModel(MODELS_BY_PROVIDER.openrouter[0].value);
     setDate(todayISO());
@@ -268,21 +312,79 @@ export function AIPostingTab() {
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">AI Assisted Posting</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Describe what happened and generate editable posting entries.
+          Describe what happened (type or dictate with your microphone) and generate editable posting entries.
         </p>
 
         <div className="mt-4 space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              What happened?
-            </label>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300" htmlFor="ai-posting-description">
+                What happened?
+              </label>
+              <button
+                type="button"
+                id="ai-posting-voice-toggle"
+                onClick={toggleVoiceInput}
+                disabled={!voiceSupported || isGenerating}
+                title={
+                  !voiceSupported
+                    ? "Voice input is not supported in this browser (try Chrome or Edge)."
+                    : voiceListening
+                      ? "Stop dictation"
+                      : "Dictate with microphone"
+                }
+                aria-pressed={voiceListening}
+                aria-label={voiceListening ? "Stop voice dictation" : "Start voice dictation"}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  voiceListening
+                    ? "border-red-300 bg-red-50 text-red-800 ring-2 ring-red-400/40 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:ring-red-500/30"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                }`}
+              >
+                <svg
+                  className="h-4 w-4 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  {voiceListening ? (
+                    <rect x="8" y="5" width="8" height="14" rx="1" />
+                  ) : (
+                    <>
+                      <path d="M12 14c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v5c0 1.66 1.34 3 3 3z" />
+                      <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v4M8 23h8" />
+                    </>
+                  )}
+                </svg>
+                {voiceListening ? "Stop" : "Dictate"}
+              </button>
+            </div>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              id="ai-posting-description"
+              value={descriptionDisplay}
+              onChange={(e) => {
+                setInterimTranscript("");
+                setDescription(e.target.value);
+              }}
               rows={4}
               placeholder="e.g. Paid KSh 5,000 for internet from Equity Bank account plus KSh 30 transaction fee."
               className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
+            {voiceListening ? (
+              <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                Listening… speak clearly. Recognized phrases are appended to the box; unfinished words appear at the
+                end until you pause.
+              </p>
+            ) : null}
+            {voiceError ? (
+              <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400" role="status">
+                {voiceError}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-end gap-4">

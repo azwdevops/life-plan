@@ -149,3 +149,87 @@ export async function deletePlotProspect(token: string, prospectId: number): Pro
     throw new Error(err.detail || "Failed to delete plot prospect");
   }
 }
+
+export interface FeasibilityLineItemApi {
+  id: number;
+  label: string;
+  unit_cost: number;
+  quantity: number;
+  sort_order: number;
+}
+
+export interface FeasibilityProjectApi {
+  id: number;
+  user_id: number;
+  name: string;
+  items: FeasibilityLineItemApi[];
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface FeasibilityLineItemWritePayload {
+  label: string;
+  unit_cost: number;
+  quantity: number;
+}
+
+export interface FeasibilityProjectCreatePayload {
+  name: string;
+  items: FeasibilityLineItemWritePayload[];
+}
+
+export async function listFeasibilityProjects(token: string): Promise<FeasibilityProjectApi[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/investments/feasibility-projects`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) throw new Error("Failed to fetch feasibility projects");
+  return response.json();
+}
+
+export async function createFeasibilityProject(
+  token: string,
+  body: FeasibilityProjectCreatePayload
+): Promise<FeasibilityProjectApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/investments/feasibility-projects`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Failed to create project" }));
+    throw new Error(err.detail || "Failed to create project");
+  }
+  return response.json();
+}
+
+export async function updateFeasibilityProject(
+  token: string,
+  projectId: number,
+  body: { name: string; items: FeasibilityLineItemWritePayload[] }
+): Promise<FeasibilityProjectApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/investments/feasibility-projects/${projectId}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Failed to update project" }));
+    throw new Error(err.detail || "Failed to update project");
+  }
+  return response.json();
+}
+
+export async function deleteFeasibilityProject(token: string, projectId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/investments/feasibility-projects/${projectId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Failed to delete project" }));
+    throw new Error(err.detail || "Failed to delete project");
+  }
+}

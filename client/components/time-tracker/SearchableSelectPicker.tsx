@@ -158,7 +158,7 @@ export function SearchableSelectPicker({
           ) : null}
           {items.length === 0 && !showCreate ? (
             <li className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
-              No items yet — type below to create one
+              No items yet. Type below to create one.
             </li>
           ) : null}
           {filtered.map((i) => (

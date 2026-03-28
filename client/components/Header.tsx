@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
+import { FloatingCalculator } from "@/components/FloatingCalculator";
 
 export interface CashAnalysisSummary {
   currentMonthLabel: string;
@@ -44,7 +46,9 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const { isAuthenticated, user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const showHeaderTimeTracker = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -105,7 +109,9 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 md:gap-x-5">
-            {isAuthenticated ? <HeaderTimeTracker inline /> : null}
+            {isAuthenticated && showHeaderTimeTracker === true ? (
+              <HeaderTimeTracker inline />
+            ) : null}
             {centerContent ? (
               <div className="flex min-w-0 justify-center">{centerContent}</div>
             ) : null}
@@ -220,6 +226,28 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
               Advance to {advanceMonthLabel}
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setCalculatorOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            aria-label="Open calculator"
+            title="Calculator (keyboard: digits and operators when open)"
+          >
+            <svg
+              className="h-5 w-5 text-zinc-700 dark:text-zinc-300"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <rect x="4" y="3" width="16" height="18" rx="2" />
+              <path d="M8 7h8M8 11h2M12 11h2M16 11h2M8 15h2M12 15h2M16 15h2" />
+            </svg>
+          </button>
+
           {/* Theme Toggle */}
           <button
             onClick={(e) => {
@@ -315,6 +343,11 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
           <div className="px-4 py-2 md:px-6">{subHeaderContent}</div>
         </div>
       )}
+
+      <FloatingCalculator
+        open={calculatorOpen}
+        onClose={() => setCalculatorOpen(false)}
+      />
     </header>
   );
 }

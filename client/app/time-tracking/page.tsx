@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { useSidebar } from "@/contexts/SidebarContext";
 import {
   TIME_TRACKER_ENTRIES_UPDATED_EVENT,
@@ -252,6 +254,7 @@ export default function TimeTrackingPage() {
   const [fetching, setFetching] = useState(false);
   const [fetchingMore, setFetchingMore] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(true);
+  const showMobileTimeTracker = useMediaQuery("(max-width: 767px)");
 
   const dayBuckets = useMemo(
     () => bucketEntriesByStartedDay(entries, new Date()),
@@ -361,6 +364,17 @@ export default function TimeTrackingPage() {
         }`}
       >
         <div className="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col">
+          {showMobileTimeTracker === true ? (
+            <section
+              className="mb-5 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              aria-label="Time tracker"
+            >
+              <h2 className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                Track time
+              </h2>
+              <HeaderTimeTracker inline />
+            </section>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 gap-y-2">
             <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
               Tracked time
@@ -397,8 +411,8 @@ export default function TimeTrackingPage() {
 
           {entries.length === 0 ? (
             <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">
-              No entries yet. Start a goal or project from the header timer, then
-              stop to record a session.
+              No entries yet. Start a goal or project with the time tracker, then stop to
+              record a session.
             </p>
           ) : (
             <>
@@ -562,7 +576,7 @@ export default function TimeTrackingPage() {
                                             {formatDurationMs(e.durationMs)}
                                           </td>
                                           <td className="max-w-56 truncate px-4 py-2 text-zinc-600 dark:text-zinc-400">
-                                            {e.description || "—"}
+                                            {e.description || "-"}
                                           </td>
                                         </tr>
                                       ))}

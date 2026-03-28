@@ -8,12 +8,14 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import GamePage from "@/app/game/page";
 import { PlotProspectsTab } from "./PlotProspectsTab";
+import { FeasibilityAnalysisTab } from "./FeasibilityAnalysisTab";
 
-type InvestmentsTab = "game" | "plots";
+type InvestmentsTab = "game" | "plots" | "feasibility";
 
 const TAB_CONFIG: Array<{ id: InvestmentsTab; label: string }> = [
   { id: "game", label: "Investment Game" },
   { id: "plots", label: "Plot Prospects" },
+  { id: "feasibility", label: "Feasibility analysis" },
 ];
 
 function InvestmentsContent() {
@@ -24,7 +26,9 @@ function InvestmentsContent() {
 
   const activeTab = useMemo<InvestmentsTab>(() => {
     const requested = searchParams.get("tab");
-    return requested === "plots" ? "plots" : "game";
+    if (requested === "plots") return "plots";
+    if (requested === "feasibility" || requested === "costs") return "feasibility";
+    return "game";
   }, [searchParams]);
 
   if (!isAuthenticated && !isLoading) {
@@ -88,7 +92,13 @@ function InvestmentsContent() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        {activeTab === "game" ? <GamePage /> : <PlotProspectsTab />}
+        {activeTab === "game" ? (
+          <GamePage />
+        ) : activeTab === "plots" ? (
+          <PlotProspectsTab />
+        ) : (
+          <FeasibilityAnalysisTab />
+        )}
       </main>
     </div>
   );

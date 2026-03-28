@@ -23,7 +23,7 @@ interface DropdownMenuProps {
 }
 
 const PANEL_CLASS =
-  "min-w-44 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800";
+  "w-32 rounded-lg border border-zinc-200 bg-white py-0.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-800";
 
 export function DropdownMenu({
   items,
@@ -104,7 +104,7 @@ export function DropdownMenu({
             item.onClick();
             setIsOpen(false);
           }}
-          className={`w-full px-4 py-2 text-left text-sm transition-colors ${
+          className={`w-full px-2.5 py-1.5 text-left text-sm leading-snug transition-colors ${
             item.danger
               ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
               : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
