@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -11,6 +12,7 @@ from models.time_tracker_entry import TimeTrackerEntry as TimeTrackerEntryModel
 from schemas.time_tracker_entry import (
     TimeTrackerEntryCreate,
     TimeTrackerEntryResponse,
+    TimeTrackerEntryUpdate,
 )
 
 router = APIRouter()
@@ -118,3 +120,108 @@ async def create_time_entry(
     db.commit()
     db.refresh(row)
     return _row_to_response(row)
+
+
+def _get_entry_for_user(
+    db: Session, user_id: int, client_entry_id: str
+) -> TimeTrackerEntryModel:
+    row = (
+        db.query(TimeTrackerEntryModel)
+        .filter(
+            TimeTrackerEntryModel.user_id == user_id,
+            TimeTrackerEntryModel.client_entry_id == client_entry_id[:64],
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Time entry not found",
+        )
+    return row
+
+
+@router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_time_entry(
+    entry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = _get_entry_for_user(db, current_user.id, entry_id)
+    db.delete(row)
+    db.commit()
+
+
+@router.patch("/{entry_id}", response_model=TimeTrackerEntryResponse)
+async def update_time_entry(
+    entry_id: str,
+    body: TimeTrackerEntryUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+    row = _get_entry_for_user(db, current_user.id, entry_id)
+    if "kind" in data:
+        row.kind = data["kind"]
+    if "subject_id" in data:
+        row.subject_id = data["subject_id"][:512]
+    if "subject_name" in data:
+        row.subject_name = data["subject_name"][:512]
+    if "parent_goal_id" in data:
+        v = data["parent_goal_id"]
+        row.parent_goal_id = (v[:512] if isinstance(v, str) and v else None)
+    if "parent_goal_name" in data:
+        v = data["parent_goal_name"]
+        row.parent_goal_name = (v[:512] if isinstance(v, str) and v else None)
+    if "description" in data:
+        row.description = data["description"] or ""
+    if "started_at" in data:
+        row.started_at = data["started_at"]
+    if "ended_at" in data:
+        row.ended_at = data["ended_at"]
+    if "duration_ms" in data:
+        row.duration_ms = data["duration_ms"]
+    if row.ended_at < row.started_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ended_at must be >= started_at",
+        )
+    db.commit()
+    db.refresh(row)
+    return _row_to_response(row)
+
+
+@router.post(
+    "/{entry_id}/duplicate",
+    response_model=TimeTrackerEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def duplicate_time_entry(
+    entry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    src = _get_entry_for_user(db, current_user.id, entry_id)
+    new_client_id = str(uuid.uuid4())[:64]
+    copy_row = TimeTrackerEntryModel(
+        user_id=current_user.id,
+        client_entry_id=new_client_id,
+        kind=src.kind,
+        subject_id=src.subject_id,
+        subject_name=src.subject_name,
+        parent_goal_id=src.parent_goal_id,
+        parent_goal_name=src.parent_goal_name,
+        description=src.description or "",
+        started_at=src.started_at,
+        ended_at=src.ended_at,
+        duration_ms=src.duration_ms,
+    )
+    db.add(copy_row)
+    db.commit()
+    db.refresh(copy_row)
+    return _row_to_response(copy_row)

@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
+import { Dialog } from "@/components/Dialog";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
@@ -15,7 +23,13 @@ import {
   type TimeTrackerKind,
 } from "@/lib/time-tracker-storage";
 import { emitTrackerPreset } from "@/lib/time-tracker-preset-bridge";
-import { listRecentTimeEntries, listTimeEntries } from "@/lib/api/time-entries";
+import {
+  deleteTimeEntry,
+  duplicateTimeEntry,
+  listRecentTimeEntries,
+  listTimeEntries,
+  updateTimeEntry,
+} from "@/lib/api/time-entries";
 
 function IconPlay({ className }: { className?: string }) {
   return (
@@ -91,6 +105,148 @@ function formatTimeOnly(iso: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function isoToLocalDatetimeValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function localDatetimeValueToIso(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function bumpTimeEntriesEvent() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
+  }
+}
+
+function TimeEntryRowMenu({
+  disabled,
+  onEdit,
+  onDuplicate,
+  onDeleteClick,
+}: {
+  disabled?: boolean;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDeleteClick: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuFixed, setMenuFixed] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const el = buttonRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const gapBelowButton = 4;
+    const shiftUpPx = 52;
+    const shiftLeftPx = 36;
+    setMenuFixed({
+      top: Math.max(8, r.bottom + gapBelowButton - shiftUpPx),
+      right: window.innerWidth - r.right + shiftLeftPx,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuFixed(null);
+      return;
+    }
+    updateMenuPosition();
+    const onScrollOrResize = () => updateMenuPosition();
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [open, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="flex justify-end" ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Entry actions"
+        onClick={() => !disabled && setOpen((o) => !o)}
+        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="12" cy="19" r="2" />
+        </svg>
+      </button>
+      {open && menuFixed ? (
+        <ul
+          className="fixed z-50 min-w-36 rounded-lg border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
+          style={{ top: menuFixed.top, right: menuFixed.right }}
+          role="menu"
+        >
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full px-3 py-2 text-left text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+            >
+              Edit
+            </button>
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full px-3 py-2 text-left text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              onClick={() => {
+                setOpen(false);
+                onDuplicate();
+              }}
+            >
+              Duplicate
+            </button>
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+              onClick={() => {
+                setOpen(false);
+                onDeleteClick();
+              }}
+            >
+              Delete
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function bucketEntriesByStartedDay(
@@ -255,6 +411,15 @@ export default function TimeTrackingPage() {
   const [fetchingMore, setFetchingMore] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(true);
   const showMobileTimeTracker = useMediaQuery("(max-width: 767px)");
+  const [editingEntry, setEditingEntry] = useState<TimeTrackerEntry | null>(null);
+  const [editStarted, setEditStarted] = useState("");
+  const [editEnded, setEditEnded] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editTimeRangeError, setEditTimeRangeError] = useState<string | null>(
+    null
+  );
+  const [deleteTarget, setDeleteTarget] = useState<TimeTrackerEntry | null>(null);
+  const [entryActionBusy, setEntryActionBusy] = useState(false);
 
   const dayBuckets = useMemo(
     () => bucketEntriesByStartedDay(entries, new Date()),
@@ -291,6 +456,79 @@ export default function TimeTrackingPage() {
       );
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!editingEntry) return;
+    setEditStarted(isoToLocalDatetimeValue(editingEntry.startedAt));
+    setEditEnded(isoToLocalDatetimeValue(editingEntry.endedAt));
+    setEditDescription(editingEntry.description ?? "");
+    setEditTimeRangeError(null);
+  }, [editingEntry]);
+
+  const handleDuplicateEntry = useCallback(
+    async (e: TimeTrackerEntry) => {
+      if (!token) return;
+      setFetchError(null);
+      setEntryActionBusy(true);
+      try {
+        const copy = await duplicateTimeEntry(token, e.id);
+        setEntries((prev) => sortEntriesDesc([...prev, copy]));
+        bumpTimeEntriesEvent();
+      } catch (err) {
+        setFetchError(err instanceof Error ? err.message : "Duplicate failed");
+      } finally {
+        setEntryActionBusy(false);
+      }
+    },
+    [token]
+  );
+
+  const confirmDeleteEntry = useCallback(async () => {
+    if (!token || !deleteTarget) return;
+    setFetchError(null);
+    setEntryActionBusy(true);
+    try {
+      await deleteTimeEntry(token, deleteTarget.id);
+      setEntries((prev) => prev.filter((x) => x.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      bumpTimeEntriesEvent();
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setEntryActionBusy(false);
+    }
+  }, [token, deleteTarget]);
+
+  const saveEditEntry = useCallback(async () => {
+    if (!token || !editingEntry) return;
+    setFetchError(null);
+    const startedIso = localDatetimeValueToIso(editStarted);
+    const endedIso = localDatetimeValueToIso(editEnded);
+    if (new Date(endedIso) < new Date(startedIso)) {
+      setEditTimeRangeError("End time must be on or after start time.");
+      return;
+    }
+    const durationMs = Math.max(
+      0,
+      new Date(endedIso).getTime() - new Date(startedIso).getTime()
+    );
+    setEntryActionBusy(true);
+    try {
+      const updated = await updateTimeEntry(token, editingEntry.id, {
+        description: editDescription,
+        started_at: startedIso,
+        ended_at: endedIso,
+        duration_ms: durationMs,
+      });
+      setEntries((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      setEditingEntry(null);
+      bumpTimeEntriesEvent();
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setEntryActionBusy(false);
+    }
+  }, [token, editingEntry, editStarted, editEnded, editDescription]);
 
   const toggleGroup = (dayKey: string, groupKey: string) => {
     const k = expandKey(dayKey, groupKey);
@@ -543,7 +781,7 @@ export default function TimeTrackingPage() {
                                 className="border-t border-zinc-200 dark:border-zinc-800"
                               >
                                 <div className="overflow-x-auto">
-                                  <table className="w-full min-w-[360px] border-collapse text-left text-sm">
+                                  <table className="w-full min-w-[400px] border-collapse text-left text-sm">
                                     <thead>
                                       <tr className="bg-zinc-50 text-xs dark:bg-zinc-800/50">
                                         <th className="px-4 py-2 font-semibold text-zinc-600 dark:text-zinc-300">
@@ -557,6 +795,9 @@ export default function TimeTrackingPage() {
                                         </th>
                                         <th className="px-4 py-2 font-semibold text-zinc-600 dark:text-zinc-300">
                                           Notes
+                                        </th>
+                                        <th className="w-14 px-2 py-2 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                          <span className="sr-only">Actions</span>
                                         </th>
                                       </tr>
                                     </thead>
@@ -577,6 +818,14 @@ export default function TimeTrackingPage() {
                                           </td>
                                           <td className="max-w-56 truncate px-4 py-2 text-zinc-600 dark:text-zinc-400">
                                             {e.description || "-"}
+                                          </td>
+                                          <td className="w-14 align-middle px-2 py-1">
+                                            <TimeEntryRowMenu
+                                              disabled={!token || entryActionBusy}
+                                              onEdit={() => setEditingEntry(e)}
+                                              onDuplicate={() => void handleDuplicateEntry(e)}
+                                              onDeleteClick={() => setDeleteTarget(e)}
+                                            />
                                           </td>
                                         </tr>
                                       ))}
@@ -629,6 +878,140 @@ export default function TimeTrackingPage() {
                 {fetchingMore ? "Loading…" : "Load more"}
               </button>
             </div>
+
+            <Dialog
+              isOpen={editingEntry != null}
+              onClose={() => {
+                if (!entryActionBusy) {
+                  setEditTimeRangeError(null);
+                  setEditingEntry(null);
+                }
+              }}
+              title="Edit time entry"
+              size="md"
+            >
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label
+                    htmlFor="edit-entry-started"
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Started
+                  </label>
+                  <input
+                    id="edit-entry-started"
+                    type="datetime-local"
+                    step={1}
+                    value={editStarted}
+                    onChange={(ev) => setEditStarted(ev.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="edit-entry-ended"
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Ended
+                  </label>
+                  <input
+                    id="edit-entry-ended"
+                    type="datetime-local"
+                    step={1}
+                    value={editEnded}
+                    onChange={(ev) => setEditEnded(ev.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="edit-entry-notes"
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Notes
+                  </label>
+                  <textarea
+                    id="edit-entry-notes"
+                    rows={3}
+                    value={editDescription}
+                    onChange={(ev) => setEditDescription(ev.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={entryActionBusy}
+                    onClick={() => {
+                      setEditTimeRangeError(null);
+                      setEditingEntry(null);
+                    }}
+                    className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={entryActionBusy}
+                    onClick={() => void saveEditEntry()}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white dark:bg-emerald-600"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </Dialog>
+
+            <Dialog
+              isOpen={editTimeRangeError != null}
+              onClose={() => setEditTimeRangeError(null)}
+              title="Invalid times"
+              size="sm"
+            >
+              <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                {editTimeRangeError}
+              </p>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditTimeRangeError(null)}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white dark:bg-emerald-600"
+                >
+                  OK
+                </button>
+              </div>
+            </Dialog>
+
+            <Dialog
+              isOpen={deleteTarget != null}
+              onClose={() => {
+                if (!entryActionBusy) setDeleteTarget(null);
+              }}
+              title="Delete time entry"
+              size="sm"
+            >
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Delete this session permanently? This cannot be undone.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={entryActionBusy}
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={entryActionBusy}
+                  onClick={() => void confirmDeleteEntry()}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white dark:bg-red-600"
+                >
+                  Delete
+                </button>
+              </div>
+            </Dialog>
             </>
           )}
         </div>

@@ -79,7 +79,7 @@ export async function listRecentTimeEntries(
 export async function createTimeEntry(
   token: string,
   entry: TimeTrackerEntry
-): Promise<void> {
+): Promise<TimeTrackerEntry> {
   const body = {
     id: entry.id,
     kind: entry.kind,
@@ -106,4 +106,84 @@ export async function createTimeEntry(
   if (!response.ok) {
     throw new Error("Failed to save time entry");
   }
+  const row = (await response.json()) as TimeEntryApiRow;
+  return apiRowToClientEntry(row);
+}
+
+export type TimeEntryUpdateBody = Partial<{
+  kind: "goal" | "project";
+  subject_id: string;
+  subject_name: string;
+  parent_goal_id: string | null;
+  parent_goal_name: string | null;
+  description: string;
+  started_at: string;
+  ended_at: string;
+  duration_ms: number;
+}>;
+
+export async function updateTimeEntry(
+  token: string,
+  entryId: string,
+  patch: TimeEntryUpdateBody
+): Promise<TimeTrackerEntry> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/time-entries/${encodeURIComponent(entryId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const detail =
+      typeof err?.detail === "string" ? err.detail : "Failed to update time entry";
+    throw new Error(detail);
+  }
+  const row = (await response.json()) as TimeEntryApiRow;
+  return apiRowToClientEntry(row);
+}
+
+export async function deleteTimeEntry(token: string, entryId: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/time-entries/${encodeURIComponent(entryId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok && response.status !== 204) {
+    throw new Error("Failed to delete time entry");
+  }
+}
+
+export async function duplicateTimeEntry(
+  token: string,
+  entryId: string
+): Promise<TimeTrackerEntry> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/time-entries/${encodeURIComponent(entryId)}/duplicate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error("Failed to duplicate time entry");
+  }
+  const row = (await response.json()) as TimeEntryApiRow;
+  return apiRowToClientEntry(row);
 }
