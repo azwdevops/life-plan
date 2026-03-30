@@ -1,13 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Dialog } from "@/components/Dialog";
 import { TiptapRichTextEditor } from "@/components/editor/TiptapRichTextEditor";
 import "@/components/resume-builder/rich-text-editor.css";
 import { useAuth } from "@/lib/hooks/use-auth";
 import {
   createProductivityCategory,
+  createProductivityPost,
+  deleteProductivityPost,
   getProductivityBlogData,
+  type ProductivityBlogPostApi,
+  updateProductivityPost,
 } from "@/lib/api/productivity-blog";
 
 export type BlogPostDraft = {
@@ -16,6 +26,15 @@ export type BlogPostDraft = {
   bodyHtml: string;
   categoryNames: string[];
 };
+
+function mapApiPostToDraft(p: ProductivityBlogPostApi): BlogPostDraft {
+  return {
+    id: p.id,
+    title: p.title,
+    bodyHtml: p.body_html,
+    categoryNames: [...p.category_names],
+  };
+}
 
 function newId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -56,6 +75,32 @@ function PostTitleMenu({
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const gapBelowTriggerPx = 4;
+    const shiftUpPx = 22;
+    const shiftLeftPx = 18;
+    setMenuPos({
+      top: r.bottom + gapBelowTriggerPx - shiftUpPx,
+      right: window.innerWidth - r.right + shiftLeftPx,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+    updateMenuPosition();
+  }, [open, updateMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -75,9 +120,20 @@ function PostTitleMenu({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open, updateMenuPosition]);
+
   return (
     <div className="relative shrink-0" ref={wrapRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         aria-expanded={open}
@@ -87,10 +143,14 @@ function PostTitleMenu({
       >
         <IconDotsVertical />
       </button>
-      {open ? (
+      {open && menuPos ? (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-1 min-w-40 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
+          style={{
+            top: menuPos.top,
+            right: menuPos.right,
+          }}
+          className="fixed z-100 min-w-40 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
         >
           <button
             type="button"
@@ -287,7 +347,6 @@ export function ProductivityBlogPanel() {
   }, [token]);
   const [posts, setPosts] = useState<BlogPostDraft[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isEditingPost, setIsEditingPost] = useState(false);
   const [title, setTitle] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -297,19 +356,48 @@ export function ProductivityBlogPanel() {
   const [newPostCategories, setNewPostCategories] = useState<string[]>([]);
   const [newPostBodyHtml, setNewPostBodyHtml] = useState("");
 
+  const [editPostOpen, setEditPostOpen] = useState(false);
+  const [editPostId, setEditPostId] = useState<string | null>(null);
+  const [editPostTitle, setEditPostTitle] = useState("");
+  const [editPostCategories, setEditPostCategories] = useState<string[]>([]);
+  const [editPostBodyHtml, setEditPostBodyHtml] = useState("");
+
+  const hydrateFromServer = useCallback(
+    async (opts?: { selectId?: string | null }) => {
+      if (!token) return;
+      const data = await getProductivityBlogData(token);
+      const mapped = data.posts.map(mapApiPostToDraft);
+      setCategories(data.categories.map((c) => c.name));
+      setPosts(mapped);
+      if (opts && "selectId" in opts) {
+        const sid = opts.selectId;
+        if (sid != null && mapped.some((p) => p.id === sid)) {
+          setSelectedId(sid);
+        } else {
+          setSelectedId(null);
+        }
+      } else {
+        setSelectedId((prev) => {
+          if (!prev) return null;
+          return mapped.some((p) => p.id === prev) ? prev : null;
+        });
+      }
+    },
+    [token]
+  );
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    void getProductivityBlogData(token)
-      .then((data) => {
+    void hydrateFromServer()
+      .then(() => {
         if (cancelled) return;
-        setCategories(data.categories.map((c) => c.name));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, hydrateFromServer]);
 
   useEffect(() => {
     if (!newPostOpen) {
@@ -318,6 +406,15 @@ export function ProductivityBlogPanel() {
       setNewPostBodyHtml("");
     }
   }, [newPostOpen]);
+
+  useEffect(() => {
+    if (!editPostOpen) {
+      setEditPostId(null);
+      setEditPostTitle("");
+      setEditPostCategories([]);
+      setEditPostBodyHtml("");
+    }
+  }, [editPostOpen]);
 
   const syncFormFromPost = useCallback((p: BlogPostDraft | null) => {
     if (!p) {
@@ -331,6 +428,15 @@ export function ProductivityBlogPanel() {
     setSelectedCategories([...p.categoryNames]);
   }, []);
 
+  useEffect(() => {
+    if (!selectedId) {
+      syncFormFromPost(null);
+      return;
+    }
+    const p = posts.find((x) => x.id === selectedId);
+    syncFormFromPost(p ?? null);
+  }, [selectedId, posts, syncFormFromPost]);
+
   const openNewPostDialog = () => {
     setNewPostTitle("");
     setNewPostCategories([]);
@@ -338,20 +444,62 @@ export function ProductivityBlogPanel() {
     setNewPostOpen(true);
   };
 
-  const confirmNewPost = () => {
+  const confirmNewPost = async () => {
     const id = newId();
-    const body = newPostBodyHtml;
     const post: BlogPostDraft = {
       id,
       title: newPostTitle.trim() || "Untitled",
-      bodyHtml: body,
+      bodyHtml: newPostBodyHtml,
       categoryNames: [...newPostCategories],
     };
-    setPosts((prev) => [post, ...prev]);
-    setSelectedId(id);
-    setIsEditingPost(false);
-    syncFormFromPost(post);
-    setNewPostOpen(false);
+    if (!token) {
+      setPosts((prev) => [post, ...prev]);
+      setSelectedId(id);
+      setNewPostOpen(false);
+      return;
+    }
+    try {
+      const row = await createProductivityPost(token, {
+        id: post.id,
+        title: post.title,
+        body_html: post.bodyHtml,
+        category_names: post.categoryNames,
+      });
+      await hydrateFromServer({ selectId: row.id });
+      setNewPostOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not create post";
+      if (typeof window !== "undefined") window.alert(msg);
+    }
+  };
+
+  const confirmEditPost = async () => {
+    if (!editPostId) return;
+    const updated: BlogPostDraft = {
+      id: editPostId,
+      title: editPostTitle.trim() || "Untitled",
+      bodyHtml: editPostBodyHtml,
+      categoryNames: [...editPostCategories],
+    };
+    if (!token) {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === editPostId ? updated : p))
+      );
+      setEditPostOpen(false);
+      return;
+    }
+    try {
+      await updateProductivityPost(token, editPostId, {
+        title: updated.title,
+        body_html: updated.bodyHtml,
+        category_names: updated.categoryNames,
+      });
+      await hydrateFromServer();
+      setEditPostOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not save post";
+      if (typeof window !== "undefined") window.alert(msg);
+    }
   };
 
   const saveCurrentToState = () => {
@@ -372,31 +520,43 @@ export function ProductivityBlogPanel() {
 
   const selectPost = (id: string) => {
     saveCurrentToState();
-    const p = posts.find((x) => x.id === id);
     setSelectedId(id);
-    setIsEditingPost(false);
-    syncFormFromPost(p ?? null);
   };
 
-  const deletePost = (id: string) => {
+  const openPostEdit = (id: string) => {
+    saveCurrentToState();
+    const p = posts.find((x) => x.id === id);
+    if (!p) return;
+    setSelectedId(id);
+    setEditPostId(id);
+    setEditPostTitle(p.title);
+    setEditPostCategories([...p.categoryNames]);
+    setEditPostBodyHtml(p.bodyHtml);
+    setEditPostOpen(true);
+  };
+
+  const deletePost = async (id: string) => {
+    if (token) {
+      try {
+        await deleteProductivityPost(token, id);
+        await hydrateFromServer();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not delete post";
+        if (typeof window !== "undefined") window.alert(msg);
+      }
+      return;
+    }
     setPosts((prev) => prev.filter((p) => p.id !== id));
     if (selectedId === id) {
       setSelectedId(null);
-      setIsEditingPost(false);
-      syncFormFromPost(null);
     }
-  };
-
-  const exitEditToPreview = () => {
-    saveCurrentToState();
-    setIsEditingPost(false);
   };
 
   const confirmDeletePost = (id: string) => {
     if (typeof window !== "undefined" && !window.confirm("Delete this post?")) {
       return;
     }
-    deletePost(id);
+    void deletePost(id);
   };
 
   return (
@@ -415,11 +575,11 @@ export function ProductivityBlogPanel() {
           </button>
           <ul className="mt-4 max-h-64 space-y-1 overflow-y-auto">
             {posts.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="flex min-w-0 items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => selectPost(p.id)}
-                  className={`w-full truncate rounded-lg px-2 py-2 text-left text-sm font-medium ${
+                  className={`min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-left text-sm font-medium ${
                     selectedId === p.id
                       ? "bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100"
                       : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -427,12 +587,17 @@ export function ProductivityBlogPanel() {
                 >
                   {p.title || "Untitled"}
                 </button>
+                <PostTitleMenu
+                  primaryLabel="Edit"
+                  onPrimary={() => openPostEdit(p.id)}
+                  onDelete={() => confirmDeletePost(p.id)}
+                />
               </li>
             ))}
           </ul>
           {posts.length === 0 ? (
             <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-              No posts yet. Create one locally; backend sync comes later.
+              No posts yet. Create one to get started.
             </p>
           ) : null}
         </div>
@@ -440,140 +605,55 @@ export function ProductivityBlogPanel() {
 
       <div className="min-w-0 flex-1 space-y-6">
         {selectedId ? (
-          isEditingPost ? (
-            <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                  Edit post
-                </h2>
-                <PostTitleMenu
-                  primaryLabel="Preview"
-                  onPrimary={exitEditToPreview}
-                  onDelete={() => {
-                    if (selectedId) confirmDeletePost(selectedId);
-                  }}
-                />
-              </div>
+          <article className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <header className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+              <h1 className="min-w-0 flex-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                {title.trim() || "Untitled"}
+              </h1>
+              <PostTitleMenu
+                primaryLabel="Edit"
+                onPrimary={() => {
+                  if (selectedId) openPostEdit(selectedId);
+                }}
+                onDelete={() => {
+                  if (selectedId) confirmDeletePost(selectedId);
+                }}
+              />
+            </header>
 
-              <div>
-                <label
-                  htmlFor="blog-post-title"
-                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-                >
-                  Title
-                </label>
-                <input
-                  id="blog-post-title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onBlur={saveCurrentToState}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                />
-              </div>
+            {isPostBodyEmpty(bodyHtml) ? (
+              <p className="mt-6 text-sm italic text-zinc-400 dark:text-zinc-500">
+                No content yet.
+              </p>
+            ) : (
+              <div
+                className="resume-rich-editor blog-post-preview prose prose-zinc mt-6 max-w-none dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed prose-a:text-emerald-700 dark:prose-a:text-emerald-400"
+                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+              />
+            )}
 
-              <div>
-                <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Categories for this post
-                </span>
-                <div className="mt-2">
-                  <CategoryPicker
-                    allCategories={categories}
-                    selected={selectedCategories}
-                    onChange={(next) => {
-                      setSelectedCategories(next);
-                      if (selectedId) {
-                        setPosts((prev) =>
-                          prev.map((p) =>
-                            p.id === selectedId
-                              ? { ...p, categoryNames: [...next] }
-                              : p
-                          )
-                        );
-                      }
-                    }}
-                    inputId="blog-post-category-filter"
-                    onCreateCategory={handleCreateCategory}
-                  />
+            <footer className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Labels
+              </p>
+              {selectedCategories.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedCategories.map((c) => (
+                    <span
+                      key={c}
+                      className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-200"
+                    >
+                      {c}
+                    </span>
+                  ))}
                 </div>
-              </div>
-
-              <div>
-                <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Body
-                </span>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  Rich text is stored as HTML in the browser for now.
-                </p>
-                <div className="mt-2">
-                  <TiptapRichTextEditor
-                    value={bodyHtml}
-                    onChange={(html) => {
-                      setBodyHtml(html);
-                      if (selectedId) {
-                        setPosts((prev) =>
-                          prev.map((p) =>
-                            p.id === selectedId ? { ...p, bodyHtml: html } : p
-                          )
-                        );
-                      }
-                    }}
-                    placeholder="Write your post…"
-                    minHeight="16rem"
-                    aria-label="Post body"
-                  />
-                </div>
-              </div>
-            </section>
-          ) : (
-            <article className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <header className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4 dark:border-zinc-800">
-                <h1 className="min-w-0 flex-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                  {title.trim() || "Untitled"}
-                </h1>
-                <PostTitleMenu
-                  primaryLabel="Edit"
-                  onPrimary={() => setIsEditingPost(true)}
-                  onDelete={() => {
-                    if (selectedId) confirmDeletePost(selectedId);
-                  }}
-                />
-              </header>
-
-              {isPostBodyEmpty(bodyHtml) ? (
-                <p className="mt-6 text-sm italic text-zinc-400 dark:text-zinc-500">
-                  No content yet.
-                </p>
               ) : (
-                <div
-                  className="resume-rich-editor blog-post-preview prose prose-zinc mt-6 max-w-none dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed prose-a:text-emerald-700 dark:prose-a:text-emerald-400"
-                  dangerouslySetInnerHTML={{ __html: bodyHtml }}
-                />
-              )}
-
-              <footer className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Labels
+                <p className="mt-2 text-sm text-zinc-400 dark:text-zinc-500">
+                  No labels
                 </p>
-                {selectedCategories.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedCategories.map((c) => (
-                      <span
-                        key={c}
-                        className="inline-flex rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-200"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-sm text-zinc-400 dark:text-zinc-500">
-                    No labels
-                  </p>
-                )}
-              </footer>
-            </article>
-          )
+              )}
+            </footer>
+          </article>
         ) : null}
       </div>
 
@@ -641,10 +721,83 @@ export function ProductivityBlogPanel() {
             </button>
             <button
               type="button"
-              onClick={confirmNewPost}
+              onClick={() => void confirmNewPost()}
               className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white dark:bg-emerald-600"
             >
               Create post
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        isOpen={editPostOpen}
+        onClose={() => setEditPostOpen(false)}
+        title="Edit post"
+        size="xl"
+      >
+        <div className="flex flex-col gap-5">
+          <div>
+            <label
+              htmlFor="dialog-edit-post-title"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Title
+            </label>
+            <input
+              id="dialog-edit-post-title"
+              type="text"
+              value={editPostTitle}
+              onChange={(e) => setEditPostTitle(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              placeholder="Untitled"
+            />
+          </div>
+          <div>
+            <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Categories
+            </span>
+            <div className="mt-2">
+              <CategoryPicker
+                allCategories={categories}
+                selected={editPostCategories}
+                onChange={setEditPostCategories}
+                inputId="dialog-edit-post-category-filter"
+                onCreateCategory={handleCreateCategory}
+              />
+            </div>
+          </div>
+          <div>
+            <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Body
+            </span>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Rich text is stored as HTML in the browser for now.
+            </p>
+            <div className="mt-2">
+              <TiptapRichTextEditor
+                value={editPostBodyHtml}
+                onChange={setEditPostBodyHtml}
+                placeholder="Write your post…"
+                minHeight="min(22rem, 45vh)"
+                aria-label="Edit post body"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+            <button
+              type="button"
+              onClick={() => setEditPostOpen(false)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmEditPost()}
+              className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white dark:bg-emerald-600"
+            >
+              Save changes
             </button>
           </div>
         </div>
