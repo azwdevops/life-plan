@@ -31,16 +31,6 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       items: [
         { icon: "📊", label: "Dashboard", href: "/dashboard", type: "link" },
         { icon: "🏦", label: "Accounts", href: "/accounts", type: "link" },
-        ...(isLoggedIn
-          ? [
-              {
-                icon: "⏱️",
-                label: "Time tracking",
-                href: "/time-tracking",
-                type: "link" as const,
-              },
-            ]
-          : []),
       ],
     },
     {
@@ -64,6 +54,16 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       label: "Personal growth",
       items: [
         { icon: "💼", label: "Investments", href: "/investments", type: "link" },
+        ...(isLoggedIn
+          ? [
+              {
+                icon: "✨",
+                label: "Productivity",
+                href: "/productivity",
+                type: "link" as const,
+              },
+            ]
+          : []),
         ...(isAdmin
           ? [
               { icon: "🌱", label: "Personal Growth", href: "/personal-growth", type: "link" as const },
@@ -175,6 +175,8 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                       const href = item.href;
                       const isActive =
                         pathname === href ||
+                        (href === "/productivity" &&
+                          pathname.startsWith("/productivity")) ||
                         (href === "/developer-growth" &&
                           (pathname.startsWith("/game/revision") ||
                             pathname.startsWith("/developer-growth/")));

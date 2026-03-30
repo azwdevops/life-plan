@@ -10,6 +10,10 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.20",
+    "@tiptap/extension-placeholder": "^3.21.0",
+    "@tiptap/extension-underline": "^3.21.0",
+    "@tiptap/react": "^3.21.0",
+    "@tiptap/starter-kit": "^3.21.0",
     "@types/react-datepicker": "^7.0.0",
     "next": "16.1.6",
     "react": "19.2.3",

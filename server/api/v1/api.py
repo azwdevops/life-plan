@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, feasibility_projects, resumes, time_entries, reading_library
+from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, feasibility_projects, resumes, time_entries, reading_library, productivity_blog
 
 api_router = APIRouter()
 api_router.include_router(test.router, prefix="/test", tags=["test"])
@@ -17,4 +17,9 @@ api_router.include_router(feasibility_projects.router, prefix="/investments", ta
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(time_entries.router, prefix="/time-entries", tags=["time-entries"])
 api_router.include_router(reading_library.router, prefix="/reading-library", tags=["reading-library"])
+api_router.include_router(
+    productivity_blog.router,
+    prefix="/productivity-blog",
+    tags=["productivity-blog"],
+)
 

@@ -29,3 +29,23 @@
 .resume-rich-editor p {
   margin: 0.25rem 0;
 }
+
+.resume-rich-editor p code,
+.resume-rich-editor li code,
+.resume-rich-editor h3 code {
+  border-radius: 0.25rem;
+  background: rgb(244 244 245);
+  padding: 0.1em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.dark .resume-rich-editor p code,
+.dark .resume-rich-editor li code,
+.dark .resume-rich-editor h3 code {
+  background: rgb(39 39 42);
+}
+
+.resume-rich-editor.ProseMirror {
+  min-height: 100%;
+}

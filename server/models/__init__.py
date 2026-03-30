@@ -24,6 +24,11 @@ from models.reading_library import (
     ReadingCategory,
     reading_book_categories,
 )
+from models.productivity_blog import (
+    ProductivityBlogCategory,
+    ProductivityBlogPost,
+    productivity_blog_post_categories,
+)
 
 __all__ = [
     "User",
@@ -51,4 +56,7 @@ __all__ = [
     "ReadingBook",
     "ReadingCategory",
     "reading_book_categories",
+    "ProductivityBlogCategory",
+    "ProductivityBlogPost",
+    "productivity_blog_post_categories",
 ]
