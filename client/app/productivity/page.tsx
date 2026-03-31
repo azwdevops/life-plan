@@ -101,18 +101,20 @@ function ProductivityPageInner() {
         onClose={() => setIsSidebarOpen(false)}
         isLoggedIn={isAuthenticated}
       />
-      <main
-        className={`min-h-0 min-w-0 w-full max-w-full flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
-        }`}
-      >
-        <div
-          className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-6"
-          role="tabpanel"
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
+        <main
+          className={`min-h-0 min-w-0 max-w-full flex-1 transition-all duration-300 ${
+            isSidebarOpen && isAuthenticated ? "lg:pl-64" : ""
+          }`}
         >
-          {tab === "tracking" ? <TimeTrackingPanel /> : <ProductivityBlogPanel />}
-        </div>
-      </main>
+          <div
+            className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-6"
+            role="tabpanel"
+          >
+            {tab === "tracking" ? <TimeTrackingPanel /> : <ProductivityBlogPanel />}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
