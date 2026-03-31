@@ -44,14 +44,14 @@ function ProductivityPageInner() {
 
   return (
     <div
-      className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950"
+      className="flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-zinc-50 dark:bg-zinc-950"
       suppressHydrationWarning
     >
       <Header
         onMenuClick={toggleSidebar}
         isSidebarOpen={isSidebarOpen}
         centerContent={
-          <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
+          <div className="flex min-w-0 max-w-full flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
             <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
               Productivity
             </h1>
@@ -102,11 +102,14 @@ function ProductivityPageInner() {
         isLoggedIn={isAuthenticated}
       />
       <main
-        className={`min-h-0 min-w-0 w-full flex-1 transition-all duration-300 ${
+        className={`min-h-0 min-w-0 w-full max-w-full flex-1 transition-all duration-300 ${
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        <div className="min-h-0 w-full min-w-0 flex-1 px-4 py-6" role="tabpanel">
+        <div
+          className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-6"
+          role="tabpanel"
+        >
           {tab === "tracking" ? <TimeTrackingPanel /> : <ProductivityBlogPanel />}
         </div>
       </main>

@@ -560,7 +560,7 @@ export function ProductivityBlogPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
       <aside className="w-full shrink-0 lg:max-w-xs">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
@@ -605,7 +605,7 @@ export function ProductivityBlogPanel() {
 
       <div className="min-w-0 flex-1 space-y-6">
         {selectedId ? (
-          <article className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <article className="min-w-0 max-w-full overflow-hidden rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <header className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4 dark:border-zinc-800">
               <h1 className="min-w-0 flex-1 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                 {title.trim() || "Untitled"}
@@ -627,7 +627,7 @@ export function ProductivityBlogPanel() {
               </p>
             ) : (
               <div
-                className="resume-rich-editor blog-post-preview prose prose-zinc mt-6 max-w-none dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed prose-a:text-emerald-700 dark:prose-a:text-emerald-400"
+                className="resume-rich-editor blog-post-preview prose prose-zinc mt-6 max-w-full wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed prose-a:wrap-break-word prose-a:text-emerald-700 dark:prose-a:text-emerald-400 [&_img]:h-auto [&_img]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto"
                 dangerouslySetInnerHTML={{ __html: bodyHtml }}
               />
             )}

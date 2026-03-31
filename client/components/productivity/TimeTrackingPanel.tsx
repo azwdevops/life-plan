@@ -570,7 +570,7 @@ export function TimeTrackingPanel() {
   };
 
   return (
-        <div className="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col">
+        <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col">
           {showMobileTimeTracker === true ? (
             <section
               className="mb-5 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
