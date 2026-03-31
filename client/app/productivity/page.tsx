@@ -44,7 +44,7 @@ function ProductivityPageInner() {
 
   return (
     <div
-      className="flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-zinc-50 dark:bg-zinc-950"
+      className="flex min-h-screen min-w-0 flex-col bg-zinc-50 dark:bg-zinc-950"
       suppressHydrationWarning
     >
       <Header
