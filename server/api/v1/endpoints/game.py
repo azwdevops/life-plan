@@ -417,7 +417,17 @@ async def suggest_posting(body: PostingSuggestionRequest):
     ledger_lines = "\n".join([f"- id={l.id}, name={l.name}" for l in body.ledgers])
     prompt = (
         "You are an accounting assistant. Based on the user's activity description and available ledgers, "
-        "propose a double-entry posting suggestion.\n\n"
+        "propose a double-entry posting suggestion. Every suggestion MUST follow standard accounting "
+        "double-entry rules; debits and credits must reflect real increases and decreases to the accounts involved.\n\n"
+        "Double-entry debit/credit logic (apply using ledger names/types):\n"
+        "- When an expense or an asset INCREASES, record that side as DEBIT.\n"
+        "- When income (revenue) or a liability INCREASES, record that side as CREDIT.\n"
+        "- When an asset DECREASES (e.g. cash or bank balance goes down because money was spent), record that "
+        "asset as CREDIT.\n"
+        "- When a liability DECREASES (e.g. a loan or payable is paid down), record that liability as DEBIT.\n"
+        "Example: paying for an expense with cash — debit the expense (expense increased), credit cash "
+        "(asset decreased because funds were used). Paying a supplier from the bank — debit expense or the "
+        "appropriate account that increased, credit the bank/cash ledger that decreased.\n\n"
         "Rules:\n"
         "1. Use ONLY provided ledger IDs.\n"
         "2. Return balanced entries (total debits must equal total credits).\n"
@@ -440,7 +450,13 @@ async def suggest_posting(body: PostingSuggestionRequest):
     try:
         content = _call_openrouter(
             [
-                {"role": "system", "content": "You output only valid JSON. No markdown code fences or extra text."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You output only valid JSON. No markdown code fences or extra text. "
+                        "Debit/credit choices must follow standard double-entry accounting."
+                    ),
+                },
                 {"role": "user", "content": prompt},
             ],
             model=body.model,

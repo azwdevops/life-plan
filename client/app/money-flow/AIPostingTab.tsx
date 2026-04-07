@@ -78,6 +78,12 @@ export function AIPostingTab() {
     }
   };
 
+  const clearDescriptionField = useCallback(() => {
+    stopVoice();
+    setInterimTranscript("");
+    setDescription("");
+  }, [stopVoice]);
+
   const descriptionDisplay =
     interimTranscript === ""
       ? description
@@ -326,6 +332,16 @@ export function AIPostingTab() {
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300" htmlFor="ai-posting-description">
                 What happened?
               </label>
+              <div className="flex flex-wrap items-center gap-2">
+              {(description.trim() || interimTranscript) ? (
+                <button
+                  type="button"
+                  onClick={clearDescriptionField}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                >
+                  Clear
+                </button>
+              ) : null}
               <button
                 type="button"
                 id="ai-posting-voice-toggle"
@@ -367,11 +383,13 @@ export function AIPostingTab() {
                 </svg>
                 {voiceListening ? "Stop" : "Dictate"}
               </button>
+              </div>
             </div>
             <textarea
               id="ai-posting-description"
               value={descriptionDisplay}
               onChange={(e) => {
+                stopVoice();
                 setInterimTranscript("");
                 setDescription(e.target.value);
               }}
@@ -443,67 +461,40 @@ export function AIPostingTab() {
 
         {hasGenerated && (
           <>
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Date</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Transaction Type
-                </label>
-                <select
-                  value={transactionType}
-                  onChange={(e) => setTransactionType(e.target.value as TransactionType)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            <div className="mt-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Posting lines</h3>
+                <button
+                  type="button"
+                  onClick={handleAddRow}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                 >
-                  <option value="MONEY_PAID">Money Paid</option>
-                  <option value="MONEY_RECEIVED">Money Received</option>
-                  <option value="JOURNAL">Journal</option>
-                </select>
+                  + Add row
+                </button>
               </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Narration (notes)
-                </label>
-                <input
-                  type="text"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="Short description"
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
-                    <th className="px-3 py-3 text-left text-sm font-semibold text-zinc-700 dark:text-zinc-300">Ledger</th>
-                    <th className="px-3 py-3 text-left text-sm font-semibold text-zinc-700 dark:text-zinc-300">DR</th>
-                    <th className="px-3 py-3 text-left text-sm font-semibold text-zinc-700 dark:text-zinc-300">CR</th>
-                    <th className="px-3 py-3 text-left text-sm font-semibold text-zinc-700 dark:text-zinc-300">Amount</th>
-                    <th className="px-3 py-3 text-left text-sm font-semibold text-zinc-700 dark:text-zinc-300">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, idx) => {
-                    const dr = Number.parseFloat(row.debit) || 0;
-                    const cr = Number.parseFloat(row.credit) || 0;
-                    return (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
+                      <th className="px-4 py-5 text-left text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                        Ledger *
+                      </th>
+                      <th className="px-4 py-5 text-right text-sm font-semibold text-zinc-700 dark:text-zinc-300">Dr</th>
+                      <th className="px-4 py-5 text-right text-sm font-semibold text-zinc-700 dark:text-zinc-300">Cr</th>
+                      <th className="px-4 py-5 text-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, idx) => (
                       <tr key={`${idx}-${row.ledger_id}`} className="border-b border-zinc-200 dark:border-zinc-700">
-                        <td className="px-3 py-3 min-w-[260px]">
+                        <td className="px-4 py-5 min-w-[220px]">
                           <SearchableSelect
                             options={ledgers.map((ledger) => ({
                               value: ledger.id,
                               label: ledger.name,
-                              searchText: `${ledger.name} ${ledger.id}`,
+                              searchText: ledger.name,
                             }))}
                             value={row.ledger_id || 0}
                             onChange={(value) =>
@@ -521,13 +512,13 @@ export function AIPostingTab() {
                             }
                             placeholder="Select ledger"
                             searchPlaceholder="Type to search ledgers..."
-                            className="w-full"
+                            className="w-full min-w-[200px] relative"
                             allowClear
                             onCreateNew={handleCreateNewLedger(idx)}
                             createNewLabel={(searchTerm) => `Create "${searchTerm}" ledger`}
                           />
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-5 text-right">
                           <input
                             type="number"
                             min="0"
@@ -538,10 +529,10 @@ export function AIPostingTab() {
                                 prev.map((r, i) => (i === idx ? { ...r, debit: e.target.value, credit: "" } : r))
                               )
                             }
-                            className="w-28 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                            className="ml-auto block w-full min-w-[100px] max-w-[140px] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-right text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                           />
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-5 text-right">
                           <input
                             type="number"
                             min="0"
@@ -552,59 +543,118 @@ export function AIPostingTab() {
                                 prev.map((r, i) => (i === idx ? { ...r, debit: "", credit: e.target.value } : r))
                               )
                             }
-                            className="w-28 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                            className="ml-auto block w-full min-w-[100px] max-w-[140px] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-right text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                           />
                         </td>
-                        <td className="px-3 py-3 text-sm text-zinc-700 dark:text-zinc-300">
-                          {(dr > 0 ? dr : cr).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </td>
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-5 text-center">
                           <button
                             type="button"
                             onClick={() => handleRemoveRow(idx)}
-                            className="rounded border border-red-300 px-2 py-1 text-sm text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
+                            className="rounded p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                            title="Remove row"
                           >
-                            Remove
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
                           </button>
                         </td>
                       </tr>
-                    );
-                  })}
-                  {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
-                        No entries yet. Generate suggestions or add rows manually.
+                    ))}
+                    {rows.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
+                          No entries yet. Generate suggestions or add rows manually.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-zinc-300 bg-zinc-50 font-semibold dark:border-zinc-700 dark:bg-zinc-800">
+                      <td className="px-4 py-5 text-right text-zinc-700 dark:text-zinc-300">Totals:</td>
+                      <td className="px-4 py-5 text-right text-green-600 dark:text-green-400">
+                        {debitTotal.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </td>
+                      <td className="px-4 py-5 text-right text-red-600 dark:text-red-400">
+                        {creditTotal.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="px-4 py-5" />
                     </tr>
-                  )}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
-                    <td className="px-3 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">Totals</td>
-                    <td className="px-3 py-3 text-sm font-semibold text-green-700 dark:text-green-300">
-                      {debitTotal.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-3 text-sm font-semibold text-red-700 dark:text-red-300">
-                      {creditTotal.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                      {isBalanced ? "Balanced" : "Out of balance"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={handleAddRow}
-                        className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                      >
-                        + Add row
-                      </button>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div className="relative z-0 mt-6 rounded-lg border-2 border-zinc-300 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Balance status</span>
+                <span
+                  className={`text-sm font-semibold ${
+                    isBalanced
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {isBalanced
+                    ? "✓ Balanced"
+                    : `Out of balance (${Math.abs(debitTotal - creditTotal).toFixed(2)})`}
+                </span>
+              </div>
+              {!isBalanced && debitTotal + creditTotal > 0 && (
+                <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+                  {debitTotal > creditTotal
+                    ? "Credits need to be increased or debits decreased."
+                    : "Debits need to be increased or credits decreased."}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Date *</label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Transaction type
+                </label>
+                <select
+                  value={transactionType}
+                  onChange={(e) => setTransactionType(e.target.value as TransactionType)}
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                >
+                  <option value="MONEY_PAID">Money paid</option>
+                  <option value="MONEY_RECEIVED">Money received</option>
+                  <option value="JOURNAL">Journal</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Reference (optional)
+                </label>
+                <input
+                  type="text"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Short narration"
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                />
+              </div>
             </div>
 
             <div className="mt-5 flex justify-end">
@@ -614,7 +664,7 @@ export function AIPostingTab() {
                 onClick={() => void handlePost()}
                 className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
-                {createTransactionMutation.isPending ? "Posting..." : "Post transaction"}
+                {createTransactionMutation.isPending ? "Posting…" : "Post transaction"}
               </button>
             </div>
           </>

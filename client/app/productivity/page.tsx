@@ -8,12 +8,14 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { TimeTrackingPanel } from "@/components/productivity/TimeTrackingPanel";
 import { ProductivityBlogPanel } from "@/components/productivity/ProductivityBlogPanel";
+import { AiSchedulePanel } from "@/components/productivity/AiSchedulePanel";
 
-type ProductivityTab = "tracking" | "blog";
+type ProductivityTab = "tracking" | "blog" | "schedule";
 
 const TAB_CONFIG: Array<{ id: ProductivityTab; label: string }> = [
   { id: "tracking", label: "Time tracking" },
   { id: "blog", label: "Blog" },
+  { id: "schedule", label: "AI schedule" },
 ];
 
 function ProductivityPageInner() {
@@ -25,6 +27,7 @@ function ProductivityPageInner() {
   const tab = useMemo((): ProductivityTab => {
     const t = searchParams.get("tab");
     if (t === "blog") return "blog";
+    if (t === "schedule") return "schedule";
     return "tracking";
   }, [searchParams]);
 
@@ -111,7 +114,13 @@ function ProductivityPageInner() {
             className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-6"
             role="tabpanel"
           >
-            {tab === "tracking" ? <TimeTrackingPanel /> : <ProductivityBlogPanel />}
+            {tab === "tracking" ? (
+              <TimeTrackingPanel />
+            ) : tab === "blog" ? (
+              <ProductivityBlogPanel />
+            ) : (
+              <AiSchedulePanel />
+            )}
           </div>
         </main>
       </div>
