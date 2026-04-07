@@ -22,12 +22,46 @@ export interface AiDayScheduleActivityIn {
   max_duration_minutes: number;
 }
 
-export interface AiDayScheduleResponseApi {
-  blocks: ScheduleBlockApi[];
-  tips?: string | null;
+export interface StartAiScheduleJobResponse {
+  job_id: string;
+  status: "processing";
+  message: string;
 }
 
-export async function requestAiDaySchedule(
+export type AiScheduleJobStatusResponse =
+  | {
+      status: "processing";
+      message?: string | null;
+    }
+  | {
+      status: "completed";
+      blocks: ScheduleBlockApi[];
+      tips?: string | null;
+    }
+  | {
+      status: "failed";
+      error: string;
+    };
+
+async function parseErrorResponse(response: Response): Promise<string> {
+  const raw = await response.text();
+  let message = response.statusText || "Request failed";
+  try {
+    const parsed = JSON.parse(raw) as { detail?: unknown };
+    if (typeof parsed.detail === "string") message = parsed.detail;
+  } catch {
+    if (
+      response.status === 504 ||
+      /\b504\b|Gateway time-out|cf-error-details|cloudflare/i.test(raw)
+    ) {
+      message =
+        "Gateway timed out. If this was a quick request, check your network; long-running work uses Check status instead.";
+    }
+  }
+  return message;
+}
+
+export async function startAiScheduleJob(
   token: string,
   body: {
     activities: AiDayScheduleActivityIn[];
@@ -36,8 +70,8 @@ export async function requestAiDaySchedule(
     timezone_name: string;
     model?: string;
   }
-): Promise<AiDayScheduleResponseApi> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/ai-schedule/plan`, {
+): Promise<StartAiScheduleJobResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/ai-schedule/plan/start`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -60,8 +94,25 @@ export async function requestAiDaySchedule(
     throw new Error("Unauthorized");
   }
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to build schedule");
+    throw new Error(await parseErrorResponse(response));
   }
-  return response.json();
+  return response.json() as Promise<StartAiScheduleJobResponse>;
+}
+
+export async function getAiScheduleJobStatus(
+  token: string,
+  jobId: string
+): Promise<AiScheduleJobStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/ai-schedule/plan/jobs/${encodeURIComponent(jobId)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await parseErrorResponse(response));
+  }
+  return response.json() as Promise<AiScheduleJobStatusResponse>;
 }

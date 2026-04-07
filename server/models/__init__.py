@@ -29,6 +29,7 @@ from models.productivity_blog import (
     ProductivityBlogPost,
     productivity_blog_post_categories,
 )
+from models.ai_schedule_job import AiScheduleJob
 
 __all__ = [
     "User",
@@ -59,4 +60,5 @@ __all__ = [
     "ProductivityBlogCategory",
     "ProductivityBlogPost",
     "productivity_blog_post_categories",
+    "AiScheduleJob",
 ]

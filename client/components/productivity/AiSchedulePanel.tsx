@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/lib/hooks/use-auth";
-import { requestAiDaySchedule, type ScheduleBlockApi } from "@/lib/api/ai-schedule";
+import {
+  getAiScheduleJobStatus,
+  startAiScheduleJob,
+  type ScheduleBlockApi,
+} from "@/lib/api/ai-schedule";
 import {
   clearSchedule,
   getTodayKey,
@@ -121,6 +125,9 @@ export function AiSchedulePanel() {
   const [activityRows, setActivityRows] = useState<ActivityRowState[]>(() => [emptyActivityRow()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set after POST /plan/start; poll with Check status. */
+  const [scheduleJobId, setScheduleJobId] = useState<string | null>(null);
+  const [jobHint, setJobHint] = useState<string | null>(null);
   /** Blur non-current blocks when true; single source of truth is localStorage. */
   const focusOthersMode = useSyncExternalStore(
     subscribeFocusBlurOthers,
@@ -222,6 +229,8 @@ export function AiSchedulePanel() {
 
   const openDialog = () => {
     setError(null);
+    setScheduleJobId(null);
+    setJobHint(null);
     const plan = parsePlanInput(stored?.tasksInput ?? "");
     setActivityRows(plan.length ? rowsFromPlan(plan) : [emptyActivityRow()]);
     setDialogOpen(true);
@@ -246,10 +255,14 @@ export function AiSchedulePanel() {
   };
 
   const closeDialog = () => {
-    if (!loading) setDialogOpen(false);
+    if (!loading) {
+      setDialogOpen(false);
+      setScheduleJobId(null);
+      setJobHint(null);
+    }
   };
 
-  const handleGenerate = async () => {
+  const handleStartGenerate = async () => {
     const activities = planFromRows(activityRows);
     if (!activities.length) {
       setError("Add at least one activity with a title.");
@@ -261,14 +274,44 @@ export function AiSchedulePanel() {
     }
     setLoading(true);
     setError(null);
+    setJobHint(null);
     try {
-      const res = await requestAiDaySchedule(token, {
+      const res = await startAiScheduleJob(token, {
         activities,
         now_iso: new Date().toISOString(),
         end_of_day_iso: endOfEatDayIso(),
         timezone_name: EAT_TIMEZONE,
       });
-      const blocks = sortBlocks(res.blocks);
+      setScheduleJobId(res.job_id);
+      setJobHint(res.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckJobStatus = async () => {
+    if (!scheduleJobId || !token) {
+      setError("Start generation first.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const activities = planFromRows(activityRows);
+      const status = await getAiScheduleJobStatus(token, scheduleJobId);
+      if (status.status === "processing") {
+        setJobHint(status.message ?? "Still working on it. Try again in a few seconds.");
+        return;
+      }
+      if (status.status === "failed") {
+        setError(status.error);
+        setScheduleJobId(null);
+        setJobHint(null);
+        return;
+      }
+      const blocks = sortBlocks(status.blocks);
       const payload: StoredAiDaySchedule = {
         dayKey: getTodayKey(),
         generatedAt: new Date().toISOString(),
@@ -278,12 +321,28 @@ export function AiSchedulePanel() {
       };
       saveSchedule(payload);
       setStored(payload);
+      setScheduleJobId(null);
+      setJobHint(null);
       setDialogOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSchedulePrimaryAction = () => {
+    if (scheduleJobId) {
+      void handleCheckJobStatus();
+    } else {
+      void handleStartGenerate();
+    }
+  };
+
+  const handleCancelScheduleJob = () => {
+    setScheduleJobId(null);
+    setJobHint(null);
+    setError(null);
   };
 
   const handleClear = () => {
@@ -559,6 +618,9 @@ export function AiSchedulePanel() {
                 single block may run; leave empty for 40 minutes.
               </p>
             </div>
+            {jobHint ? (
+              <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{jobHint}</p>
+            ) : null}
             {error ? (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
                 {error}
@@ -573,13 +635,29 @@ export function AiSchedulePanel() {
               >
                 Cancel
               </button>
+              {scheduleJobId ? (
+                <button
+                  type="button"
+                  onClick={handleCancelScheduleJob}
+                  disabled={loading}
+                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  Start over
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={handleGenerate}
+                onClick={handleSchedulePrimaryAction}
                 disabled={loading}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
-                {loading ? "Building…" : "Generate schedule"}
+                {loading
+                  ? scheduleJobId
+                    ? "Checking…"
+                    : "Starting…"
+                  : scheduleJobId
+                    ? "Check status"
+                    : "Generate schedule"}
               </button>
             </div>
           </div>

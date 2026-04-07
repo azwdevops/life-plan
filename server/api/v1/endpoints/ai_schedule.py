@@ -1,13 +1,17 @@
 import json
 import re
+import uuid
 from typing import List, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from api.v1.endpoints.auth import get_current_user
 from core.config import settings
+from core.database import SessionLocal, get_db
+from models.ai_schedule_job import AiScheduleJob
 from models.user import User
 
 router = APIRouter()
@@ -46,6 +50,20 @@ class ScheduleBlock(BaseModel):
 class AiDayScheduleResponse(BaseModel):
     blocks: List[ScheduleBlock]
     tips: Optional[str] = None
+
+
+class PlanJobStartResponse(BaseModel):
+    job_id: str
+    status: Literal["processing"] = "processing"
+    message: str = "Generation started. Use Check status until the schedule is ready."
+
+
+class PlanJobStatusResponse(BaseModel):
+    status: Literal["processing", "completed", "failed"]
+    message: Optional[str] = None
+    blocks: Optional[List[ScheduleBlock]] = None
+    tips: Optional[str] = None
+    error: Optional[str] = None
 
 
 def _call_openrouter(messages: list, model: Optional[str] = None, max_tokens: int = 4096) -> str:
@@ -109,23 +127,7 @@ def _coerce_blocks(data: dict) -> List[ScheduleBlock]:
     return out
 
 
-@router.post("/plan", response_model=AiDayScheduleResponse)
-async def plan_day(
-    body: AiDayScheduleRequest,
-    _user: User = Depends(get_current_user),
-):
-    if body.api != "openrouter":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only 'openrouter' API is supported for now",
-        )
-    cleaned = [a for a in body.activities if a.title and str(a.title).strip()]
-    if not cleaned:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one activity with a non-empty title is required",
-        )
-
+def _build_user_prompt(body: AiDayScheduleRequest, cleaned: List[ScheduleActivityIn]) -> str:
     activity_lines = []
     for i, a in enumerate(cleaned, 1):
         t = a.title.strip()
@@ -141,7 +143,7 @@ async def plan_day(
 
     activities_block = "\n".join(activity_lines)
 
-    user_prompt = (
+    return (
         "You are an expert productivity coach. Build a rest-of-day WORK schedule for ONE person.\n\n"
         "TIME WINDOW (ISO 8601 instants; all block times must fall inside this window):\n"
         f"- Schedule starts at (earliest start for any block): {body.now_iso}\n"
@@ -190,33 +192,149 @@ async def plan_day(
         'Every block must have "kind": "task" only.'
     )
 
+
+def execute_plan(body: AiDayScheduleRequest) -> AiDayScheduleResponse:
+    """Runs OpenRouter and returns parsed schedule (used by background job)."""
+    cleaned = [a for a in body.activities if a.title and str(a.title).strip()]
+    if not cleaned:
+        raise ValueError("At least one activity with a non-empty title is required")
+
+    body = body.model_copy(update={"activities": cleaned})
+    user_prompt = _build_user_prompt(body, cleaned)
+
+    content = _call_openrouter(
+        [
+            {
+                "role": "system",
+                "content": (
+                    "You output only valid JSON. No markdown, no code fences, no commentary outside JSON. "
+                    "Blocks are work tasks only (kind task). Never emit break/lunch/buffer rows."
+                ),
+            },
+            {"role": "user", "content": user_prompt},
+        ],
+        model=body.model,
+        max_tokens=4096,
+    )
+    data = _parse_schedule_json(content)
+    blocks = _coerce_blocks(data)
+    tips = data.get("tips")
+    tips_str = str(tips).strip() if tips is not None else None
+    return AiDayScheduleResponse(blocks=blocks, tips=tips_str)
+
+
+def _background_run_schedule_job(job_id: str, user_id: int, payload: dict) -> None:
+    db = SessionLocal()
     try:
-        content = _call_openrouter(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "You output only valid JSON. No markdown, no code fences, no commentary outside JSON. "
-                        "Blocks are work tasks only (kind task). Never emit break/lunch/buffer rows."
-                    ),
-                },
-                {"role": "user", "content": user_prompt},
-            ],
-            model=body.model,
-            max_tokens=4096,
-        )
-        data = _parse_schedule_json(content)
-        blocks = _coerce_blocks(data)
-        tips = data.get("tips")
-        tips_str = str(tips).strip() if tips is not None else None
-        return AiDayScheduleResponse(blocks=blocks, tips=tips_str)
+        body = AiDayScheduleRequest(**payload)
+        if body.api != "openrouter":
+            raise ValueError("Only 'openrouter' API is supported for now")
+        result = execute_plan(body)
+        job = db.query(AiScheduleJob).filter(AiScheduleJob.id == job_id).one_or_none()
+        if job is None or job.user_id != user_id:
+            return
+        job.status = "completed"
+        job.result_payload = result.model_dump(mode="json")
+        db.query(AiScheduleJob).filter(
+            AiScheduleJob.user_id == user_id,
+            AiScheduleJob.id != job_id,
+        ).delete(synchronize_session=False)
+        db.commit()
     except httpx.HTTPStatusError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenRouter error: {e.response.text}",
-        )
+        job = db.query(AiScheduleJob).filter(AiScheduleJob.id == job_id).one_or_none()
+        if job and job.user_id == user_id:
+            job.status = "failed"
+            job.error_message = (e.response.text or str(e))[:8192]
+            db.commit()
     except Exception as e:
+        db.rollback()
+        job = db.query(AiScheduleJob).filter(AiScheduleJob.id == job_id).one_or_none()
+        if job and job.user_id == user_id:
+            job.status = "failed"
+            job.error_message = str(e)[:8192]
+            db.commit()
+    finally:
+        db.close()
+
+
+@router.post("/plan/start", response_model=PlanJobStartResponse)
+async def plan_start(
+    body: AiDayScheduleRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if body.api != "openrouter":
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'openrouter' API is supported for now",
         )
+    cleaned = [a for a in body.activities if a.title and str(a.title).strip()]
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one activity with a non-empty title is required",
+        )
+
+    job_id = str(uuid.uuid4())
+    job = AiScheduleJob(
+        id=job_id,
+        user_id=user.id,
+        status="processing",
+        error_message=None,
+        result_payload=None,
+    )
+    db.add(job)
+    db.commit()
+
+    payload = body.model_dump()
+    background_tasks.add_task(_background_run_schedule_job, job_id, user.id, payload)
+
+    return PlanJobStartResponse(
+        job_id=job_id,
+        message="Schedule generation started. Click Check status to load the result when ready.",
+    )
+
+
+@router.get("/plan/jobs/{job_id}", response_model=PlanJobStatusResponse)
+def plan_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    job = (
+        db.query(AiScheduleJob)
+        .filter(AiScheduleJob.id == job_id, AiScheduleJob.user_id == user.id)
+        .one_or_none()
+    )
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    if job.status == "processing":
+        return PlanJobStatusResponse(
+            status="processing",
+            message="Still generating your schedule. Try again in a few seconds.",
+        )
+    if job.status == "failed":
+        return PlanJobStatusResponse(
+            status="failed",
+            error=job.error_message or "Generation failed",
+        )
+
+    raw = job.result_payload
+    if not raw or not isinstance(raw, dict):
+        return PlanJobStatusResponse(
+            status="failed",
+            error="Missing result data",
+        )
+
+    try:
+        blocks_data = raw.get("blocks")
+        if not isinstance(blocks_data, list):
+            raise ValueError("Invalid blocks")
+        blocks = [ScheduleBlock.model_validate(b) for b in blocks_data]
+        tips = raw.get("tips")
+        tips_str = str(tips).strip() if tips is not None else None
+        return PlanJobStatusResponse(status="completed", blocks=blocks, tips=tips_str)
+    except Exception as e:
+        return PlanJobStatusResponse(status="failed", error=str(e))
