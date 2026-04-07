@@ -86,7 +86,7 @@ def _call_openrouter(messages: list, model: Optional[str] = None, max_tokens: in
             "messages": messages,
             "max_tokens": max_tokens,
         },
-        timeout=240.0,
+        timeout=600.0,
     )
     response.raise_for_status()
     data = response.json()
