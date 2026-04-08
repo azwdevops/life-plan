@@ -27,6 +27,10 @@ import {
   subscribeFocusBlurOthers,
 } from "@/lib/ai-schedule-focus-storage";
 import {
+  loadScheduleDialogDraft,
+  saveScheduleDialogDraft,
+} from "@/lib/ai-schedule-dialog-draft-storage";
+import {
   emptyActivityRow,
   parsePlanInput,
   planFromRows,
@@ -231,10 +235,20 @@ export function AiSchedulePanel() {
     setError(null);
     setScheduleJobId(null);
     setJobHint(null);
-    const plan = parsePlanInput(stored?.tasksInput ?? "");
-    setActivityRows(plan.length ? rowsFromPlan(plan) : [emptyActivityRow()]);
+    const draft = loadScheduleDialogDraft();
+    if (draft && draft.length > 0) {
+      setActivityRows(draft);
+    } else {
+      const plan = parsePlanInput(stored?.tasksInput ?? "");
+      setActivityRows(plan.length ? rowsFromPlan(plan) : [emptyActivityRow()]);
+    }
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    saveScheduleDialogDraft(activityRows);
+  }, [dialogOpen, activityRows]);
 
   const updateActivityRow = (
     id: string,
