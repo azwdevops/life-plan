@@ -30,6 +30,8 @@ from models.productivity_blog import (
     productivity_blog_post_categories,
 )
 from models.ai_schedule_job import AiScheduleJob
+from models.pending_work import PendingWorkCategory, PendingWorkItem
+from models.discipline_track import DisciplineTrack
 
 __all__ = [
     "User",
@@ -61,4 +63,7 @@ __all__ = [
     "ProductivityBlogPost",
     "productivity_blog_post_categories",
     "AiScheduleJob",
+    "PendingWorkCategory",
+    "PendingWorkItem",
+    "DisciplineTrack",
 ]

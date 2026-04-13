@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -9,13 +9,17 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { TimeTrackingPanel } from "@/components/productivity/TimeTrackingPanel";
 import { ProductivityBlogPanel } from "@/components/productivity/ProductivityBlogPanel";
 import { AiSchedulePanel } from "@/components/productivity/AiSchedulePanel";
+import { PendingWorkPanel } from "@/components/productivity/PendingWorkPanel";
+import { DisciplinePanel } from "@/components/productivity/DisciplinePanel";
 
-type ProductivityTab = "tracking" | "blog" | "schedule";
+type ProductivityTab = "tracking" | "blog" | "schedule" | "pending" | "discipline";
 
 const TAB_CONFIG: Array<{ id: ProductivityTab; label: string }> = [
   { id: "tracking", label: "Time tracking" },
   { id: "blog", label: "Blog" },
   { id: "schedule", label: "AI schedule" },
+  { id: "pending", label: "Pending work" },
+  { id: "discipline", label: "Discipline" },
 ];
 
 function ProductivityPageInner() {
@@ -23,11 +27,18 @@ function ProductivityPageInner() {
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
+  /** Avoid SSR vs client mismatch: auth reads localStorage only on the client. */
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const tab = useMemo((): ProductivityTab => {
     const t = searchParams.get("tab");
     if (t === "blog") return "blog";
     if (t === "schedule") return "schedule";
+    if (t === "pending") return "pending";
+    if (t === "discipline") return "discipline";
     return "tracking";
   }, [searchParams]);
 
@@ -36,20 +47,26 @@ function ProductivityPageInner() {
   };
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!hasMounted || isLoading) return;
+    if (!isAuthenticated) {
       router.push("/login");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [hasMounted, isAuthenticated, isLoading, router]);
+
+  if (!hasMounted) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
+        Loading…
+      </div>
+    );
+  }
 
   if (!isAuthenticated && !isLoading) {
     return null;
   }
 
   return (
-    <div
-      className="flex min-h-screen min-w-0 flex-col bg-zinc-50 dark:bg-zinc-950"
-      suppressHydrationWarning
-    >
+    <div className="flex min-h-screen min-w-0 flex-col bg-zinc-50 dark:bg-zinc-950">
       <Header
         onMenuClick={toggleSidebar}
         isSidebarOpen={isSidebarOpen}
@@ -118,8 +135,12 @@ function ProductivityPageInner() {
               <TimeTrackingPanel />
             ) : tab === "blog" ? (
               <ProductivityBlogPanel />
-            ) : (
+            ) : tab === "schedule" ? (
               <AiSchedulePanel />
+            ) : tab === "pending" ? (
+              <PendingWorkPanel />
+            ) : (
+              <DisciplinePanel />
             )}
           </div>
         </main>

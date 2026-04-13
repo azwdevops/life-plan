@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, feasibility_projects, resumes, time_entries, reading_library, productivity_blog, ai_schedule
+from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, feasibility_projects, resumes, time_entries, reading_library, productivity_blog, ai_schedule, pending_work, discipline
 
 api_router = APIRouter()
 api_router.include_router(test.router, prefix="/test", tags=["test"])
@@ -26,5 +26,15 @@ api_router.include_router(
     ai_schedule.router,
     prefix="/ai-schedule",
     tags=["ai-schedule"],
+)
+api_router.include_router(
+    pending_work.router,
+    prefix="/pending-work",
+    tags=["pending-work"],
+)
+api_router.include_router(
+    discipline.router,
+    prefix="/discipline",
+    tags=["discipline"],
 )
 

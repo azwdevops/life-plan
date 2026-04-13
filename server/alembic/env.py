@@ -19,6 +19,8 @@ from models.user import User
 from models.group import Group
 from models.finance import ParentLedgerGroup, LedgerGroup, Ledger, SpendingType, Transaction, TransactionItem
 from models.feasibility import FeasibilityProject, FeasibilityLineItem
+from models.pending_work import PendingWorkCategory, PendingWorkItem
+from models.discipline_track import DisciplineTrack
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
