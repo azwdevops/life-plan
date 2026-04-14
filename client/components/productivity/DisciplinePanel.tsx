@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Dialog } from "@/components/Dialog";
 import {
   deleteDisciplineTrack,
+  fetchDisciplineHistory,
   fetchDisciplineStore,
   patchDisciplineTrack,
   postDisciplineTrack,
@@ -12,8 +15,10 @@ import {
   addDisciplineCategory,
   adjustDisciplineCount,
   createEmptyDisciplineStore,
+  getTodayIsoDate,
   isDisciplineLabelTaken,
   loadDisciplineStore,
+  markDisciplineDailyReadyForDate,
   removeDisciplineCategory,
   renameDisciplineCategory,
   saveDisciplineStore,
@@ -35,13 +40,31 @@ function IconPencil({ className }: { className?: string }) {
   );
 }
 
+type HistoryRangeMode = "week" | "month" | "custom";
+
+function getDateDaysAgo(days: number): string {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatAxisDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+const CHART_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#db2777", "#4f46e5"];
+
 export function DisciplinePanel() {
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const [store, setStore] = useState<DisciplineStore>(() =>
     token ? createEmptyDisciplineStore() : loadDisciplineStore()
-  );
-  const [remoteInit, setRemoteInit] = useState<"loading" | "ready" | "error">(() =>
-    token ? "loading" : "ready"
   );
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -49,6 +72,10 @@ export function DisciplinePanel() {
   const [removeConfirm, setRemoveConfirm] = useState<{ id: string; label: string } | null>(null);
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [editingLabelDraft, setEditingLabelDraft] = useState("");
+  const [historyRangeMode, setHistoryRangeMode] = useState<HistoryRangeMode>("month");
+  const [historyStartDate, setHistoryStartDate] = useState<string>(() => getDateDaysAgo(29));
+  const [historyEndDate, setHistoryEndDate] = useState<string>(() => getTodayIsoDate());
+  const [selectedHistoryCategoryIds, setSelectedHistoryCategoryIds] = useState<string[]>([]);
   const labelInputRef = useRef<HTMLInputElement>(null);
 
   const sortedCategories = useMemo(
@@ -64,25 +91,73 @@ export function DisciplinePanel() {
   useEffect(() => {
     if (!token) {
       setStore(loadDisciplineStore());
-      setRemoteInit("ready");
+    }
+  }, [token]);
+
+  const disciplineQuery = useQuery({
+    queryKey: ["discipline-store", token],
+    queryFn: async () => {
+      if (!token) throw new Error("Not authenticated");
+      return fetchDisciplineStore(token);
+    },
+    enabled: !!token,
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["discipline-history", token, historyStartDate, historyEndDate],
+    queryFn: async () => {
+      if (!token) throw new Error("Not authenticated");
+      return fetchDisciplineHistory(token, { startDate: historyStartDate, endDate: historyEndDate });
+    },
+    enabled: !!token,
+  });
+
+  useEffect(() => {
+    if (!token || !disciplineQuery.data) return;
+    setStore(disciplineQuery.data);
+    markDisciplineDailyReadyForDate(getTodayIsoDate());
+  }, [token, disciplineQuery.data]);
+
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    const availableIds = historyQuery.data.categories.map((c) => c.id);
+    setSelectedHistoryCategoryIds((prev) => {
+      const kept = prev.filter((id) => availableIds.includes(id));
+      if (kept.length > 0) return kept;
+      return availableIds.slice(0, Math.min(4, availableIds.length));
+    });
+  }, [historyQuery.data]);
+
+  useEffect(() => {
+    if (historyRangeMode === "week") {
+      setHistoryStartDate(getDateDaysAgo(6));
+      setHistoryEndDate(getTodayIsoDate());
       return;
     }
-    let cancelled = false;
-    setRemoteInit("loading");
-    fetchDisciplineStore(token)
-      .then((s) => {
-        if (!cancelled) {
-          setStore(s);
-          setRemoteInit("ready");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setRemoteInit("error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+    if (historyRangeMode === "month") {
+      setHistoryStartDate(getDateDaysAgo(29));
+      setHistoryEndDate(getTodayIsoDate());
+    }
+  }, [historyRangeMode]);
+
+  const selectedHistoryCategories = useMemo(() => {
+    if (!historyQuery.data) return [];
+    return historyQuery.data.categories.filter((c) => selectedHistoryCategoryIds.includes(c.id));
+  }, [historyQuery.data, selectedHistoryCategoryIds]);
+
+  const historyChartData = useMemo(() => {
+    if (!historyQuery.data) return [];
+    return historyQuery.data.points.map((p) => {
+      const row: Record<string, number | string> = {
+        date: p.date,
+        dayLabel: formatAxisDate(p.date),
+      };
+      for (const categoryId of selectedHistoryCategoryIds) {
+        row[categoryId] = Number(p.counts[categoryId] ?? 0);
+      }
+      return row;
+    });
+  }, [historyQuery.data, selectedHistoryCategoryIds]);
 
   useLayoutEffect(() => {
     if (!editingLabelId || !labelInputRef.current) return;
@@ -109,12 +184,18 @@ export function DisciplinePanel() {
         const row = next.categories.find((c) => c.id === id);
         if (row) {
           void patchDisciplineTrack(token, id, { count: row.count })
-            .then(() => setMutationError(null))
+            .then(() => {
+              queryClient.setQueryData(["discipline-store", token], next);
+              void queryClient.invalidateQueries({ queryKey: ["discipline-history", token] });
+              setMutationError(null);
+            })
             .catch(async () => {
               setMutationError("Could not save count.");
               try {
                 const fresh = await fetchDisciplineStore(token);
                 setStore(fresh);
+                queryClient.setQueryData(["discipline-store", token], fresh);
+                void queryClient.invalidateQueries({ queryKey: ["discipline-history", token] });
               } catch {
                 // keep optimistic state if refetch fails
               }
@@ -123,7 +204,7 @@ export function DisciplinePanel() {
         return next;
       });
     },
-    [token, updateStoreLocal]
+    [queryClient, token, updateStoreLocal]
   );
 
   const commitLabelRename = (categoryId: string) => {
@@ -153,6 +234,14 @@ export function DisciplinePanel() {
           ...prev,
           categories: prev.categories.map((c) => (c.id === row.id ? { ...c, label: row.label } : c)),
         }));
+        queryClient.setQueryData(["discipline-store", token], (prev: DisciplineStore | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            categories: prev.categories.map((c) => (c.id === row.id ? { ...c, label: row.label } : c)),
+          };
+        });
+        void queryClient.invalidateQueries({ queryKey: ["discipline-history", token] });
         setMutationError(null);
       } catch (err) {
         setMutationError(err instanceof Error ? err.message : "Could not save the label.");
@@ -186,6 +275,14 @@ export function DisciplinePanel() {
           ...prev,
           categories: [...prev.categories, { id: row.id, label: row.label, count: row.count }],
         }));
+        queryClient.setQueryData(["discipline-store", token], (prev: DisciplineStore | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            categories: [...prev.categories, { id: row.id, label: row.label, count: row.count }],
+          };
+        });
+        void queryClient.invalidateQueries({ queryKey: ["discipline-history", token] });
         setNewLabel("");
         setAddOpen(false);
         setMutationError(null);
@@ -197,17 +294,20 @@ export function DisciplinePanel() {
 
   const retryLoadRemote = () => {
     if (!token) return;
-    setRemoteInit("loading");
-    void fetchDisciplineStore(token)
+    void disciplineQuery.refetch()
       .then((s) => {
-        setStore(s);
-        setRemoteInit("ready");
+        if (s.data) {
+          setStore(s.data);
+          markDisciplineDailyReadyForDate(getTodayIsoDate());
+        }
         setMutationError(null);
       })
-      .catch(() => setRemoteInit("error"));
+      .catch(() => {
+        // handled by query error state
+      });
   };
 
-  if (token && remoteInit === "loading") {
+  if (token && disciplineQuery.isLoading) {
     return (
       <div className="flex min-h-[200px] items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
         Loading discipline…
@@ -215,7 +315,7 @@ export function DisciplinePanel() {
     );
   }
 
-  if (token && remoteInit === "error") {
+  if (token && disciplineQuery.isError) {
     return (
       <div className="space-y-4 rounded-xl border border-red-200 bg-red-50/80 px-4 py-6 text-center dark:border-red-900/60 dark:bg-red-950/40">
         <p className="text-sm text-red-800 dark:text-red-200">Could not load discipline data from the server.</p>
@@ -397,6 +497,116 @@ export function DisciplinePanel() {
               </table>
             </div>
           </section>
+
+          {token ? (
+            <section className="w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-600 dark:bg-zinc-800/80">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Progress over time</h3>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                Compare selected discipline categories by date.
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                {(["week", "month", "custom"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setHistoryRangeMode(mode)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                      historyRangeMode === mode
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
+                    }`}
+                  >
+                    {mode === "week" ? "Week" : mode === "month" ? "Month" : "Custom"}
+                  </button>
+                ))}
+                {historyRangeMode === "custom" ? (
+                  <>
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="text-zinc-600 dark:text-zinc-400">From</span>
+                      <input
+                        type="date"
+                        value={historyStartDate}
+                        onChange={(e) => setHistoryStartDate(e.target.value)}
+                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="text-zinc-600 dark:text-zinc-400">To</span>
+                      <input
+                        type="date"
+                        value={historyEndDate}
+                        onChange={(e) => setHistoryEndDate(e.target.value)}
+                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(historyQuery.data?.categories ?? []).map((c) => {
+                  const selected = selectedHistoryCategoryIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedHistoryCategoryIds((prev) => {
+                          if (prev.includes(c.id)) return prev.filter((id) => id !== c.id);
+                          return [...prev, c.id];
+                        });
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                        selected
+                          ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-950/40 dark:text-blue-200"
+                          : "border-zinc-300 bg-white text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 h-72 w-full">
+                {historyQuery.isLoading ? (
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading progress chart…</p>
+                ) : historyQuery.isError ? (
+                  <p className="text-sm text-red-700 dark:text-red-300">Could not load discipline history.</p>
+                ) : historyChartData.length === 0 || selectedHistoryCategories.length === 0 ? (
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Select at least one category to view progress.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={historyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#d4d4d8" className="dark:opacity-30" />
+                      <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: "#71717a" }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 11, fill: "#71717a" }} width={36} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8, border: "1px solid #e4e4e7" }}
+                        labelFormatter={(_, payload) => String(payload?.[0]?.payload?.date ?? "")}
+                      />
+                      {selectedHistoryCategories.map((c, index) => (
+                        <Line
+                          key={c.id}
+                          type="monotone"
+                          dataKey={c.id}
+                          name={c.label}
+                          stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                          strokeWidth={2}
+                          dot={{ r: 2.5 }}
+                          activeDot={{ r: 4 }}
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </section>
+          ) : null}
         </>
       )}
 
@@ -478,6 +688,14 @@ export function DisciplinePanel() {
                       ...prev,
                       categories: prev.categories.filter((c) => c.id !== id),
                     }));
+                    queryClient.setQueryData(["discipline-store", token], (prev: DisciplineStore | undefined) => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        categories: prev.categories.filter((c) => c.id !== id),
+                      };
+                    });
+                    void queryClient.invalidateQueries({ queryKey: ["discipline-history", token] });
                     setMutationError(null);
                   } catch (err) {
                     setMutationError(err instanceof Error ? err.message : "Could not remove the track.");

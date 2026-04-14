@@ -11,6 +11,13 @@ export interface DisciplineStoreApi {
   categories: Array<{ id: string; label: string; count: number }>;
 }
 
+export interface DisciplineHistoryApi {
+  start_date: string;
+  end_date: string;
+  categories: Array<{ id: string; label: string }>;
+  points: Array<{ date: string; counts: Record<string, number> }>;
+}
+
 export function mapDisciplineApiToStore(data: DisciplineStoreApi): DisciplineStore {
   return {
     v: data.v,
@@ -52,6 +59,27 @@ export async function fetchDisciplineStore(token: string): Promise<DisciplineSto
   }
   const data = (await response.json()) as DisciplineStoreApi;
   return mapDisciplineApiToStore(data);
+}
+
+export async function fetchDisciplineHistory(
+  token: string,
+  params: { startDate: string; endDate: string }
+): Promise<DisciplineHistoryApi> {
+  const qs = new URLSearchParams({
+    start_date: params.startDate,
+    end_date: params.endDate,
+  });
+  const response = await fetch(`${API_BASE_URL}/api/v1/discipline/history?${qs.toString()}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await disciplineErrorMessage(response, "Failed to load discipline history"));
+  }
+  return (await response.json()) as DisciplineHistoryApi;
 }
 
 export async function postDisciplineTrack(

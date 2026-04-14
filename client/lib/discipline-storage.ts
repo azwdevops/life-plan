@@ -1,6 +1,7 @@
 /** Decision / habit counters on the Productivity Discipline tab; browser-only until backend exists. */
 
 export const DISCIPLINE_STORAGE_KEY = "life_plan_discipline";
+export const DISCIPLINE_DAILY_READY_KEY = "life_plan_discipline_daily_ready_date";
 const STORE_VERSION = 1;
 
 export interface DisciplineCategory {
@@ -59,6 +60,23 @@ export function saveDisciplineStore(store: DisciplineStore): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(DISCIPLINE_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // ignore
+  }
+}
+
+export function getTodayIsoDate(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function markDisciplineDailyReadyForDate(dateIso: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DISCIPLINE_DAILY_READY_KEY, dateIso);
   } catch {
     // ignore
   }

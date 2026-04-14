@@ -27,3 +27,20 @@ class DisciplineCategoryPatch(BaseModel):
         if self.label is None and self.count is None:
             raise ValueError("At least one of label or count is required")
         return self
+
+
+class DisciplineHistoryCategoryOut(BaseModel):
+    id: str
+    label: str
+
+
+class DisciplineHistoryPointOut(BaseModel):
+    date: str
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class DisciplineHistoryOut(BaseModel):
+    start_date: str
+    end_date: str
+    categories: List[DisciplineHistoryCategoryOut] = Field(default_factory=list)
+    points: List[DisciplineHistoryPointOut] = Field(default_factory=list)
