@@ -233,3 +233,38 @@ export async function deleteFeasibilityProject(token: string, projectId: number)
     throw new Error(err.detail || "Failed to delete project");
   }
 }
+
+export interface SharesFeasibilityWorkspaceApi {
+  state: Record<string, unknown>;
+}
+
+export async function getSharesFeasibilityWorkspace(
+  token: string
+): Promise<SharesFeasibilityWorkspaceApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/investments/shares-feasibility`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Failed to load shares feasibility" }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to load shares feasibility");
+  }
+  return response.json();
+}
+
+export async function putSharesFeasibilityWorkspace(
+  token: string,
+  state: object
+): Promise<SharesFeasibilityWorkspaceApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/investments/shares-feasibility`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: "Failed to save shares feasibility" }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to save shares feasibility");
+  }
+  return response.json();
+}

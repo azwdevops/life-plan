@@ -9,13 +9,15 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import GamePage from "@/app/game/page";
 import { PlotProspectsTab } from "./PlotProspectsTab";
 import { FeasibilityAnalysisTab } from "./FeasibilityAnalysisTab";
+import { SharesFeasibilityTab } from "./SharesFeasibilityTab";
 
-type InvestmentsTab = "game" | "plots" | "feasibility";
+type InvestmentsTab = "game" | "plots" | "feasibility" | "shares-feasibility";
 
 const TAB_CONFIG: Array<{ id: InvestmentsTab; label: string }> = [
   { id: "game", label: "Investment Game" },
   { id: "plots", label: "Plot Prospects" },
   { id: "feasibility", label: "Feasibility analysis" },
+  { id: "shares-feasibility", label: "Shares feasibility" },
 ];
 
 function InvestmentsContent() {
@@ -28,6 +30,7 @@ function InvestmentsContent() {
     const requested = searchParams.get("tab");
     if (requested === "plots") return "plots";
     if (requested === "feasibility" || requested === "costs") return "feasibility";
+    if (requested === "shares-feasibility" || requested === "shares") return "shares-feasibility";
     return "game";
   }, [searchParams]);
 
@@ -96,6 +99,8 @@ function InvestmentsContent() {
           <GamePage />
         ) : activeTab === "plots" ? (
           <PlotProspectsTab />
+        ) : activeTab === "shares-feasibility" ? (
+          <SharesFeasibilityTab />
         ) : (
           <FeasibilityAnalysisTab />
         )}

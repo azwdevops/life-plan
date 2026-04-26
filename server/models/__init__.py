@@ -32,6 +32,7 @@ from models.productivity_blog import (
 from models.ai_schedule_job import AiScheduleJob
 from models.pending_work import PendingWorkCategory, PendingWorkItem
 from models.discipline_track import DisciplineTrack, DisciplineTrackDailyCount
+from models.shares_feasibility import SharesFeasibilityWorkspace
 
 __all__ = [
     "User",
@@ -67,4 +68,5 @@ __all__ = [
     "PendingWorkItem",
     "DisciplineTrack",
     "DisciplineTrackDailyCount",
+    "SharesFeasibilityWorkspace",
 ]
