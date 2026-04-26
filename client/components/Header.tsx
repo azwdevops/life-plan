@@ -324,15 +324,9 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
             <div className="flex items-center gap-2">
               <button
                 onClick={() => router.push("/login")}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                Log In
-              </button>
-              <button
-                onClick={() => router.push("/signup")}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
-                Sign Up
+                Log In
               </button>
             </div>
           )}

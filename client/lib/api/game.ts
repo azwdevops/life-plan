@@ -19,19 +19,40 @@ export interface GenerateQuestionsResponse {
   questions: GameQuestion[];
 }
 
+/** Stored credentials for OpenRouter (self-discovery). */
+export type GameSavedCredentials = {
+  providerId: number;
+  keyId: number;
+};
+
 export async function generateQuestions(
   testId: string,
   api: GameApiProvider = "openrouter",
-  model?: string
+  model?: string,
+  opts?: { token?: string; credentials?: GameSavedCredentials }
 ): Promise<GenerateQuestionsResponse> {
+  const body: Record<string, unknown> = {
+    test_id: testId,
+    api,
+    model: model || undefined,
+  };
+  if (opts?.credentials) {
+    body.provider_id = opts.credentials.providerId;
+    body.key_id = opts.credentials.keyId;
+  }
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts?.token) headers.Authorization = `Bearer ${opts.token}`;
   const res = await fetch(`${API_BASE_URL}/api/v1/game/generate-questions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ test_id: testId, api, model: model || undefined }),
+    headers,
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Failed to generate questions");
+    const d = err.detail;
+    const msg =
+      typeof d === "string" ? d : Array.isArray(d) ? d.map((x: { msg?: string }) => x?.msg).join(", ") : res.statusText;
+    throw new Error(msg || "Failed to generate questions");
   }
   return res.json();
 }
@@ -64,22 +85,33 @@ export async function analyze(
   questions: { question: string; options: { key: string; text: string }[] }[],
   answers: string[],
   api: GameApiProvider = "openrouter",
-  model?: string
+  model?: string,
+  opts?: { token?: string; credentials?: GameSavedCredentials }
 ): Promise<AnalyzeResponse> {
+  const payload: Record<string, unknown> = {
+    test_id: testId,
+    questions: questions.map((q) => ({ question: q.question, options: q.options })),
+    answers,
+    api,
+    model: model || undefined,
+  };
+  if (opts?.credentials) {
+    payload.provider_id = opts.credentials.providerId;
+    payload.key_id = opts.credentials.keyId;
+  }
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts?.token) headers.Authorization = `Bearer ${opts.token}`;
   const res = await fetch(`${API_BASE_URL}/api/v1/game/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      test_id: testId,
-      questions: questions.map((q) => ({ question: q.question, options: q.options })),
-      answers,
-      api,
-      model: model || undefined,
-    }),
+    headers,
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Failed to get analysis");
+    const d = err.detail;
+    const msg =
+      typeof d === "string" ? d : Array.isArray(d) ? d.map((x: { msg?: string }) => x?.msg).join(", ") : res.statusText;
+    throw new Error(msg || "Failed to get analysis");
   }
   return res.json();
 }

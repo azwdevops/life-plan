@@ -22,6 +22,8 @@ from models.feasibility import FeasibilityProject, FeasibilityLineItem
 from models.pending_work import PendingWorkCategory, PendingWorkItem
 from models.discipline_track import DisciplineTrack
 from models.shares_feasibility import SharesFeasibilityWorkspace
+from models.user_api_credentials import UserApiKey, UserApiProvider, UserApiProviderModel
+from models.self_discovery_assessment import SelfDiscoveryAssessment
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

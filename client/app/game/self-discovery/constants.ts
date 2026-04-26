@@ -14,14 +14,15 @@ export const MODELS_BY_PROVIDER: Record<GameApiProvider, { value: string; label:
   ],
 };
 
-export const TESTS = [
-  { id: "self_esteem", name: "Self Esteem Test", description: "Understand my self-worth and areas to grow." },
-  { id: "kind_of_wife", name: "Kind of Wife I'm Looking For", description: "Discover the kind of wife that fits me, traits, values, and how she'd complement my life." },
-  { id: "attachment_style", name: "My Attachment Style", description: "Understand my attachment style in relationships (secure, anxious, avoidant, or mixed) and what it means for me." },
-  { id: "what_drives_me", name: "What Drives Me to Pursue Something", description: "Discover what really drives me to pursue goals, projects, and endeavours and what it means for how I show up." },
+/** Stable assessment ids (must match server `self_discovery_builtin`). */
+export const SELF_DISCOVERY_TEST_IDS = [
+  "self_esteem",
+  "kind_of_wife",
+  "attachment_style",
+  "what_drives_me",
 ] as const;
 
-export type TestId = (typeof TESTS)[number]["id"];
+export type TestId = (typeof SELF_DISCOVERY_TEST_IDS)[number];
 
 export interface SessionData {
   questions: GameQuestion[];
@@ -31,6 +32,11 @@ export interface SessionData {
 
 export interface SettingsData {
   api: GameApiProvider;
+  /** Saved API provider (from Settings → API providers). */
+  providerId: number;
+  /** Which stored key to use for OpenRouter. */
+  keyId: number;
+  /** Model slug stored for that provider (exact OpenRouter model id). */
   model: string;
 }
 
@@ -75,5 +81,5 @@ export function saveSettings(data: SettingsData): void {
 }
 
 export function isValidTestId(testId: string): testId is TestId {
-  return TESTS.some((t) => t.id === testId);
+  return (SELF_DISCOVERY_TEST_IDS as readonly string[]).includes(testId);
 }

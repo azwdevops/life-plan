@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { CompaniesPanel } from "./shares-feasibility/CompaniesPanel";
 import { AccountsYearsPanel } from "./shares-feasibility/AccountsYearsPanel";
 import { FormulaBuilder } from "./shares-feasibility/FormulaBuilder";
+import { PdfPageExtractDialog } from "./shares-feasibility/PdfPageExtractDialog";
 import { ResultsPanel } from "./shares-feasibility/ResultsPanel";
 import {
   applyAllFormulas,
@@ -57,6 +58,7 @@ export function SharesFeasibilityTab() {
   const [inputValuesDialogOpen, setInputValuesDialogOpen] = useState(false);
   const [createFormulaDialogOpen, setCreateFormulaDialogOpen] = useState(false);
   const [viewFormulasDialogOpen, setViewFormulasDialogOpen] = useState(false);
+  const [pdfExtractDialogOpen, setPdfExtractDialogOpen] = useState(false);
 
   const accountAliasMap = useMemo(
     () => accountAliasToAccountIdMap(state.accounts),
@@ -355,23 +357,6 @@ export function SharesFeasibilityTab() {
     setBannerMessage("All formulas applied. Existing computations were overwritten.");
   };
 
-  const resetAllWorkspaceData = async (): Promise<void> => {
-    if (!window.confirm("Reset all shares feasibility data? This cannot be undone.")) return;
-    const fresh = createDefaultSharesFeasibilityState();
-    try {
-      if (token) {
-        await putSharesFeasibilityWorkspace(token, fresh);
-      }
-    } catch {
-      setBannerMessage("Could not reset data on the server.");
-      return;
-    }
-    setState(fresh);
-    setSelectedCompanyId(null);
-    setBannerMessage("Shares feasibility data has been reset.");
-    skipNextPersistRef.current = true;
-  };
-
   if (!token) {
     return (
       <div className="container mx-auto px-4 py-8 md:px-6 md:py-10">
@@ -392,12 +377,11 @@ export function SharesFeasibilityTab() {
     <div className="container mx-auto px-4 py-8 md:px-6 md:py-10">
       <div className="w-full space-y-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-                Shares feasibility
-              </h2>
-              <div className="flex flex-wrap gap-2">
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+              Shares feasibility
+            </h2>
+            <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setAddCompanyDialogOpen(true)}
@@ -475,15 +459,14 @@ export function SharesFeasibilityTab() {
                 >
                   Apply all formulas
                 </button>
-              </div>
+                <button
+                  type="button"
+                  onClick={() => setPdfExtractDialogOpen(true)}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  Extract PDF pages
+                </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void resetAllWorkspaceData()}
-              className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
-            >
-              Reset all data
-            </button>
           </div>
           {bannerMessage ? (
             <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
@@ -548,6 +531,11 @@ export function SharesFeasibilityTab() {
           companies={state.companies}
           years={sortedYears}
           computedResults={state.computedResults}
+        />
+
+        <PdfPageExtractDialog
+          isOpen={pdfExtractDialogOpen}
+          onClose={() => setPdfExtractDialogOpen(false)}
         />
       </div>
     </div>

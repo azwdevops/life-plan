@@ -4,14 +4,12 @@ from sqlalchemy.orm import Session, joinedload
 from core.database import get_db
 from core.security import (
     verify_password,
-    get_password_hash,
     create_access_token,
     decode_access_token,
 )
 from models.user import User
 from models.group import Group
 from schemas.auth import (
-    UserSignup,
     UserLogin,
     UserResponse,
     UserFitnessProfilePut,
@@ -58,51 +56,13 @@ def require_groups(*group_names: str):
     return _require
 
 
-@router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def signup(user_data: UserSignup, db: Session = Depends(get_db)):
-    """Create a new user account."""
-    # Check if passwords match
-    if user_data.password != user_data.confirm_password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Passwords do not match",
-        )
-
-    # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
-        )
-
-    # Validate password length
-    if len(user_data.password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 6 characters long",
-        )
-
-    # Create new user
-    hashed_password = get_password_hash(user_data.password)
-    new_user = User(
-        email=user_data.email,
-        first_name=user_data.first_name,
-        hashed_password=hashed_password,
+@router.post("/signup", include_in_schema=False)
+async def signup_disabled():
+    """Public registration is disabled for this deployment."""
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Registration is disabled.",
     )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # Add new user to member group (not admin)
-    member_group = db.query(Group).filter(Group.name == "member").first()
-    if member_group:
-        new_user.groups.append(member_group)
-        db.commit()
-        db.refresh(new_user, ["groups"])
-
-    return user_to_response(new_user, db)
 
 
 @router.post("/login", response_model=Token)

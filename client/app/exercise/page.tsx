@@ -645,14 +645,17 @@ function ExerciseContent() {
       setCustomEnd("");
       return;
     }
+    const todayIso = localISODate(new Date());
     setCustomStart((s) => {
       if (!s) return dataBounds.first;
-      if (s < dataBounds.first || s > dataBounds.last) return dataBounds.first;
+      if (s < dataBounds.first) return dataBounds.first;
+      if (s > todayIso) return todayIso;
       return s;
     });
     setCustomEnd((e) => {
-      if (!e) return dataBounds.last;
-      if (e < dataBounds.first || e > dataBounds.last) return dataBounds.last;
+      if (!e) return todayIso;
+      if (e < dataBounds.first) return dataBounds.first;
+      if (e > todayIso) return todayIso;
       return e;
     });
   }, [dataBounds]);
@@ -1380,7 +1383,7 @@ function ExerciseContent() {
                         type="date"
                         value={customStart}
                         min={dataBounds?.first}
-                        max={dataBounds?.last}
+                        max={localISODate(new Date())}
                         onChange={(e) => setCustomStart(e.target.value)}
                         className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                       />
@@ -1393,7 +1396,7 @@ function ExerciseContent() {
                         type="date"
                         value={customEnd}
                         min={dataBounds?.first}
-                        max={dataBounds?.last}
+                        max={localISODate(new Date())}
                         onChange={(e) => setCustomEnd(e.target.value)}
                         className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                       />

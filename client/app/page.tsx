@@ -89,13 +89,13 @@ export default function Home() {
           {!isAuthenticated && (
             <div className="mt-12 text-center">
               <p className="mb-4 text-zinc-600 dark:text-zinc-400">
-                Ready to take control of your finances?
+                Sign in to use your life plan.
               </p>
               <button
-                onClick={() => router.push("/signup")}
+                onClick={() => router.push("/login")}
                 className="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
-                Get Started
+                Log in
               </button>
             </div>
           )}

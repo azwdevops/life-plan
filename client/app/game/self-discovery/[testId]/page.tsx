@@ -7,14 +7,15 @@ import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
-import { generateQuestions, analyze, type GameApiProvider, type GameQuestion } from "@/lib/api/game";
 import {
-  TESTS,
-  loadSession,
-  saveSession,
-  loadSettings,
-  isValidTestId,
-} from "../constants";
+  analyze,
+  generateQuestions,
+  type GameApiProvider,
+  type GameQuestion,
+  type GameSavedCredentials,
+} from "@/lib/api/game";
+import { listSelfDiscoveryAssessments } from "@/lib/api/self-discovery-assessments";
+import { loadSession, saveSession, loadSettings, isValidTestId } from "../constants";
 
 type Phase = "loading" | "loading_questions" | "quiz" | "submitting" | "results";
 
@@ -22,7 +23,7 @@ export default function SelfDiscoveryTestPage() {
   const router = useRouter();
   const params = useParams();
   const testId = params?.testId as string | undefined;
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, token } = useAuth();
   const { isSidebarOpen, toggleSidebar, setIsSidebarOpen } = useSidebar();
   const isAdmin = user?.groups?.includes("admin");
   const initialized = useRef(false);
@@ -36,8 +37,30 @@ export default function SelfDiscoveryTestPage() {
   const [error, setError] = useState<string | null>(null);
   const [api, setApi] = useState<GameApiProvider>("openrouter");
   const [model, setModel] = useState<string>("");
+  const [cred, setCred] = useState<GameSavedCredentials | null>(null);
+  const [assessmentTitle, setAssessmentTitle] = useState<string | null>(null);
 
-  const testMeta = testId ? TESTS.find((t) => t.id === testId) : null;
+  useEffect(() => {
+    if (!testId || isLoading || !isAuthenticated || !token) return;
+    if (!isValidTestId(testId)) return;
+    let cancelled = false;
+    listSelfDiscoveryAssessments(token)
+      .then((rows) => {
+        if (cancelled) return;
+        const card = rows.find((r) => r.test_id === testId);
+        if (!card) {
+          router.replace("/game/self-discovery");
+          return;
+        }
+        setAssessmentTitle(card.title);
+      })
+      .catch(() => {
+        if (!cancelled) router.replace("/game/self-discovery");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [testId, isLoading, isAuthenticated, token, router]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -51,18 +74,32 @@ export default function SelfDiscoveryTestPage() {
   }, [isLoading, isAuthenticated, isAdmin, router]);
 
   useEffect(() => {
-    if (!testId || initialized.current || isLoading || !isAuthenticated) return;
+    if (!testId || initialized.current || isLoading || !isAuthenticated || !token) return;
     if (!isValidTestId(testId)) {
       router.replace("/game/self-discovery");
       return;
     }
 
-    initialized.current = true;
     const settings = loadSettings();
-    const savedApi = settings?.api ?? "openrouter";
-    const savedModel = settings?.model ?? "arcee-ai/trinity-large-preview:free";
+    if (
+      !settings?.providerId ||
+      !settings?.keyId ||
+      !settings?.model?.trim()
+    ) {
+      router.replace("/game/self-discovery");
+      return;
+    }
+
+    initialized.current = true;
+    const savedApi = settings.api ?? "openrouter";
+    const savedModel = settings.model.trim();
+    const savedCred: GameSavedCredentials = {
+      providerId: settings.providerId,
+      keyId: settings.keyId,
+    };
     setApi(savedApi);
     setModel(savedModel);
+    setCred(savedCred);
 
     const session = loadSession(testId);
 
@@ -86,6 +123,8 @@ export default function SelfDiscoveryTestPage() {
           session.answers,
           savedApi,
           savedModel,
+          savedCred,
+          token,
           (analysisText) => {
             setAnalysis(analysisText);
             setPhase("results");
@@ -111,7 +150,7 @@ export default function SelfDiscoveryTestPage() {
     }
 
     setPhase("loading_questions");
-    generateQuestions(testId, savedApi, savedModel)
+    generateQuestions(testId, savedApi, savedModel, { token, credentials: savedCred })
       .then((res) => {
         setQuestions(res.questions);
         setCurrentIndex(0);
@@ -124,7 +163,7 @@ export default function SelfDiscoveryTestPage() {
         setPhase("loading");
         router.replace("/game/self-discovery");
       });
-  }, [testId, isAuthenticated, isLoading, router]);
+  }, [testId, isAuthenticated, isLoading, router, token]);
 
   function runAnalyze(
     id: string,
@@ -132,10 +171,12 @@ export default function SelfDiscoveryTestPage() {
     ans: string[],
     a: GameApiProvider,
     m: string,
+    credentials: GameSavedCredentials,
+    authToken: string,
     onSuccess: (analysis: string) => void,
     onError: (message: string) => void
   ) {
-    analyze(id, qs, ans, a, m)
+    analyze(id, qs, ans, a, m, { token: authToken, credentials })
       .then((res) => onSuccess(res.analysis))
       .catch((e) => onError(e instanceof Error ? e.message : "Failed to get analysis"));
   }
@@ -149,17 +190,28 @@ export default function SelfDiscoveryTestPage() {
     setSelectedOption(null);
 
     if (currentIndex + 1 >= questions.length) {
+      if (!token || !cred) return;
       setPhase("submitting");
-      runAnalyze(testId, questions, newAnswers, api, model, (analysisText) => {
-        setAnalysis(analysisText);
-        setPhase("results");
-        saveSession(testId, { questions, answers: newAnswers, analysis: analysisText });
-      }, (err) => {
-        setError(err);
-        setPhase("quiz");
-        setCurrentIndex(questions.length - 1);
-        setAnswers(newAnswers.slice(0, -1));
-      });
+      runAnalyze(
+        testId,
+        questions,
+        newAnswers,
+        api,
+        model,
+        cred,
+        token,
+        (analysisText) => {
+          setAnalysis(analysisText);
+          setPhase("results");
+          saveSession(testId, { questions, answers: newAnswers, analysis: analysisText });
+        },
+        (err) => {
+          setError(err);
+          setPhase("quiz");
+          setCurrentIndex(questions.length - 1);
+          setAnswers(newAnswers.slice(0, -1));
+        }
+      );
     } else {
       setCurrentIndex((i) => i + 1);
       saveSession(testId, { questions, answers: newAnswers });
@@ -167,10 +219,11 @@ export default function SelfDiscoveryTestPage() {
   };
 
   if (!isAuthenticated && !isLoading) return null;
-  if (!testId || !testMeta) return null;
+  if (!testId) return null;
+  if (!isValidTestId(testId)) return null;
   if (!isLoading && isAuthenticated && !isAdmin) return null;
 
-  return (
+  const layoutShell = (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
       <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} isLoggedIn={isAuthenticated} />
@@ -185,7 +238,9 @@ export default function SelfDiscoveryTestPage() {
             >
               ← Back to tests
             </Link>
-            <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">{testMeta.name}</h1>
+            <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+              {assessmentTitle ?? "Loading…"}
+            </h1>
           </div>
 
           {error && (
@@ -269,4 +324,6 @@ export default function SelfDiscoveryTestPage() {
       </main>
     </div>
   );
+
+  return layoutShell;
 }

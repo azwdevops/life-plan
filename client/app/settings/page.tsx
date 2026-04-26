@@ -1,10 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
-import { FitnessProfileModal } from "@/components/FitnessProfileModal";
+import {
+  ApiCredentialsSection,
+  type ApiCredentialsSectionHandle,
+} from "@/components/settings/ApiCredentialsSection";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 
@@ -12,10 +15,10 @@ function SettingsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isLoading, user, token, applyUser } = useAuth();
+  const { isAuthenticated, isLoading, token } = useAuth();
   const isEmbedded = searchParams.get("embedded") === "1" || pathname === "/support-settings";
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
-  const [metricsOpen, setMetricsOpen] = useState(false);
+  const apiCredentialsRef = useRef<ApiCredentialsSectionHandle>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -53,45 +56,30 @@ function SettingsContent() {
         }
       >
         <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
-          <h1 className="mb-8 text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-            Settings
-          </h1>
+          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+            <h1 className="min-w-0 text-3xl font-bold text-zinc-900 dark:text-zinc-100">
+              Settings
+              <span className="font-semibold text-zinc-500 dark:text-zinc-400">
+                {" "}
+                — API providers & keys
+              </span>
+            </h1>
+            {token ? (
+              <button
+                type="button"
+                onClick={() => apiCredentialsRef.current?.openAddProvider()}
+                className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                Add provider
+              </button>
+            ) : null}
+          </div>
 
           <div className="space-y-6">
-            <div className="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-                Exercise metrics
-              </h2>
-              <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-                Configure saved weight, height, age, sex, MET, and live-run refresh
-                timing used for exercise estimates.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setMetricsOpen(true)}
-                  className="inline-flex items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                >
-                  Edit exercise metrics…
-                </button>
-              </div>
-              <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
-                Values stay saved to your account until you change them.
-              </p>
-            </div>
+            {token ? <ApiCredentialsSection ref={apiCredentialsRef} token={token} /> : null}
           </div>
         </div>
       </main>
-
-      {token && (
-        <FitnessProfileModal
-          isOpen={metricsOpen}
-          onClose={() => setMetricsOpen(false)}
-          token={token}
-          user={user}
-          onSaved={applyUser}
-        />
-      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@
     "@tiptap/starter-kit": "^3.21.0",
     "@types/react-datepicker": "^7.0.0",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-datepicker": "^9.1.0",
     "react-dom": "19.2.3",

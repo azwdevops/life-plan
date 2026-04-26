@@ -1,26 +1,17 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
 
 function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { login, isLoggingIn, loginError, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (searchParams.get("signup") === "success") {
-      setSuccessMessage("Account created successfully! Please log in.");
-    }
-  }, [searchParams]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -31,7 +22,6 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccessMessage(null);
 
     try {
       await login(formData);
@@ -95,12 +85,6 @@ function LoginForm() {
               />
             </div>
 
-            {successMessage && (
-              <div className="rounded-lg bg-green-50 p-4 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-200">
-                {successMessage}
-              </div>
-            )}
-
             {(error || loginError) && (
               <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
                 {error || (loginError instanceof Error ? loginError.message : "Login failed")}
@@ -115,16 +99,6 @@ function LoginForm() {
               {isLoggingIn ? "Logging in..." : "Log In"}
             </button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
-            Don't have an account?{" "}
-            <Link
-              href="/signup"
-              className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              Sign up
-            </Link>
-          </div>
         </div>
       </div>
     </div>

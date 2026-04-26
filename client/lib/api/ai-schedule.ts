@@ -28,6 +28,11 @@ export interface StartAiScheduleJobResponse {
   message: string;
 }
 
+export type AiSchedulePromptCard = {
+  test_id: string;
+  title: string;
+};
+
 export type AiScheduleJobStatusResponse =
   | {
       status: "processing";
@@ -61,6 +66,15 @@ async function parseErrorResponse(response: Response): Promise<string> {
   return message;
 }
 
+export async function listAiSchedulePromptCards(token: string): Promise<AiSchedulePromptCard[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/ai-schedule/prompt-cards`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) throw new Error(await parseErrorResponse(response));
+  return response.json() as Promise<AiSchedulePromptCard[]>;
+}
+
 export async function startAiScheduleJob(
   token: string,
   body: {
@@ -69,6 +83,8 @@ export async function startAiScheduleJob(
     end_of_day_iso: string;
     timezone_name: string;
     model?: string;
+    /** self_discovery_assessments.test_id (e.g. ai_schedule_default). */
+    prompt_test_id?: string;
   }
 ): Promise<StartAiScheduleJobResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/ai-schedule/plan/start`, {
@@ -88,6 +104,7 @@ export async function startAiScheduleJob(
       timezone_name: body.timezone_name,
       api: "openrouter",
       model: body.model || undefined,
+      prompt_test_id: body.prompt_test_id || undefined,
     }),
   });
   if (handleApiResponse(response)) {

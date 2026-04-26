@@ -1,6 +1,28 @@
 from fastapi import APIRouter
 
-from api.v1.endpoints import test, auth, accounts, transactions, reports, feedback, upcoming_expenses, game, run_sessions, investments, feasibility_projects, shares_feasibility, resumes, time_entries, reading_library, productivity_blog, ai_schedule, pending_work, discipline
+from api.v1.endpoints import (
+    test,
+    auth,
+    accounts,
+    transactions,
+    reports,
+    feedback,
+    upcoming_expenses,
+    game,
+    self_discovery_assessments,
+    run_sessions,
+    investments,
+    feasibility_projects,
+    shares_feasibility,
+    resumes,
+    time_entries,
+    reading_library,
+    productivity_blog,
+    ai_schedule,
+    pending_work,
+    discipline,
+    user_api_credentials,
+)
 
 api_router = APIRouter()
 api_router.include_router(test.router, prefix="/test", tags=["test"])
@@ -11,6 +33,11 @@ api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
 api_router.include_router(upcoming_expenses.router, prefix="/upcoming-expenses", tags=["upcoming-expenses"])
 api_router.include_router(game.router, prefix="/game", tags=["game"])
+api_router.include_router(
+    self_discovery_assessments.router,
+    prefix="/game/self-discovery",
+    tags=["game"],
+)
 api_router.include_router(run_sessions.router, prefix="/run-sessions", tags=["run-sessions"])
 api_router.include_router(investments.router, prefix="/investments", tags=["investments"])
 api_router.include_router(feasibility_projects.router, prefix="/investments", tags=["investments"])
@@ -37,5 +64,10 @@ api_router.include_router(
     discipline.router,
     prefix="/discipline",
     tags=["discipline"],
+)
+api_router.include_router(
+    user_api_credentials.router,
+    prefix="/settings",
+    tags=["settings"],
 )
 

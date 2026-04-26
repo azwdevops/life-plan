@@ -4,9 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useAuth } from "@/lib/hooks/use-auth";
 import {
   getAiScheduleJobStatus,
+  listAiSchedulePromptCards,
   startAiScheduleJob,
+  type AiSchedulePromptCard,
   type ScheduleBlockApi,
 } from "@/lib/api/ai-schedule";
+import {
+  listSelfDiscoveryAssessments,
+  type SelfDiscoveryAssessmentCard,
+} from "@/lib/api/self-discovery-assessments";
+import { SelfDiscoveryAssessmentsEditor } from "@/components/self-discovery/SelfDiscoveryAssessmentsEditor";
 import {
   clearSchedule,
   getTodayKey,
@@ -38,6 +45,7 @@ import {
   serializePlanInput,
   type ActivityRowState,
 } from "@/lib/ai-schedule-plan-input";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 function sortBlocks(blocks: ScheduleBlockApi[]): ScheduleBlockApi[] {
   return [...blocks].sort(
@@ -122,8 +130,21 @@ function formatBreakCountdown(remainingMs: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+const PROMPT_ID_STORAGE_KEY = "ai_schedule_prompt_test_id";
+
+function readStoredPromptTestId(): string {
+  if (typeof window === "undefined") return "ai_schedule_default";
+  try {
+    const v = window.localStorage.getItem(PROMPT_ID_STORAGE_KEY);
+    return v && v.trim() ? v.trim() : "ai_schedule_default";
+  } catch {
+    return "ai_schedule_default";
+  }
+}
+
 export function AiSchedulePanel() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const isAdmin = Boolean(user?.groups?.includes("admin"));
   const [stored, setStored] = useState<StoredAiDaySchedule | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activityRows, setActivityRows] = useState<ActivityRowState[]>(() => [emptyActivityRow()]);
@@ -140,6 +161,9 @@ export function AiSchedulePanel() {
   );
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [blockEndAlarmPlaying, setBlockEndAlarmPlaying] = useState(false);
+  const [promptCards, setPromptCards] = useState<AiSchedulePromptCard[]>([]);
+  const [selectedPromptTestId, setSelectedPromptTestId] = useState("ai_schedule_default");
+  const [schedulePromptAssessments, setSchedulePromptAssessments] = useState<SelfDiscoveryAssessmentCard[]>([]);
 
   const blockEndAlarmRef = useRef<BlockEndAlarmHandle | null>(null);
   const prevBlockIndexRef = useRef<number | null | undefined>(undefined);
@@ -167,6 +191,54 @@ export function AiSchedulePanel() {
   }, [hydrate]);
 
   useEffect(() => {
+    setSelectedPromptTestId(readStoredPromptTestId());
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setPromptCards([]);
+      return;
+    }
+    let cancelled = false;
+    listAiSchedulePromptCards(token)
+      .then((rows) => {
+        if (cancelled) return;
+        setPromptCards(rows);
+        setSelectedPromptTestId((cur) => {
+          if (rows.some((r) => r.test_id === cur)) return cur;
+          const next = rows[0]?.test_id ?? "ai_schedule_default";
+          try {
+            window.localStorage.setItem(PROMPT_ID_STORAGE_KEY, next);
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setPromptCards([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const loadSchedulePromptAssessments = useCallback(() => {
+    if (!token || !isAdmin) return;
+    listSelfDiscoveryAssessments(token, "ai_schedule")
+      .then(setSchedulePromptAssessments)
+      .catch(() => setSchedulePromptAssessments([]));
+  }, [token, isAdmin]);
+
+  useEffect(() => {
+    if (!token || !isAdmin) {
+      setSchedulePromptAssessments([]);
+      return;
+    }
+    loadSchedulePromptAssessments();
+  }, [token, isAdmin, loadSchedulePromptAssessments]);
+
+  useEffect(() => {
     if (!stored) return;
     const tick = () => setNowTick(Date.now());
     tick();
@@ -178,6 +250,31 @@ export function AiSchedulePanel() {
     () => (stored ? sortBlocks(stored.blocks) : []),
     [stored]
   );
+
+  const planningPromptOptions = useMemo(
+    () =>
+      promptCards.length === 0
+        ? [
+            {
+              value: "ai_schedule_default",
+              label: "Default day plan",
+              searchText: "ai_schedule_default default",
+            },
+          ]
+        : promptCards.map((p) => ({
+            value: p.test_id,
+            label: p.title,
+            searchText: `${p.test_id} ${p.title}`,
+          })),
+    [promptCards]
+  );
+
+  const planningPromptSelectValue = useMemo(() => {
+    if (planningPromptOptions.some((o) => String(o.value) === selectedPromptTestId)) {
+      return selectedPromptTestId;
+    }
+    return String(planningPromptOptions[0]?.value ?? "ai_schedule_default");
+  }, [planningPromptOptions, selectedPromptTestId]);
 
   const currentBlockIndex = useMemo(
     () => getCurrentBlockIndex(sortedBlocks, nowTick),
@@ -295,6 +392,7 @@ export function AiSchedulePanel() {
         now_iso: new Date().toISOString(),
         end_of_day_iso: endOfEatDayIso(),
         timezone_name: EAT_TIMEZONE,
+        prompt_test_id: planningPromptSelectValue,
       });
       setScheduleJobId(res.job_id);
       setJobHint(res.message);
@@ -632,6 +730,37 @@ export function AiSchedulePanel() {
                 single block may run; leave empty for 40 minutes.
               </p>
             </div>
+            <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+              <p
+                id="ai-schedule-planning-prompt-label"
+                className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Planning prompt
+              </p>
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                Template used for this generation (same entries admins edit below as “AI schedule prompts”). Search by
+                name or id.
+              </p>
+              <div className="mt-2" aria-labelledby="ai-schedule-planning-prompt-label">
+                <SearchableSelect
+                  options={planningPromptOptions}
+                  value={planningPromptSelectValue}
+                  onChange={(v) => {
+                    const id = String(v);
+                    setSelectedPromptTestId(id);
+                    try {
+                      window.localStorage.setItem(PROMPT_ID_STORAGE_KEY, id);
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                  placeholder="Select a planning prompt"
+                  searchPlaceholder="Search prompts…"
+                  className="w-full"
+                  disabled={loading}
+                />
+              </div>
+            </div>
             {jobHint ? (
               <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{jobHint}</p>
             ) : null}
@@ -676,6 +805,15 @@ export function AiSchedulePanel() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {token && isAdmin && schedulePromptAssessments.length > 0 ? (
+        <SelfDiscoveryAssessmentsEditor
+          token={token}
+          kind="ai_schedule"
+          assessments={schedulePromptAssessments}
+          onSaved={() => loadSchedulePromptAssessments()}
+        />
       ) : null}
     </div>
   );

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { signup, login, getCurrentUser, UserResponse } from "@/lib/api/auth";
-import type { SignupRequest, LoginRequest } from "@/lib/api/auth";
+import { login, getCurrentUser, UserResponse } from "@/lib/api/auth";
+import type { LoginRequest } from "@/lib/api/auth";
 import { clearActiveRun } from "@/lib/active-run-storage";
 
 const TOKEN_KEY = "life_plan_token";
@@ -59,13 +59,6 @@ export function useAuth() {
     // No need to re-read here
   }, []); // Only run once on mount
 
-  const signupMutation = useMutation({
-    mutationFn: signup,
-    onSuccess: () => {
-      // After successful signup, user should login
-    },
-  });
-
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: async (data) => {
@@ -91,10 +84,6 @@ export function useAuth() {
     localStorage.removeItem(USER_KEY);
   };
 
-  const handleSignup = async (data: SignupRequest) => {
-    return signupMutation.mutateAsync(data);
-  };
-
   const handleLogin = async (data: LoginRequest) => {
     return loginMutation.mutateAsync(data);
   };
@@ -114,13 +103,10 @@ export function useAuth() {
     token,
     isAuthenticated: !!user && !!token,
     isLoading,
-    signup: handleSignup,
     login: handleLogin,
     logout,
     applyUser,
-    isSigningUp: signupMutation.isPending,
     isLoggingIn: loginMutation.isPending,
-    signupError: signupMutation.error,
     loginError: loginMutation.error,
   };
 }
