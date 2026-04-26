@@ -9,6 +9,8 @@ import {
   type AiSchedulePromptCard,
   type ScheduleBlockApi,
 } from "@/lib/api/ai-schedule";
+import { listApiProviders, type ApiProviderOut } from "@/lib/api/user-api-credentials";
+import { loadSettings, saveSettings } from "@/app/game/self-discovery/constants";
 import {
   listSelfDiscoveryAssessments,
   type SelfDiscoveryAssessmentCard,
@@ -164,6 +166,16 @@ export function AiSchedulePanel() {
   const [promptCards, setPromptCards] = useState<AiSchedulePromptCard[]>([]);
   const [selectedPromptTestId, setSelectedPromptTestId] = useState("ai_schedule_default");
   const [schedulePromptAssessments, setSchedulePromptAssessments] = useState<SelfDiscoveryAssessmentCard[]>([]);
+  const [providers, setProviders] = useState<ApiProviderOut[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [providerId, setProviderId] = useState<number | null>(null);
+  const [keyId, setKeyId] = useState<number | null>(null);
+  const [modelSlug, setModelSlug] = useState("");
+  const llmSelectionSeeded = useRef(false);
+
+  useEffect(() => {
+    llmSelectionSeeded.current = false;
+  }, [token]);
 
   const blockEndAlarmRef = useRef<BlockEndAlarmHandle | null>(null);
   const prevBlockIndexRef = useRef<number | null | undefined>(undefined);
@@ -193,6 +205,52 @@ export function AiSchedulePanel() {
   useEffect(() => {
     setSelectedPromptTestId(readStoredPromptTestId());
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setProviders([]);
+      llmSelectionSeeded.current = false;
+      return;
+    }
+    let cancelled = false;
+    setProvidersLoading(true);
+    listApiProviders(token)
+      .then((rows) => {
+        if (!cancelled) setProviders(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setProvidersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || providers.length === 0 || llmSelectionSeeded.current) return;
+    llmSelectionSeeded.current = true;
+    const saved = loadSettings();
+    if (
+      saved?.providerId != null &&
+      saved.keyId != null &&
+      saved.model?.trim() &&
+      providers.some((p) => p.id === saved.providerId)
+    ) {
+      const p = providers.find((x) => x.id === saved.providerId)!;
+      if (p.keys.some((k) => k.id === saved.keyId) && p.models.some((m) => m.slug === saved.model)) {
+        setProviderId(saved.providerId);
+        setKeyId(saved.keyId);
+        setModelSlug(saved.model);
+        return;
+      }
+    }
+    setProviderId(null);
+    setKeyId(null);
+    setModelSlug("");
+  }, [providers, token]);
 
   useEffect(() => {
     if (!token) {
@@ -275,6 +333,34 @@ export function AiSchedulePanel() {
     }
     return String(planningPromptOptions[0]?.value ?? "ai_schedule_default");
   }, [planningPromptOptions, selectedPromptTestId]);
+
+  const selectedProvider = useMemo(
+    () => (providerId != null ? providers.find((p) => p.id === providerId) ?? null : null),
+    [providers, providerId]
+  );
+
+  const credentialsReady =
+    providerId != null &&
+    keyId != null &&
+    modelSlug.trim() !== "" &&
+    !!selectedProvider?.keys.some((k) => k.id === keyId) &&
+    !!selectedProvider?.models.some((m) => m.slug === modelSlug);
+
+  const anyLlmFieldSet =
+    providerId != null || keyId != null || modelSlug.trim() !== "";
+
+  const llmSelectionIncomplete = anyLlmFieldSet && !credentialsReady;
+
+  const applyProviderChange = useCallback(
+    (nextProviderId: number) => {
+      setProviderId(nextProviderId);
+      const p = providers.find((x) => x.id === nextProviderId);
+      if (!p) return;
+      setKeyId(p.keys[0]?.id ?? null);
+      setModelSlug(p.models[0]?.slug ?? "");
+    },
+    [providers]
+  );
 
   const currentBlockIndex = useMemo(
     () => getCurrentBlockIndex(sortedBlocks, nowTick),
@@ -383,16 +469,32 @@ export function AiSchedulePanel() {
       setError("You need to be signed in.");
       return;
     }
+    if (llmSelectionIncomplete) {
+      setError(
+        "Select provider, model, and API key together, or choose “Server default (OpenRouter)” to use the server key."
+      );
+      return;
+    }
     setLoading(true);
     setError(null);
     setJobHint(null);
     try {
+      if (credentialsReady && providerId != null && keyId != null) {
+        saveSettings({
+          api: "openrouter",
+          providerId,
+          keyId,
+          model: modelSlug.trim(),
+        });
+      }
       const res = await startAiScheduleJob(token, {
         activities,
         now_iso: new Date().toISOString(),
         end_of_day_iso: endOfEatDayIso(),
         timezone_name: EAT_TIMEZONE,
         prompt_test_id: planningPromptSelectValue,
+        credentials: credentialsReady ? { providerId: providerId!, keyId: keyId! } : undefined,
+        model: credentialsReady ? modelSlug.trim() : undefined,
       });
       setScheduleJobId(res.job_id);
       setJobHint(res.message);
@@ -627,7 +729,7 @@ export function AiSchedulePanel() {
             role="dialog"
             aria-modal
             aria-labelledby="ai-schedule-dialog-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+            className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
             onClick={(e) => e.stopPropagation()}
           >
             <h3
@@ -636,12 +738,6 @@ export function AiSchedulePanel() {
             >
               Build today’s schedule
             </h3>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              List each activity, how many separate time blocks it may use at most (leave max blocks empty for
-              unlimited), and the longest any single block may run (minutes; empty defaults to 40). The AI fills
-              from now until 11:59&nbsp;PM EAT with at least 5 minutes between consecutive blocks; gaps are not
-              listed as rows.
-            </p>
             <div className="mt-4 space-y-2">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_6.5rem_5.5rem_auto] sm:items-end">
                 <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Activity</span>
@@ -725,10 +821,6 @@ export function AiSchedulePanel() {
               >
                 + Add activity
               </button>
-              <p className="text-xs text-zinc-500 dark:text-zinc-500">
-                Max blocks = cap on separate time slots for that activity (empty = no limit). Max min = longest any
-                single block may run; leave empty for 40 minutes.
-              </p>
             </div>
             <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-700">
               <p
@@ -736,10 +828,6 @@ export function AiSchedulePanel() {
                 className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
               >
                 Planning prompt
-              </p>
-              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                Template used for this generation (same entries admins edit below as “AI schedule prompts”). Search by
-                name or id.
               </p>
               <div className="mt-2" aria-labelledby="ai-schedule-planning-prompt-label">
                 <SearchableSelect
@@ -760,6 +848,94 @@ export function AiSchedulePanel() {
                   disabled={loading}
                 />
               </div>
+            </div>
+            <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+              {providersLoading ? (
+                <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Loading providers…</p>
+              ) : providers.length === 0 ? (
+                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                  No API providers in Settings. Add a Gemini API key in{" "}
+                  <a href="/settings" className="font-medium text-blue-600 underline dark:text-blue-400">
+                    Settings
+                  </a>{" "}
+                  or rely on OpenRouter (clear any partial selections below).
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Provider</span>
+                    <SearchableSelect
+                      options={[
+                        {
+                          value: "",
+                          label: "Server default (OpenRouter)",
+                          searchText: "server openrouter default",
+                        },
+                        ...providers.map((p) => ({
+                          value: String(p.id),
+                          label: p.name,
+                          searchText: `${p.id} ${p.name}`,
+                        })),
+                      ]}
+                      value={providerId != null ? String(providerId) : ""}
+                      onChange={(v) => {
+                        if (!String(v)) {
+                          setProviderId(null);
+                          setKeyId(null);
+                          setModelSlug("");
+                          return;
+                        }
+                        applyProviderChange(Number(v));
+                      }}
+                      placeholder="Select provider"
+                      searchPlaceholder="Search…"
+                      className="w-full"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Model</span>
+                    <SearchableSelect
+                      options={(selectedProvider?.models ?? []).map((m) => ({
+                        value: m.slug,
+                        label: `${m.name} (${m.slug})`,
+                        searchText: `${m.name} ${m.slug}`,
+                      }))}
+                      value={modelSlug}
+                      onChange={(v) => setModelSlug(String(v))}
+                      placeholder={
+                        selectedProvider?.models?.length ? "Select model" : "No models for this provider"
+                      }
+                      searchPlaceholder="Search…"
+                      className="w-full"
+                      disabled={loading || !selectedProvider?.models?.length}
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">API key</span>
+                    <SearchableSelect
+                      options={(selectedProvider?.keys ?? []).map((k) => ({
+                        value: String(k.id),
+                        label: k.name,
+                        searchText: `${k.id} ${k.name} ${k.value_masked}`,
+                      }))}
+                      value={keyId != null ? String(keyId) : ""}
+                      onChange={(v) => setKeyId(Number(v))}
+                      placeholder={
+                        selectedProvider?.keys?.length ? "Select key" : "Add a key in Settings"
+                      }
+                      searchPlaceholder="Search…"
+                      className="w-full"
+                      disabled={loading || !selectedProvider?.keys?.length}
+                    />
+                  </div>
+                </div>
+              )}
+              {llmSelectionIncomplete ? (
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  Finish provider, model, and key, or clear all three to use OpenRouter only.
+                </p>
+              ) : null}
             </div>
             {jobHint ? (
               <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{jobHint}</p>
@@ -791,7 +967,7 @@ export function AiSchedulePanel() {
               <button
                 type="button"
                 onClick={handleSchedulePrimaryAction}
-                disabled={loading}
+                disabled={loading || (!scheduleJobId && llmSelectionIncomplete)}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
                 {loading

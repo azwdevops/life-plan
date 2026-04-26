@@ -1,13 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
-import {
-  ApiCredentialsSection,
-  type ApiCredentialsSectionHandle,
-} from "@/components/settings/ApiCredentialsSection";
+import { ApiCredentialsSection } from "@/components/settings/ApiCredentialsSection";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 
@@ -18,8 +15,6 @@ function SettingsContent() {
   const { isAuthenticated, isLoading, token } = useAuth();
   const isEmbedded = searchParams.get("embedded") === "1" || pathname === "/support-settings";
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
-  const apiCredentialsRef = useRef<ApiCredentialsSectionHandle>(null);
-
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push("/login");
@@ -61,22 +56,13 @@ function SettingsContent() {
               Settings
               <span className="font-semibold text-zinc-500 dark:text-zinc-400">
                 {" "}
-                — API providers & keys
+                — LLM API keys
               </span>
             </h1>
-            {token ? (
-              <button
-                type="button"
-                onClick={() => apiCredentialsRef.current?.openAddProvider()}
-                className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                Add provider
-              </button>
-            ) : null}
           </div>
 
           <div className="space-y-6">
-            {token ? <ApiCredentialsSection ref={apiCredentialsRef} token={token} /> : null}
+            {token ? <ApiCredentialsSection token={token} /> : null}
           </div>
         </div>
       </main>

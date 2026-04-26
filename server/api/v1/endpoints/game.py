@@ -13,7 +13,8 @@ from core.database import get_db
 from core.security import decode_access_token
 from models.self_discovery_assessment import SelfDiscoveryAssessment
 from models.user import User
-from models.user_api_credentials import UserApiKey, UserApiProvider, UserApiProviderModel
+from llm_upstream import LlmUpstreamError, chat_completion_text
+from user_llm_resolve import UserLlmCredentialError, resolve_saved_user_vendor_llm
 from llm_request_template import (
     DEFAULT_OPENROUTER_LLM_REQUEST_BODY_JSON_TEMPLATE,
     openrouter_chat_completions_variables,
@@ -45,48 +46,18 @@ async def get_optional_user(
     return db.query(User).filter(User.id == uid).first()
 
 
-def _resolve_saved_openrouter_credentials(
+def _resolve_saved_vendor_credentials(
     db: Session,
     user_id: int,
     provider_id: int,
     key_id: int,
     model_slug: str,
-) -> Tuple[str, str]:
-    """Return (api_key_secret, openrouter_model_id) after ownership checks."""
-    slug = model_slug.strip()
-    if not slug:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="model (slug) is required when using saved credentials",
-        )
-    prov = (
-        db.query(UserApiProvider)
-        .filter(UserApiProvider.id == provider_id, UserApiProvider.user_id == user_id)
-        .first()
-    )
-    if not prov:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
-    key_row = (
-        db.query(UserApiKey)
-        .filter(UserApiKey.id == key_id, UserApiKey.provider_id == prov.id)
-        .first()
-    )
-    if not key_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
-    model_row = (
-        db.query(UserApiProviderModel)
-        .filter(
-            UserApiProviderModel.provider_id == prov.id,
-            UserApiProviderModel.slug == slug,
-        )
-        .first()
-    )
-    if not model_row:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Model slug does not match any model for this provider",
-        )
-    return key_row.key_secret.strip(), slug
+) -> Tuple[str, str, str]:
+    """Return (api_key_secret, static_provider_slug, model_slug) after checks."""
+    try:
+        return resolve_saved_user_vendor_llm(db, user_id, provider_id, key_id, model_slug)
+    except UserLlmCredentialError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
 
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -99,8 +70,12 @@ def _openrouter_key_and_model_for_request(
     provider_id: Optional[int],
     key_id: Optional[int],
     model: Optional[str],
-) -> Tuple[Optional[str], str]:
-    """(api_key_override or None to use server env, openrouter_model_id)."""
+) -> Tuple[Optional[str], Optional[str], str]:
+    """(api_key_override or None, provider_slug or None, model_id).
+
+    When provider_slug is None, use OpenRouter with model_id as OpenRouter model id.
+    When provider_slug is set, api_key_override is the user's vendor secret and model_id is the vendor model slug.
+    """
     uses_saved = provider_id is not None or key_id is not None
     if uses_saved:
         if current_user is None:
@@ -114,12 +89,12 @@ def _openrouter_key_and_model_for_request(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="provider_id and key_id are required when using saved credentials",
             )
-        secret, mid = _resolve_saved_openrouter_credentials(
+        secret, pslug, mid = _resolve_saved_vendor_credentials(
             db, current_user.id, provider_id, key_id, model or ""
         )
-        return secret, mid
+        return secret, pslug, mid
     model_id = (model or "").strip() or OPENROUTER_DEFAULT_MODEL
-    return None, model_id
+    return None, None, model_id
 
 
 class GenerateQuestionsRequest(BaseModel):
@@ -127,7 +102,7 @@ class GenerateQuestionsRequest(BaseModel):
     api: Optional[str] = "openrouter"
     model: Optional[str] = Field(
         default=None,
-        description="OpenRouter model id; with saved credentials must match a stored model slug.",
+        description="OpenRouter model id when not signed in / no saved key; with saved credentials, vendor model slug from the static catalog.",
     )
     provider_id: Optional[int] = None
     key_id: Optional[int] = None
@@ -374,7 +349,7 @@ async def generate_questions(
             detail="Only 'openrouter' API is supported for now",
         )
     prompt = build_questions_user_message(db, body.test_id)
-    api_key_override, model_id = _openrouter_key_and_model_for_request(
+    api_key_override, vendor_slug, model_id = _openrouter_key_and_model_for_request(
         db, current_user, body.provider_id, body.key_id, body.model
     )
     try:
@@ -382,9 +357,18 @@ async def generate_questions(
             {"role": "system", "content": "You output only valid JSON. No markdown code fences or extra text."},
             {"role": "user", "content": prompt},
         ]
-        content = _openrouter_templated(
-            db, body.test_id, messages, model_id, 4096, api_key_override
-        )
+        if vendor_slug is None:
+            content = _openrouter_templated(
+                db, body.test_id, messages, model_id, 4096, api_key_override
+            )
+        else:
+            content = chat_completion_text(
+                provider_slug=vendor_slug,
+                api_key=api_key_override or "",
+                model=model_id,
+                messages=messages,
+                max_tokens=8192,
+            )
         questions = _parse_questions_json(content)
         if not questions:
             raise HTTPException(
@@ -394,6 +378,8 @@ async def generate_questions(
         return GenerateQuestionsResponse(questions=questions)
     except HTTPException:
         raise
+    except LlmUpstreamError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -423,7 +409,7 @@ async def analyze(
         qa_lines.append(f"Q{i}. {qtext}\nAnswer: {a}")
     qa_block = "\n\n".join(qa_lines)
     system = build_analysis_system_message(db, body.test_id)
-    api_key_override, model_id = _openrouter_key_and_model_for_request(
+    api_key_override, vendor_slug, model_id = _openrouter_key_and_model_for_request(
         db, current_user, body.provider_id, body.key_id, body.model
     )
     try:
@@ -431,12 +417,23 @@ async def analyze(
             {"role": "system", "content": system},
             {"role": "user", "content": f"Questions and answers:\n\n{qa_block}"},
         ]
-        analysis_text = _openrouter_templated(
-            db, body.test_id, messages, model_id, 1024, api_key_override
-        )
+        if vendor_slug is None:
+            analysis_text = _openrouter_templated(
+                db, body.test_id, messages, model_id, 1024, api_key_override
+            )
+        else:
+            analysis_text = chat_completion_text(
+                provider_slug=vendor_slug,
+                api_key=api_key_override or "",
+                model=model_id,
+                messages=messages,
+                max_tokens=1024,
+            )
         return AnalyzeResponse(analysis=analysis_text or "No analysis generated.")
     except HTTPException:
         raise
+    except LlmUpstreamError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

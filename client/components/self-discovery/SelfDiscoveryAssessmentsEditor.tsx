@@ -200,9 +200,6 @@ export function SelfDiscoveryAssessmentsEditor({
                 <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">{a.test_id}</p>
               </div>
             )}
-            {kind !== "self_discovery" ? (
-              <p className="mt-2 font-mono text-xs text-zinc-500 dark:text-zinc-500">{a.test_id}</p>
-            ) : null}
           </div>
         ))}
       </div>

@@ -75,6 +75,11 @@ export async function listAiSchedulePromptCards(token: string): Promise<AiSchedu
   return response.json() as Promise<AiSchedulePromptCard[]>;
 }
 
+export type AiScheduleSavedCredentials = {
+  providerId: number;
+  keyId: number;
+};
+
 export async function startAiScheduleJob(
   token: string,
   body: {
@@ -82,30 +87,39 @@ export async function startAiScheduleJob(
     now_iso: string;
     end_of_day_iso: string;
     timezone_name: string;
+    /** Gemini model slug when using saved credentials (required with credentials). */
     model?: string;
+    credentials?: AiScheduleSavedCredentials;
     /** self_discovery_assessments.test_id (e.g. ai_schedule_default). */
     prompt_test_id?: string;
   }
 ): Promise<StartAiScheduleJobResponse> {
+  const payload: Record<string, unknown> = {
+    activities: body.activities.map((a) => ({
+      title: a.title,
+      max_repetitions: a.max_repetitions,
+      max_duration_minutes: a.max_duration_minutes,
+    })),
+    now_iso: body.now_iso,
+    end_of_day_iso: body.end_of_day_iso,
+    timezone_name: body.timezone_name,
+    api: "openrouter",
+    prompt_test_id: body.prompt_test_id || undefined,
+  };
+  if (body.credentials) {
+    payload.provider_id = body.credentials.providerId;
+    payload.key_id = body.credentials.keyId;
+    payload.model = body.model || undefined;
+  } else {
+    payload.model = body.model || undefined;
+  }
   const response = await fetch(`${API_BASE_URL}/api/v1/ai-schedule/plan/start`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      activities: body.activities.map((a) => ({
-        title: a.title,
-        max_repetitions: a.max_repetitions,
-        max_duration_minutes: a.max_duration_minutes,
-      })),
-      now_iso: body.now_iso,
-      end_of_day_iso: body.end_of_day_iso,
-      timezone_name: body.timezone_name,
-      api: "openrouter",
-      model: body.model || undefined,
-      prompt_test_id: body.prompt_test_id || undefined,
-    }),
+    body: JSON.stringify(payload),
   });
   if (handleApiResponse(response)) {
     throw new Error("Unauthorized");

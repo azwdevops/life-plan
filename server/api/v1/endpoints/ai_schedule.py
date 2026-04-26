@@ -19,6 +19,8 @@ from llm_request_template import (
     openrouter_chat_completions_variables,
     substitute_json_request_template,
 )
+from llm_upstream import LlmUpstreamError, chat_completion_text
+from user_llm_resolve import UserLlmCredentialError, resolve_saved_user_vendor_llm
 from api.v1.endpoints.auth import get_current_user
 from core.config import settings
 from core.database import SessionLocal, get_db
@@ -51,6 +53,8 @@ class AiDayScheduleRequest(BaseModel):
     timezone_name: str = "UTC"
     api: Optional[str] = "openrouter"
     model: Optional[str] = None
+    provider_id: Optional[int] = None
+    key_id: Optional[int] = None
     prompt_test_id: Optional[str] = Field(
         default=None,
         description="self_discovery_assessments.test_id (e.g. ai_schedule_default); omitted uses default.",
@@ -252,8 +256,8 @@ def _compose_user_prompt(body: AiDayScheduleRequest, cleaned: List[ScheduleActiv
     return f"{coach}\n\n{tail}" if coach else tail
 
 
-def execute_plan(body: AiDayScheduleRequest, db: Session) -> AiDayScheduleResponse:
-    """Runs OpenRouter and returns parsed schedule (used by background job)."""
+def execute_plan(body: AiDayScheduleRequest, db: Session, user_id: int) -> AiDayScheduleResponse:
+    """Runs saved Gemini (Google) or server OpenRouter; returns parsed schedule (background job)."""
     cleaned = [a for a in body.activities if a.title and str(a.title).strip()]
     if not cleaned:
         raise ValueError("At least one activity with a non-empty title is required")
@@ -263,10 +267,54 @@ def execute_plan(body: AiDayScheduleRequest, db: Session) -> AiDayScheduleRespon
     system_msg = _schedule_system_message(db, body.prompt_test_id)
     user_prompt = _compose_user_prompt(body, cleaned, coach)
 
-    request_body = _openrouter_request_body(
-        db, body.prompt_test_id, system_msg, user_prompt, body.model, 4096
+    uses_saved = (
+        body.provider_id is not None
+        and body.key_id is not None
+        and bool((body.model or "").strip())
     )
-    content = _call_openrouter_json_body(request_body)
+    partial_saved = (
+        body.provider_id is not None
+        or body.key_id is not None
+        or bool((body.model or "").strip())
+    )
+    if partial_saved and not uses_saved:
+        raise ValueError(
+            "Provide all of provider_id, key_id, and model for saved Gemini, or omit all three to use server OpenRouter."
+        )
+
+    if uses_saved:
+        api_key, vendor_slug, model_id = resolve_saved_user_vendor_llm(
+            db, user_id, body.provider_id, body.key_id, body.model or ""
+        )
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_prompt},
+        ]
+        try:
+            content = chat_completion_text(
+                provider_slug=vendor_slug,
+                api_key=api_key,
+                model=model_id,
+                messages=messages,
+                max_tokens=8192,
+            )
+        except LlmUpstreamError as e:
+            raise ValueError(str(e)) from e
+    else:
+        if body.api != "openrouter":
+            raise ValueError("Only 'openrouter' API is supported when not using saved credentials")
+        if not (settings.OPENROUTER_API_KEY or "").strip():
+            raise ValueError(
+                "No OpenRouter API key configured. Set OPENROUTER_API_KEY or choose provider, key, and model in Settings."
+            )
+        request_body = _openrouter_request_body(
+            db, body.prompt_test_id, system_msg, user_prompt, body.model, 4096
+        )
+        try:
+            content = _call_openrouter_json_body(request_body)
+        except httpx.HTTPStatusError as e:
+            raise ValueError(e.response.text or str(e)) from e
+
     data = _parse_schedule_json(content)
     blocks = _coerce_blocks(data)
     tips = data.get("tips")
@@ -278,9 +326,7 @@ def _background_run_schedule_job(job_id: str, user_id: int, payload: dict) -> No
     db = SessionLocal()
     try:
         body = AiDayScheduleRequest(**payload)
-        if body.api != "openrouter":
-            raise ValueError("Only 'openrouter' API is supported for now")
-        result = execute_plan(body, db)
+        result = execute_plan(body, db, user_id)
         job = db.query(AiScheduleJob).filter(AiScheduleJob.id == job_id).one_or_none()
         if job is None or job.user_id != user_id:
             return
@@ -315,11 +361,40 @@ async def plan_start(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if body.api != "openrouter":
+    uses_saved = (
+        body.provider_id is not None
+        and body.key_id is not None
+        and bool((body.model or "").strip())
+    )
+    partial_saved = (
+        body.provider_id is not None
+        or body.key_id is not None
+        or bool((body.model or "").strip())
+    )
+    if partial_saved and not uses_saved:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only 'openrouter' API is supported for now",
+            detail="Provide all of provider_id, key_id, and model for saved Gemini, or omit all three to use server OpenRouter.",
         )
+    if uses_saved:
+        try:
+            resolve_saved_user_vendor_llm(
+                db, user.id, body.provider_id, body.key_id, body.model or ""
+            )
+        except UserLlmCredentialError as e:
+            raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+    else:
+        if body.api != "openrouter":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only 'openrouter' API is supported when not using saved credentials",
+            )
+        if not (settings.OPENROUTER_API_KEY or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No OpenRouter API key configured. Set OPENROUTER_API_KEY or use saved Gemini credentials.",
+            )
+
     cleaned = [a for a in body.activities if a.title and str(a.title).strip()]
     if not cleaned:
         raise HTTPException(
