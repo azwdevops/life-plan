@@ -26,7 +26,10 @@ type FormulaBuilderProps = {
   aliasToAccountId: Record<string, string>;
   onAddAccount: (label: string) => { ok: boolean; message?: string };
   onSaveFormula: (
-    payload: Omit<SharesFormula, "createdAt" | "updatedAt" | "expressionTree"> & {
+    payload: Omit<
+      SharesFormula,
+      "createdAt" | "updatedAt" | "expressionTree" | "id"
+    > & {
       id?: string;
       createdAt?: string;
     }

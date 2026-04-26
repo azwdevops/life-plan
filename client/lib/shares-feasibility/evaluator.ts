@@ -40,7 +40,7 @@ function evaluateNode(
 
   if (node.type === "account") {
     const value = getCellValue(values, companyId, node.accountId, year);
-    if (!Number.isFinite(value)) {
+    if (value === undefined || !Number.isFinite(value)) {
       return { value: null, status: "missing_data", reason: "Missing account value." };
     }
     return { value, status: "ok" };

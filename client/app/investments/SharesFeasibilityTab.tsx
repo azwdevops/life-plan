@@ -288,7 +288,10 @@ export function SharesFeasibilityTab() {
   };
 
   const saveFormula = (
-    payload: Omit<SharesFormula, "createdAt" | "updatedAt" | "expressionTree"> & {
+    payload: Omit<
+      SharesFormula,
+      "createdAt" | "updatedAt" | "expressionTree" | "id"
+    > & {
       id?: string;
       createdAt?: string;
     }
