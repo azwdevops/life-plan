@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
+import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
 
 export interface CashAnalysisSummary {
@@ -110,7 +111,10 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
         <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 md:gap-x-5">
             {isAuthenticated && showHeaderTimeTracker === true ? (
-              <HeaderTimeTracker inline />
+              <>
+                <HeaderTimeTracker inline />
+                <HeaderCountdownTimer inline />
+              </>
             ) : null}
             {centerContent ? (
               <div className="flex min-w-0 justify-center">{centerContent}</div>
