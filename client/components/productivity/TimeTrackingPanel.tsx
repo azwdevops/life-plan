@@ -26,6 +26,7 @@ import {
   listTimeEntries,
   updateTimeEntry,
 } from "@/lib/api/time-entries";
+import { TimeTrackingCharts } from "@/components/productivity/TimeTrackingCharts";
 
 function IconPlay({ className }: { className?: string }) {
   return (
@@ -615,6 +616,8 @@ export function TimeTrackingPanel() {
               {fetchError}
             </p>
           ) : null}
+
+          <TimeTrackingCharts entries={entries} />
 
           {entries.length === 0 ? (
             <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">

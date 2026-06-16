@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Plan — Commands</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --border: #e4e4e7;
+      --text: #18181b;
+      --muted: #71717a;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --ok: #16a34a;
+      --warn: #ca8a04;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #09090b;
+        --surface: #18181b;
+        --border: #3f3f46;
+        --text: #fafafa;
+        --muted: #a1a1aa;
+        --accent: #3b82f6;
+        --accent-soft: #1e3a5f;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap {
+      width: 100%;
+      max-width: none;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3rem;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.75rem;
+      font-weight: 700;
+    }
+    .lead {
+      margin: 0 0 1.5rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      align-items: center;
+    }
+    .search {
+      flex: 1 1 220px;
+      min-width: 0;
+      padding: 0.6rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    .search:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .filter-btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .filter-btn:hover { border-color: var(--accent); }
+    .filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+    .list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      width: 100%;
+    }
+    @media (max-width: 768px) {
+      .list { grid-template-columns: 1fr; }
+    }
+    .card {
+      width: 100%;
+      min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.85rem;
+      padding: 1rem 1.1rem;
+    }
+    .card.hidden { display: none; }
+    .card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+    }
+    .card-title {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .badge.warn {
+      background: #fef9c3;
+      color: var(--warn);
+    }
+    @media (prefers-color-scheme: dark) {
+      .badge.warn { background: #422006; color: #facc15; }
+    }
+    .desc {
+      margin: 0 0 0.75rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .cmd-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+      width: 100%;
+      min-width: 0;
+    }
+    pre.cmd {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      padding: 0.7rem 0.85rem;
+      border-radius: 0.55rem;
+      background: #f4f4f5;
+      border: 1px solid var(--border);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: all;
+    }
+    @media (prefers-color-scheme: dark) {
+      pre.cmd { background: #27272a; }
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      align-self: flex-start;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 0.55rem;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      min-width: 4.5rem;
+    }
+    .copy-btn:hover { border-color: var(--accent); }
+    .copy-btn.copied {
+      border-color: var(--ok);
+      color: var(--ok);
+    }
+    .note {
+      margin-top: 2rem;
+      width: 100%;
+      padding: 1rem 1.1rem;
+      border-radius: 0.85rem;
+      border: 1px dashed var(--border);
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .note strong { color: var(--text); }
+    .note ul { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Life Plan commands</h1>
+    <p class="lead">
+      Runnable commands from this repo. Run Python scripts from the project root unless noted.
+    </p>
+
+    <div class="toolbar">
+      <input
+        id="search"
+        class="search"
+        type="search"
+        placeholder="Filter by name, description, or command text…"
+        autocomplete="off"
+      />
+      <div class="filters" id="filters" aria-label="Filter by type"></div>
+    </div>
+    <p class="meta" id="count"></p>
+
+    <div class="list" id="list"></div>
+
+    <div class="note">
+      <strong>Not in the codebase</strong>
+      <ul>
+        <li><strong>Change password</strong> — no script or API endpoint exists.</li>
+        <li><strong>User groups</strong> — assign via <code>scripts/add_admin.py</code> or the admin UI at <code>/admin/users</code> (groups only, not new accounts).</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const COMMANDS = [
+      {
+        id: "create-user",
+        type: "users",
+        title: "Create user",
+        description:
+          "Creates a new active user with the member group. first_name is derived from the email local part. Public signup is disabled in the API.",
+        command: "python scripts/create_user.py user@example.com 'your-password'",
+        source: "scripts/create_user.py",
+      },
+      {
+        id: "add-admin",
+        type: "users",
+        title: "Add user to admin group",
+        description:
+          "Promotes an existing user to the admin group by email. Creates admin and member groups if missing. User must already exist.",
+        command: "python scripts/add_admin.py user@example.com",
+        source: "scripts/add_admin.py",
+      },
+      {
+        id: "reset-db",
+        type: "database",
+        title: "Reset PostgreSQL database",
+        description:
+          "Drops and recreates the database named in LIFE_PLAN_DATABASE_URL (.env). Terminates active connections first. Does not run migrations.",
+        command: "python scripts/reset_db.py",
+        source: "scripts/reset_db.py",
+      },
+      {
+        id: "ledger-groups",
+        type: "finance",
+        title: "Seed default ledger groups",
+        description:
+          "Creates shared parent ledger groups and ledger groups (bank accounts, cash, income, expenditure, etc.). Safe to re-run; skips or updates existing rows.",
+        command: "python scripts/create_default_ledger_groups.py",
+        source: "scripts/create_default_ledger_groups.py",
+      },
+      {
+        id: "alembic-upgrade",
+        type: "migrations",
+        title: "Apply database migrations",
+        description: "Runs all pending Alembic migrations to the latest revision.",
+        command: "cd server && alembic upgrade head",
+        source: "server/alembic/",
+      },
+      {
+        id: "alembic-revision",
+        type: "migrations",
+        title: "Generate migration (autogenerate)",
+        description:
+          "Creates a new Alembic revision from model changes. Review the generated file before applying.",
+        command: 'cd server && alembic revision --autogenerate -m "describe change"',
+        source: "server/alembic/",
+      },
+      {
+        id: "alembic-downgrade",
+        type: "migrations",
+        title: "Rollback one migration",
+        description: "Reverts the database by one Alembic revision.",
+        command: "cd server && alembic downgrade -1",
+        source: "server/alembic/",
+      },
+      {
+        id: "alembic-current",
+        type: "migrations",
+        title: "Show current migration revision",
+        description: "Prints the Alembic revision currently applied to the database.",
+        command: "cd server && alembic current",
+        source: "server/alembic/",
+      },
+      {
+        id: "pip-install",
+        type: "setup",
+        title: "Install Python dependencies",
+        description: "Installs backend packages from requirements.txt. Use a virtualenv first.",
+        command: "pip install -r requirements.txt",
+        source: "requirements.txt",
+      },
+      {
+        id: "uvicorn-dev",
+        type: "backend",
+        title: "Run API (development)",
+        description:
+          "Starts the FastAPI app with auto-reload. Requires LIFE_PLAN_DATABASE_URL and other .env values.",
+        command: "cd server && uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+        source: "server/main.py",
+      },
+      {
+        id: "gunicorn-prod",
+        type: "backend",
+        title: "Run API (production-style)",
+        description:
+          "Runs the API with Gunicorn and Uvicorn workers. Adjust bind address and worker count for your host.",
+        command:
+          "cd server && gunicorn main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000",
+        source: "requirements.txt (gunicorn)",
+      },
+      {
+        id: "npm-install",
+        type: "frontend",
+        title: "Install frontend dependencies",
+        description: "Installs Node packages for the Next.js client.",
+        command: "cd client && npm install",
+        source: "client/package.json",
+      },
+      {
+        id: "npm-dev",
+        type: "frontend",
+        title: "Run frontend (development)",
+        description:
+          "Starts Next.js dev server (default port 3000). Set NEXT_PUBLIC_API_URL in client/.env.local.",
+        command: "cd client && npm run dev",
+        source: "client/package.json",
+      },
+      {
+        id: "npm-build",
+        type: "frontend",
+        title: "Build frontend for production",
+        command: "cd client && npm run build",
+        source: "client/package.json",
+      },
+      {
+        id: "npm-start",
+        type: "frontend",
+        title: "Run production frontend build",
+        description: "Serves the output of npm run build.",
+        command: "cd client && npm run start",
+        source: "client/package.json",
+      },
+      {
+        id: "npm-lint",
+        type: "frontend",
+        title: "Lint frontend",
+        command: "cd client && npm run lint",
+        source: "client/package.json",
+      },
+      {
+        id: "fresh-db",
+        type: "database",
+        title: "Full database setup (reset + migrate + seed)",
+        description:
+          "Typical flow after reset_db: recreate schema, then seed ledger groups. Run migrations yourself between steps.",
+        command:
+          "python scripts/reset_db.py && cd server && alembic upgrade head && cd .. && python scripts/create_default_ledger_groups.py",
+        source: "workflow",
+      },
+    ];
+
+    const TYPE_LABELS = {
+      all: "All",
+      users: "Users",
+      database: "Database",
+      finance: "Finance",
+      migrations: "Migrations",
+      setup: "Setup",
+      backend: "Backend",
+      frontend: "Frontend",
+    };
+
+    const listEl = document.getElementById("list");
+    const filtersEl = document.getElementById("filters");
+    const searchEl = document.getElementById("search");
+    const countEl = document.getElementById("count");
+
+    let activeType = "all";
+
+    function renderFilters() {
+      filtersEl.innerHTML = "";
+      Object.entries(TYPE_LABELS).forEach(([key, label]) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "filter-btn" + (key === activeType ? " active" : "");
+        btn.textContent = label;
+        btn.dataset.type = key;
+        btn.addEventListener("click", () => {
+          activeType = key;
+          document.querySelectorAll(".filter-btn").forEach((b) => {
+            b.classList.toggle("active", b.dataset.type === activeType);
+          });
+          applyFilter();
+        });
+        filtersEl.appendChild(btn);
+      });
+    }
+
+    function matches(cmd, q) {
+      if (activeType !== "all" && cmd.type !== activeType) return false;
+      if (!q) return true;
+      const hay = [
+        cmd.title,
+        cmd.description || "",
+        cmd.command,
+        cmd.type,
+        cmd.source || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    }
+
+    function applyFilter() {
+      const q = searchEl.value.trim().toLowerCase();
+      let visible = 0;
+      listEl.querySelectorAll(".card").forEach((card) => {
+        const id = card.dataset.id;
+        const cmd = COMMANDS.find((c) => c.id === id);
+        const show = cmd && matches(cmd, q);
+        card.classList.toggle("hidden", !show);
+        if (show) visible += 1;
+      });
+      countEl.textContent =
+        visible === COMMANDS.length
+          ? `${visible} commands`
+          : `${visible} of ${COMMANDS.length} commands`;
+    }
+
+    async function copyText(text, btn) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      const prev = btn.textContent;
+      btn.textContent = "Copied";
+      btn.classList.add("copied");
+      setTimeout(() => {
+        btn.textContent = prev;
+        btn.classList.remove("copied");
+      }, 1400);
+    }
+
+    function renderList() {
+      listEl.innerHTML = COMMANDS.map((cmd) => {
+        const desc = cmd.description
+          ? `<p class="desc">${escapeHtml(cmd.description)}</p>`
+          : "";
+        const src = cmd.source
+          ? `<span class="badge">${escapeHtml(cmd.source)}</span>`
+          : "";
+        return `
+          <article class="card" data-id="${cmd.id}">
+            <div class="card-head">
+              <h2 class="card-title">${escapeHtml(cmd.title)}</h2>
+              <span class="badge">${escapeHtml(TYPE_LABELS[cmd.type] || cmd.type)}</span>
+            </div>
+            ${desc}
+            <div class="cmd-row">
+              <pre class="cmd">${escapeHtml(cmd.command)}</pre>
+              <button type="button" class="copy-btn" data-copy="${escapeAttr(cmd.command)}">Copy</button>
+            </div>
+            ${src ? `<p class="desc" style="margin:0.5rem 0 0;font-size:0.8rem">Source: ${src}</p>` : ""}
+          </article>
+        `;
+      }).join("");
+
+      listEl.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          copyText(btn.dataset.copy, btn);
+        });
+      });
+      applyFilter();
+    }
+
+    function escapeHtml(s) {
+      return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/'/g, "&#39;");
+    }
+
+    searchEl.addEventListener("input", applyFilter);
+    renderFilters();
+    renderList();
+  </script>
+</body>
+</html>
