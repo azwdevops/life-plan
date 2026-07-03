@@ -1,78 +1,37 @@
 pipeline {
     agent any
-
+    
     stages {
-        stage('Deploy on server') {
+        stage('Clone the repo on server') {
             steps {
                 echo '--- Entering stage ---'
-
                 script {
+                    echo '--- Inside script block ---'
+                    // define server details
                     def remoteUser = "ubuntu"
-                    def remoteHost = "185.113.249.234"
-                    def repoPath  = "/home/ubuntu/life_plan"
+                    def remoteHost = "31.220.86.209"
+                    def repoUrl = "git@github.com:azwdevops/life-plan.git"
+                    def repoPath = "/home/ubuntu/life_plan"
 
-                    sh """
-                        ssh -i /var/lib/jenkins/.ssh/jenkins_to_truehost_server \
-                        -o StrictHostKeyChecking=no ${remoteUser}@${remoteHost} bash -l << 'EOF'
+                    // ssh command - improved with error handling and logging
+                    def sshCommand = """
+                        echo '✅ SSH to server works'
 
-                        set -e
+                        set -e  # Exit immediately if any command fails
 
-                        echo "✅ SSH connected"
-                        echo "📁 Moving to project directory"
-                        cd ${repoPath}
+                        echo '📁 Navigating to project directory...'
 
-                        echo "⬇️ Pulling latest changes"
-                        GIT_SSH_COMMAND="ssh -i ~/.ssh/truehost_to_github_connect -o IdentitiesOnly=yes" \
-                          git pull github master
+                        cd ${repoPath} || { echo "Failed to cd to ${repoPath}"; exit 1; }
 
-                        echo "📦 Frontend setup"
-                        cd client
+                        echo '⬇️ Pulling latest changes...'
+                        
+                        git pull github master
 
-                        echo "🔧 Loading NVM"
-                        export NVM_DIR="\$HOME/.nvm"
-                        [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" || {
-                            echo "⚠️ Direct NVM load failed, trying profile..."
-                            [ -s "\$HOME/.bashrc" ] && source "\$HOME/.bashrc" || true
-                            [ -s "\$HOME/.profile" ] && source "\$HOME/.profile" || true
-                            [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" || {
-                                echo "❌ Failed to load NVM"
-                                exit 1
-                            }
-                        }
-
-                        # Make sure Node 20 exists
-                        if [ ! -d "\$NVM_DIR/versions/node/v20.20.0" ]; then
-                            echo "❌ Node 20 not installed. Installing..."
-                            nvm install 20
-                        fi
-
-                        # Explicitly activate Node 20
-                        export PATH="\$NVM_DIR/versions/node/v20.20.0/bin:\$PATH"
-
-                        # Verify
-                        echo "🔍 Node versions"
-                        node -v
-                        npm -v
-                        echo "Node path: \$(which node)"
-                        echo "NPM path: \$(which npm)"
-
-                        # Install all deps including dev (needed for next build; NODE_ENV=production skips devDependencies)
-                        npm install --include=dev
-
-                        # Cap Node heap and webpack parallelism on small VPS (reduces OOM / exit 137)
-                        export NODE_OPTIONS="--max-old-space-size=2048"
-                        export NEXT_WEBPACK_PARALLELISM=1
-
-                        npm run build
-
-                        echo "🚀 Restarting PM2"
-                        pm2 startOrReload ecosystem.config.js --env production
-
-                        cd ..
-
-                        echo "🐍 Backend dependencies"
+                        echo '📦 Installing dependencies...'s
+                        
                         source .venv/bin/activate
-                        pip install -r requirements.txt
+
+                        pip3 install -r requirements.txt
 
                         cd server
 
@@ -80,13 +39,33 @@ pipeline {
 
                         deactivate
 
-                        echo "🔁 Restarting services"
-                        sudo supervisorctl restart nginx-main
-                        sudo supervisorctl restart uvi-life-plan
+                        echo "📦 Frontend setup"
+                        cd ../client
 
-                        echo "🎉 Deployment completed successfully"
+                        # Install all deps including dev (needed for next build; NODE_ENV=production skips devDependencies)
+                        npm install --include=dev
 
-EOF
+                        npm run build
+
+                        echo "🚀 Restarting PM2"
+
+                        pm2 startOrReload ecosystem.config.js --env production
+
+                        echo '🚀 Restarting services...'
+                        
+                        sudo -n supervisorctl restart nginx-main
+                        sudo -n supervisorctl restart uvi-life-plan
+
+                        echo '✅ Deployment completed successfully.'
+                    """
+
+                    // run ssh command via jenkins with proper quoting
+
+                    sh """
+                        ssh -t -i /var/lib/jenkins/.ssh/jenkins_to_contabo_server \
+                        -o StrictHostKeyChecking=no ${remoteUser}@${remoteHost} '
+                        ${sshCommand}
+                    '
                     """
                 }
             }
