@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -268,10 +268,10 @@ const adminUsersSuspenseFallback = (
   </div>
 );
 
-export default function AdminUsersPage() {
+export default memo(function AdminUsersPage() {
   return (
     <Suspense fallback={adminUsersSuspenseFallback}>
       <AdminUsersContent />
     </Suspense>
   );
-}
+});

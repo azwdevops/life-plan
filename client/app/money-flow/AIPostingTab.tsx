@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, memo } from "react";
 import { useSpeechDictation } from "@/lib/hooks/use-speech-dictation";
 import { Dialog } from "@/components/Dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -27,7 +27,7 @@ function todayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-export function AIPostingTab() {
+export const AIPostingTab = memo(function AIPostingTab() {
   const { data: ledgers = [], isLoading: ledgersLoading, refetch: refetchLedgers } = useLedgers();
   const { data: groups = [] } = useLedgerGroups();
   const { data: parentGroups = [] } = useParentLedgerGroups();
@@ -906,4 +906,4 @@ export function AIPostingTab() {
       </Dialog>
     </div>
   );
-}
+});

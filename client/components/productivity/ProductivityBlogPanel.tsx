@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -322,7 +323,7 @@ function CategoryPicker({
   );
 }
 
-export function ProductivityBlogPanel() {
+export const ProductivityBlogPanel = memo(function ProductivityBlogPanel() {
   const { token } = useAuth();
   const [categories, setCategories] = useState<string[]>([]);
 
@@ -804,4 +805,4 @@ export function ProductivityBlogPanel() {
       </Dialog>
     </div>
   );
-}
+});

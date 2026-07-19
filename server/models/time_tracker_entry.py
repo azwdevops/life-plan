@@ -34,6 +34,21 @@ class TimeTrackerEntry(Base):
     subject_name = Column(String(512), nullable=False)
     parent_goal_id = Column(String(512), nullable=True)
     parent_goal_name = Column(String(512), nullable=True)
+    # Real FKs, backfilled from subject_name/kind (see
+    # api/v1/endpoints/time_tracker_subjects.py). Nullable/additive alongside
+    # the legacy subject_id/subject_name strings above, not a replacement.
+    goal_id = Column(
+        Integer,
+        ForeignKey("time_tracker_goals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = Column(
+        Integer,
+        ForeignKey("time_tracker_projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     description = Column(Text, nullable=False)
     started_at = Column(DateTime(timezone=True), nullable=False, index=True)
     ended_at = Column(DateTime(timezone=True), nullable=False)

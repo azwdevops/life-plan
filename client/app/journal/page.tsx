@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
@@ -854,10 +854,10 @@ const journalSuspenseFallback = (
   </div>
 );
 
-export default function JournalPage() {
+export default memo(function JournalPage() {
   return (
     <Suspense fallback={journalSuspenseFallback}>
       <JournalContent />
     </Suspense>
   );
-}
+});

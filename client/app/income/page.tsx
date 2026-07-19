@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
@@ -1243,11 +1243,10 @@ const incomeSuspenseFallback = (
   </div>
 );
 
-export default function IncomePage() {
+export default memo(function IncomePage() {
   return (
     <Suspense fallback={incomeSuspenseFallback}>
       <IncomeContent />
     </Suspense>
   );
-}
-
+});

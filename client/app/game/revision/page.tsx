@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
@@ -22,7 +22,7 @@ import {
   createSessionId,
 } from "./constants";
 
-export default function RevisionListPage() {
+export default memo(function RevisionListPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -237,4 +237,4 @@ export default function RevisionListPage() {
       </main>
     </div>
   );
-}
+});

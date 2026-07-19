@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
@@ -1630,10 +1630,10 @@ const loansSuspenseFallback = (
   </div>
 );
 
-export default function LoansPage() {
+export default memo(function LoansPage() {
   return (
     <Suspense fallback={loansSuspenseFallback}>
       <LoansContent />
     </Suspense>
   );
-}
+});

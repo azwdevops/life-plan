@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bar,
@@ -1953,11 +1953,10 @@ const exerciseSuspenseFallback = (
   </div>
 );
 
-export default function ExercisePage() {
+export default memo(function ExercisePage() {
   return (
     <Suspense fallback={exerciseSuspenseFallback}>
       <ExerciseContent />
     </Suspense>
   );
-}
-
+});

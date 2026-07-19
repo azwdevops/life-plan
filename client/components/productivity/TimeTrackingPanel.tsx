@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -9,6 +10,7 @@ import {
   useState,
 } from "react";
 import { Dialog } from "@/components/Dialog";
+import { RightDrawer } from "@/components/RightDrawer";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
@@ -26,6 +28,20 @@ import {
   listTimeEntries,
   updateTimeEntry,
 } from "@/lib/api/time-entries";
+import {
+  type TimeTrackerGoal,
+  type TimeTrackerProject,
+} from "@/lib/time-tracker-storage";
+import {
+  useTimeTrackerGoals,
+  useTimeTrackerProjects,
+  useSyncTimeTrackerSubjectsFromServer,
+  useDeleteTimeTrackerGoalFromCache,
+  useDeleteTimeTrackerProjectFromCache,
+} from "@/lib/hooks/use-time-tracker-subjects";
+import { CreateGoalModal } from "@/components/time-tracker/CreateGoalModal";
+import { CreateProjectModal } from "@/components/time-tracker/CreateProjectModal";
+import { backfillTimeTrackerSubjects } from "@/lib/api/time-tracker-subjects";
 import { TimeTrackingCharts } from "@/components/productivity/TimeTrackingCharts";
 
 function IconPlay({ className }: { className?: string }) {
@@ -51,6 +67,57 @@ function IconRefresh({ className }: { className?: string }) {
         strokeLinejoin="round"
         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
       />
+    </svg>
+  );
+}
+
+function IconTarget({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconFolder({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+      />
+    </svg>
+  );
+}
+
+function IconPlus({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
     </svg>
   );
 }
@@ -145,11 +212,15 @@ function TimeEntryRowMenu({
     if (!el) return;
     const r = el.getBoundingClientRect();
     const gapBelowButton = 4;
-    const shiftUpPx = 52;
-    const shiftLeftPx = 36;
+    // Matches biz-poa's DropdownMenu `offset={{x,y}}` convention: negative
+    // x/y nudge the menu left/up from its default right-aligned, gap-below
+    // position; positive would nudge it right/down. Larger than
+    // SubjectItemMenu's offset because this trigger sits at the edge of a
+    // table row.
+    const offset = { x: -36, y: -52 };
     setMenuFixed({
-      top: Math.max(8, r.bottom + gapBelowButton - shiftUpPx),
-      right: window.innerWidth - r.right + shiftLeftPx,
+      top: Math.max(8, r.bottom + gapBelowButton + offset.y),
+      right: window.innerWidth - r.right - offset.x,
     });
   }, []);
 
@@ -225,6 +296,113 @@ function TimeEntryRowMenu({
               }}
             >
               Duplicate
+            </button>
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+              onClick={() => {
+                setOpen(false);
+                onDeleteClick();
+              }}
+            >
+              Delete
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function SubjectItemMenu({
+  onEdit,
+  onDeleteClick,
+}: {
+  onEdit: () => void;
+  onDeleteClick: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuFixed, setMenuFixed] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const el = buttonRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const gapBelowButton = 4;
+    // Matches biz-poa's DropdownMenu `offset={{x,y}}` convention: negative
+    // x/y nudge the menu left/up from its default right-aligned, gap-below
+    // position; positive would nudge it right/down.
+    const offset = { x: -16, y: -44 };
+    setMenuFixed({
+      top: r.bottom + gapBelowButton + offset.y,
+      right: window.innerWidth - r.right - offset.x,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuFixed(null);
+      return;
+    }
+    updateMenuPosition();
+    const onScrollOrResize = () => updateMenuPosition();
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [open, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="flex justify-end" ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="More actions"
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 17 17" fill="currentColor" aria-hidden>
+          <path d="M16 2v2h-11v-2h11zM5 9h11v-2h-11v2zM5 14h11v-2h-11v2zM2 2c-0.552 0-1 0.447-1 1s0.448 1 1 1 1-0.447 1-1-0.448-1-1-1zM2 7c-0.552 0-1 0.447-1 1s0.448 1 1 1 1-0.447 1-1-0.448-1-1-1zM2 12c-0.552 0-1 0.447-1 1s0.448 1 1 1 1-0.447 1-1-0.448-1-1-1z" />
+        </svg>
+      </button>
+      {open && menuFixed ? (
+        <ul
+          className="fixed z-[70] min-w-32 rounded-lg border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
+          style={{ top: menuFixed.top, right: menuFixed.right }}
+          role="menu"
+        >
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full px-3 py-2 text-left text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+            >
+              Edit
             </button>
           </li>
           <li role="none">
@@ -397,7 +575,277 @@ function mergeOlderChunk(
   );
 }
 
-export function TimeTrackingPanel() {
+function totalMsForSubject(
+  entries: TimeTrackerEntry[],
+  kind: TimeTrackerKind,
+  id: string,
+  name: string
+): number {
+  return entries
+    .filter(
+      (e) =>
+        e.kind === kind &&
+        (e.subjectId === id ||
+          e.subjectName.toLowerCase() === name.toLowerCase())
+    )
+    .reduce((sum, e) => sum + e.durationMs, 0);
+}
+
+function SubjectSidePanel({
+  open,
+  kind,
+  entries,
+  onClose,
+  onStartTracking,
+}: {
+  open: boolean;
+  kind: TimeTrackerKind;
+  entries: TimeTrackerEntry[];
+  onClose: () => void;
+  onStartTracking: (
+    id: string,
+    name: string,
+    parentGoalId: string | null,
+    parentGoalName: string | null
+  ) => void;
+}) {
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<
+    TimeTrackerGoal | TimeTrackerProject | null
+  >(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    TimeTrackerGoal | TimeTrackerProject | null
+  >(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchKind, setSearchKind] = useState(kind);
+  const { token } = useAuth();
+  const goalsQuery = useTimeTrackerGoals();
+  const projectsQuery = useTimeTrackerProjects();
+  const syncFromServer = useSyncTimeTrackerSubjectsFromServer();
+  const deleteGoalFromCache = useDeleteTimeTrackerGoalFromCache();
+  const deleteProjectFromCache = useDeleteTimeTrackerProjectFromCache();
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const goals = goalsQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
+
+  const closeSubjectModal = useCallback(() => {
+    setCreateModalOpen(false);
+    setEditTarget(null);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      if (kind === "goal") {
+        deleteGoalFromCache(deleteTarget.id);
+      } else {
+        deleteProjectFromCache(deleteTarget.id);
+      }
+      setDeleteTarget(null);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [deleteTarget, kind, deleteGoalFromCache, deleteProjectFromCache]);
+
+  if (kind !== searchKind) {
+    setSearchKind(kind);
+    setSearch("");
+  }
+
+  const handleRefresh = useCallback(async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      if (token) {
+        const result = await syncFromServer(token);
+        if (result.goalsAdded > 0 || result.projectsAdded > 0) {
+          setSyncMessage(
+            `Imported ${result.goalsAdded} goal(s), ${result.projectsAdded} project(s) from the server.`
+          );
+        }
+      }
+      await (kind === "goal" ? goalsQuery.refetch() : projectsQuery.refetch());
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setSyncing(false);
+    }
+  }, [token, syncFromServer, kind, goalsQuery, projectsQuery]);
+
+  const items = (
+    kind === "goal"
+      ? [...goals].sort((a, b) => a.name.localeCompare(b.name))
+      : [...projects].sort((a, b) => a.name.localeCompare(b.name))
+  ).filter((item) =>
+    item.name.toLowerCase().includes(search.trim().toLowerCase())
+  );
+
+  return (
+    <>
+      <RightDrawer
+        open={open}
+        onClose={onClose}
+        title={kind === "goal" ? "Goals" : "Projects"}
+        width="xl"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={syncing}
+              aria-label={kind === "goal" ? "Refresh goals" : "Refresh projects"}
+              title="Refresh (also pulls in goals/projects created server-side)"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            >
+              <IconRefresh className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+            </button>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Search ${kind === "goal" ? "goals" : "projects"}…`}
+              aria-label={`Search ${kind === "goal" ? "goals" : "projects"}`}
+              className="w-full min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setEditTarget(null);
+                setCreateModalOpen(true);
+              }}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            >
+              <IconPlus className="h-4 w-4" />
+              {kind === "goal" ? "Add goal" : "Add project"}
+            </button>
+          </>
+        }
+      >
+      {syncMessage ? (
+        <p className="mb-2 rounded-lg bg-blue-50 p-2 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+          {syncMessage}
+        </p>
+      ) : null}
+      {items.length === 0 ? (
+        <p className="p-2 text-sm text-zinc-500 dark:text-zinc-400">
+          {search.trim()
+            ? `No ${kind === "goal" ? "goals" : "projects"} match "${search.trim()}".`
+            : `No ${kind === "goal" ? "goals" : "projects"} yet.`}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {items.map((item) => {
+            const parentGoalId =
+              kind === "project" ? (item as TimeTrackerProject).goalId : null;
+            const parentGoalName = parentGoalId
+              ? goals.find((g) => g.id === parentGoalId)?.name ?? null
+              : null;
+            const ms = totalMsForSubject(entries, kind, item.id, item.name);
+            return (
+              <li
+                key={item.id}
+                className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">
+                    {item.name}
+                  </p>
+                  <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    {parentGoalName ? `${parentGoalName} · ` : ""}
+                    {formatDurationMs(ms)} tracked
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onStartTracking(item.id, item.name, parentGoalId, parentGoalName)
+                  }
+                  aria-label={`Start tracking ${item.name}`}
+                  title="Start tracking"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  <IconPlay className="h-4 w-4" />
+                </button>
+                <SubjectItemMenu
+                  onEdit={() => {
+                    setEditTarget(item);
+                    setCreateModalOpen(true);
+                  }}
+                  onDeleteClick={() => setDeleteTarget(item)}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      </RightDrawer>
+
+      {kind === "goal" ? (
+        <CreateGoalModal
+          open={createModalOpen}
+          initialName=""
+          goals={goals}
+          editTarget={editTarget as TimeTrackerGoal | null}
+          onClose={closeSubjectModal}
+          onCreated={closeSubjectModal}
+          stackLevel={1}
+        />
+      ) : (
+        <CreateProjectModal
+          open={createModalOpen}
+          initialName=""
+          goals={goals}
+          projects={projects}
+          refreshGoals={() => {}}
+          editTarget={editTarget as TimeTrackerProject | null}
+          onClose={closeSubjectModal}
+          onCreated={closeSubjectModal}
+          stackLevel={1}
+        />
+      )}
+
+      <Dialog
+        isOpen={deleteTarget != null}
+        onClose={() => {
+          if (!deleteBusy) setDeleteTarget(null);
+        }}
+        title={kind === "goal" ? "Delete goal" : "Delete project"}
+        size="sm"
+      >
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Delete &quot;{deleteTarget?.name}&quot; permanently? This cannot be
+          undone.
+          {kind === "goal"
+            ? " Projects under this goal will keep their own time entries but lose their link to it."
+            : ""}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={deleteBusy}
+            onClick={() => setDeleteTarget(null)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={deleteBusy}
+            onClick={confirmDelete}
+            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white dark:bg-red-600"
+          >
+            Delete
+          </button>
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
+export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
   const { token } = useAuth();
   const [entries, setEntries] = useState<TimeTrackerEntry[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -415,6 +863,59 @@ export function TimeTrackingPanel() {
   );
   const [deleteTarget, setDeleteTarget] = useState<TimeTrackerEntry | null>(null);
   const [entryActionBusy, setEntryActionBusy] = useState(false);
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [sidePanelKind, setSidePanelKind] = useState<TimeTrackerKind>("goal");
+  // TEMPORARY: remove this button + handler once the goal/project FK backfill
+  // has been run successfully against production data.
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
+
+  const openSidePanel = useCallback((kind: TimeTrackerKind) => {
+    setSidePanelKind(kind);
+    setSidePanelOpen(true);
+  }, []);
+
+  const runBackfill = useCallback(async () => {
+    if (!token) return;
+    setBackfilling(true);
+    setBackfillMessage(null);
+    try {
+      const result = await backfillTimeTrackerSubjects(token);
+      setBackfillMessage(
+        `Created ${result.goals_created} goal(s), ${result.projects_created} project(s); linked ${result.entries_linked} entr${
+          result.entries_linked === 1 ? "y" : "ies"
+        }, ${result.projects_linked_to_goal} project(s) to a goal.`
+      );
+    } catch (err) {
+      setBackfillMessage(
+        err instanceof Error ? err.message : "Backfill failed"
+      );
+    } finally {
+      setBackfilling(false);
+    }
+  }, [token]);
+
+  const startTrackingSubject = useCallback(
+    (
+      kind: TimeTrackerKind,
+      id: string,
+      name: string,
+      parentGoalId: string | null,
+      parentGoalName: string | null
+    ) => {
+      emitTrackerPreset({
+        kind,
+        subjectId: id,
+        subjectName: name,
+        autoStart: true,
+        description: "",
+        ...(kind === "project" ? { parentGoalId, parentGoalName } : {}),
+      });
+      setSidePanelOpen(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    []
+  );
 
   const dayBuckets = useMemo(
     () => bucketEntriesByStartedDay(entries, new Date()),
@@ -583,50 +1084,82 @@ export function TimeTrackingPanel() {
               <HeaderTimeTracker inline />
             </section>
           ) : null}
-          <div className="flex flex-wrap items-center gap-2 gap-y-2">
-            <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-              Tracked time
-            </h1>
-            <button
-              type="button"
-              disabled={!token || fetching}
-              onClick={() => void onRefreshFromServer()}
-              aria-label={
-                fetching ? "Refreshing time entries" : "Refresh time entries"
-              }
-              title="Refresh"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              <IconRefresh
-                className={`h-5 w-5 ${fetching ? "animate-spin" : ""}`}
-              />
-            </button>
-            {!token ? (
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Sign in to load entries from the server.
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            By day, then goal or project. Times are clock times for that day
-            only.
-          </p>
           {fetchError ? (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">
               {fetchError}
             </p>
           ) : null}
+          {backfillMessage ? (
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              {backfillMessage}
+            </p>
+          ) : null}
 
-          <TimeTrackingCharts entries={entries} />
+          <TimeTrackingCharts
+            entries={entries}
+            headerActions={
+              <div className="flex flex-wrap items-center gap-2 gap-y-2">
+                <button
+                  type="button"
+                  disabled={!token || fetching}
+                  onClick={() => void onRefreshFromServer()}
+                  aria-label={
+                    fetching ? "Refreshing time entries" : "Refresh time entries"
+                  }
+                  title="Refresh"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  <IconRefresh
+                    className={`h-5 w-5 ${fetching ? "animate-spin" : ""}`}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openSidePanel("goal")}
+                  aria-label="View goals"
+                  title="Goals"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  <IconTarget className="h-4 w-4" />
+                  Goals
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openSidePanel("project")}
+                  aria-label="View projects"
+                  title="Projects"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  <IconFolder className="h-4 w-4" />
+                  Projects
+                </button>
+                {/* TEMPORARY: remove once the goal/project FK backfill has been run successfully. */}
+                <button
+                  type="button"
+                  disabled={!token || backfilling}
+                  onClick={() => void runBackfill()}
+                  title="One-time: derive Goal/Project rows from existing time entries and link them"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                >
+                  {backfilling ? "Backfilling…" : "Backfill goals/projects"}
+                </button>
+                {!token ? (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Sign in to load entries from the server.
+                  </span>
+                ) : null}
+              </div>
+            }
+          />
 
           {entries.length === 0 ? (
-            <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
               No entries yet. Start a goal or project with the time tracker, then stop to
               record a session.
             </p>
           ) : (
             <>
-            <div className="mt-8 flex min-h-0 flex-1 flex-col gap-10">
+            <div className="mt-6 flex min-h-0 flex-1 flex-col gap-10">
               {dayBuckets.map((day) => {
                 const subjectGroups = groupDayItemsBySubject(day.items);
                 const projectGroups = subjectGroups.filter(
@@ -986,6 +1519,22 @@ export function TimeTrackingPanel() {
             </Dialog>
             </>
           )}
+
+          <SubjectSidePanel
+            open={sidePanelOpen}
+            kind={sidePanelKind}
+            entries={entries}
+            onClose={() => setSidePanelOpen(false)}
+            onStartTracking={(id, name, parentGoalId, parentGoalName) =>
+              startTrackingSubject(
+                sidePanelKind,
+                id,
+                name,
+                parentGoalId,
+                parentGoalName
+              )
+            }
+          />
         </div>
   );
-}
+});

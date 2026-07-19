@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
@@ -1282,10 +1282,10 @@ const shortTermLiabilitiesSuspenseFallback = (
   </div>
 );
 
-export default function ShortTermLiabilitiesPage() {
+export default memo(function ShortTermLiabilitiesPage() {
   return (
     <Suspense fallback={shortTermLiabilitiesSuspenseFallback}>
       <ShortTermLiabilitiesContent />
     </Suspense>
   );
-}
+});

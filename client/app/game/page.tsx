@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useMemo, useEffect } from "react";
+import { Suspense, useState, useMemo, useEffect, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -2393,7 +2393,7 @@ const gamePageSuspenseFallback = (
   </div>
 );
 
-export default function GamePage() {
+export default memo(function GamePage() {
   return (
     <DialogProvider>
       <Suspense fallback={gamePageSuspenseFallback}>
@@ -2401,4 +2401,4 @@ export default function GamePage() {
       </Suspense>
     </DialogProvider>
   );
-}
+});

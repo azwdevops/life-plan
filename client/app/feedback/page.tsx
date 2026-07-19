@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -401,10 +401,10 @@ const feedbackSuspenseFallback = (
   </div>
 );
 
-export default function FeedbackPage() {
+export default memo(function FeedbackPage() {
   return (
     <Suspense fallback={feedbackSuspenseFallback}>
       <FeedbackContent />
     </Suspense>
   );
-}
+});

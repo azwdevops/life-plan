@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -316,10 +316,10 @@ const selfDiscoverySuspenseFallback = (
   </div>
 );
 
-export default function SelfDiscoveryListPage() {
+export default memo(function SelfDiscoveryListPage() {
   return (
     <Suspense fallback={selfDiscoverySuspenseFallback}>
       <SelfDiscoveryListContent />
     </Suspense>
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -1056,10 +1056,10 @@ const transfersSuspenseFallback = (
   </div>
 );
 
-export default function TransfersPage() {
+export default memo(function TransfersPage() {
   return (
     <Suspense fallback={transfersSuspenseFallback}>
       <TransfersContent />
     </Suspense>
   );
-}
+});

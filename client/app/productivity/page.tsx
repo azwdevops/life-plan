@@ -67,55 +67,7 @@ function ProductivityPageInner() {
 
   return (
     <div className="flex min-h-screen min-w-0 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <Header
-        onMenuClick={toggleSidebar}
-        isSidebarOpen={isSidebarOpen}
-        centerContent={
-          <div className="flex min-w-0 max-w-full flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
-            <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
-              Productivity
-            </h1>
-            <label className="sr-only" htmlFor="productivity-tab-select">
-              Productivity section
-            </label>
-            <select
-              id="productivity-tab-select"
-              value={tab}
-              onChange={(e) => {
-                setTab(e.target.value as ProductivityTab);
-              }}
-              className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm md:hidden dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            >
-              {TAB_CONFIG.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <div className="hidden gap-2 md:flex" role="tablist" aria-label="Productivity sections">
-              {TAB_CONFIG.map((t) => {
-                const selected = t.id === tab;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    onClick={() => setTab(t.id)}
-                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                      selected
-                        ? "bg-blue-600 text-white dark:bg-blue-500"
-                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        }
-      />
+      <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -127,8 +79,50 @@ function ProductivityPageInner() {
             isSidebarOpen && isAuthenticated ? "lg:pl-64" : ""
           }`}
         >
+          <div className="border-b border-zinc-200/80 bg-white py-3 dark:border-zinc-700/80 dark:bg-zinc-900">
+            <div className="px-4 md:hidden">
+              <label className="sr-only" htmlFor="productivity-tab-select">
+                Productivity section
+              </label>
+              <select
+                id="productivity-tab-select"
+                value={tab}
+                onChange={(e) => {
+                  setTab(e.target.value as ProductivityTab);
+                }}
+                className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                {TAB_CONFIG.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="hidden w-full md:flex" role="tablist" aria-label="Productivity sections">
+              {TAB_CONFIG.map((t) => {
+                const selected = t.id === tab;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setTab(t.id)}
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${
+                      selected
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "bg-white text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div
-            className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-6"
+            className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-4"
             role="tabpanel"
           >
             {tab === "tracking" ? (

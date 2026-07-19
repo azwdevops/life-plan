@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import {
   Bar,
   BarChart,
@@ -73,15 +75,19 @@ function formatAxisDate(iso: string): string {
   return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function formatWeekRangeLabel(startIso: string): string {
-  const endIso = addCalendarDays(startIso, 6);
-  return `${formatAxisDate(startIso)} – ${formatAxisDate(endIso)}`;
+function isoToLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
-function formatMonthKey(mk: string): string {
+function monthKeyToDate(mk: string): Date {
+  if (!mk) return new Date();
   const [y, m] = mk.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return new Date(y, m - 1, 1);
+}
+
+function dateToMonthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function formatMinutesAxis(totalMinutes: number): string {
@@ -195,19 +201,12 @@ function deriveDataBounds(
   return { first: keys[0], last: keys[keys.length - 1] };
 }
 
-function deriveWeekOptions(
-  dailyMap: Map<string, DailyPoint>
-): { startIso: string; label: string }[] {
+function deriveWeekOptions(dailyMap: Map<string, DailyPoint>): string[] {
   const set = new Set<string>();
   for (const date of dailyMap.keys()) {
     set.add(weekStartMondayLocalFromDayIso(date));
   }
-  return Array.from(set)
-    .sort()
-    .map((startIso) => ({
-      startIso,
-      label: formatWeekRangeLabel(startIso),
-    }));
+  return Array.from(set).sort();
 }
 
 function fillRangeDaily(
@@ -288,9 +287,15 @@ function aggregateProjectsForDay(
   return Array.from(map.values()).sort((a, b) => b.totalMs - a.totalMs);
 }
 
-export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] }) {
+export function TimeTrackingCharts({
+  entries,
+  headerActions,
+}: {
+  entries: TimeTrackerEntry[];
+  headerActions?: ReactNode;
+}) {
   const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
+  const [selectedWeekStart, setSelectedWeekStart] = useState<Date | null>(null);
   const [selectedMonthKey, setSelectedMonthKey] = useState("");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -308,9 +313,8 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
   const filteredDaily = useMemo(() => {
     if (dailyMap.size === 0) return [];
     if (periodMode === "week") {
-      if (weekOptions.length === 0) return [];
-      const idx = Math.min(selectedWeekIndex, weekOptions.length - 1);
-      const weekStartIso = weekOptions[idx]!.startIso;
+      if (!selectedWeekStart) return [];
+      const weekStartIso = localISODate(selectedWeekStart);
       return getFilteredDaily(
         periodMode,
         weekStartIso,
@@ -331,11 +335,10 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
   }, [
     dailyMap,
     periodMode,
-    selectedWeekIndex,
+    selectedWeekStart,
     selectedMonthKey,
     customStart,
     customEnd,
-    weekOptions,
   ]);
 
   const lineSeries = useMemo(
@@ -370,18 +373,10 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
   }, [monthKeys]);
 
   useEffect(() => {
-    if (weekOptions.length === 0) {
-      weekPickerInitRef.current = false;
-      return;
-    }
-    if (!weekPickerInitRef.current) {
-      setSelectedWeekIndex(weekOptions.length - 1);
-      weekPickerInitRef.current = true;
-    } else {
-      setSelectedWeekIndex((i) =>
-        i >= weekOptions.length ? weekOptions.length - 1 : i
-      );
-    }
+    if (weekPickerInitRef.current) return;
+    if (weekOptions.length === 0) return;
+    setSelectedWeekStart(isoToLocalDate(weekOptions[weekOptions.length - 1]!));
+    weekPickerInitRef.current = true;
   }, [weekOptions]);
 
   useEffect(() => {
@@ -421,117 +416,115 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
     }
   }, [lineSeries, selectedDayIso]);
 
-  if (dailyMap.size === 0) return null;
+  const hasData = dailyMap.size > 0;
 
   return (
-    <section className="mt-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-        Activity over period
-      </h2>
-      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-        Daily tracked time across the selected period.
-      </p>
+    <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      {!hasData && headerActions}
 
-      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              ["week", "Week"],
-              ["month", "Month"],
-              ["custom", "Custom dates"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPeriodMode(value)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                periodMode === value
-                  ? "bg-blue-600 text-white dark:bg-blue-500"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      {hasData && (
+        <>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPeriodMode("week")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              periodMode === "week"
+                ? "bg-blue-600 text-white dark:bg-blue-500"
+                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            }`}
+          >
+            Week
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodMode("month")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              periodMode === "month"
+                ? "bg-blue-600 text-white dark:bg-blue-500"
+                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            }`}
+          >
+            Month
+          </button>
+
+          {periodMode === "month" && (
+            <DatePicker
+              selected={monthKeyToDate(
+                selectedMonthKey || monthKeys[monthKeys.length - 1] || ""
+              )}
+              onChange={(date: Date | null) => {
+                if (date) setSelectedMonthKey(dateToMonthKey(date));
+              }}
+              dateFormat="MMMM yyyy"
+              showMonthYearPicker
+              aria-label="Month"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              popperPlacement="bottom-start"
+            />
+          )}
+
+          <button
+            type="button"
+            onClick={() => setPeriodMode("custom")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              periodMode === "custom"
+                ? "bg-blue-600 text-white dark:bg-blue-500"
+                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            }`}
+          >
+            Custom dates
+          </button>
+
+          {periodMode === "week" && (
+            <DatePicker
+              selected={selectedWeekStart}
+              onChange={(date: Date | null) => {
+                if (date) setSelectedWeekStart(date);
+              }}
+              showWeekPicker
+              calendarStartDay={1}
+              dateFormat="'Week of' MMM d, yyyy"
+              aria-label="Calendar week"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              popperPlacement="bottom-start"
+            />
+          )}
+
+          {periodMode === "custom" && (
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                  From
+                </span>
+                <input
+                  type="date"
+                  value={customStart}
+                  min={dataBounds?.first}
+                  max={localISODate(new Date())}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                  To
+                </span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  min={dataBounds?.first}
+                  max={localISODate(new Date())}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
-        {periodMode === "week" && (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">
-              Calendar week
-            </span>
-            <select
-              value={
-                weekOptions.length === 0
-                  ? 0
-                  : Math.min(selectedWeekIndex, weekOptions.length - 1)
-              }
-              onChange={(e) => setSelectedWeekIndex(Number(e.target.value))}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-            >
-              {weekOptions.map((w, i) => (
-                <option key={w.startIso} value={i}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {periodMode === "month" && (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">
-              Month
-            </span>
-            <select
-              value={
-                monthKeys.includes(selectedMonthKey)
-                  ? selectedMonthKey
-                  : (monthKeys[monthKeys.length - 1] ?? "")
-              }
-              onChange={(e) => setSelectedMonthKey(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-            >
-              {monthKeys.map((mk) => (
-                <option key={mk} value={mk}>
-                  {formatMonthKey(mk)}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {periodMode === "custom" && (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-700 dark:text-zinc-300">
-                From
-              </span>
-              <input
-                type="date"
-                value={customStart}
-                min={dataBounds?.first}
-                max={localISODate(new Date())}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-700 dark:text-zinc-300">
-                To
-              </span>
-              <input
-                type="date"
-                value={customEnd}
-                min={dataBounds?.first}
-                max={localISODate(new Date())}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-              />
-            </label>
-          </div>
-        )}
+        {headerActions}
       </div>
 
       {periodSummaryLabel && (
@@ -552,7 +545,7 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
             {lineSeries.length === 0 ? (
               <p className="text-sm text-zinc-500">No days in range.</p>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" debounce={150}>
                 <LineChart
                   data={lineSeries}
                   margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
@@ -625,7 +618,7 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
                 No time was tracked on this day.
               </p>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" debounce={150}>
                 <BarChart
                   data={selectedDayProjectSeries}
                   margin={{ top: 12, right: 8, left: 0, bottom: 8 }}
@@ -674,6 +667,8 @@ export function TimeTrackingCharts({ entries }: { entries: TimeTrackerEntry[] })
           </div>
         </div>
       </div>
+        </>
+      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Dialog } from "@/components/Dialog";
@@ -60,7 +60,7 @@ function formatAxisDate(iso: string): string {
 
 const CHART_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#db2777", "#4f46e5"];
 
-export function DisciplinePanel() {
+export const DisciplinePanel = memo(function DisciplinePanel() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const [store, setStore] = useState<DisciplineStore>(() =>
@@ -711,4 +711,4 @@ export function DisciplinePanel() {
       </Dialog>
     </div>
   );
-}
+});

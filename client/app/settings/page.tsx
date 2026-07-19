@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -76,10 +76,10 @@ const settingsSuspenseFallback = (
   </div>
 );
 
-export default function SettingsPage() {
+export default memo(function SettingsPage() {
   return (
     <Suspense fallback={settingsSuspenseFallback}>
       <SettingsContent />
     </Suspense>
   );
-}
+});

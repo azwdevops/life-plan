@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import {
   getSharesFeasibilityWorkspace,
   putSharesFeasibilityWorkspace,
@@ -42,7 +42,7 @@ function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function SharesFeasibilityTab() {
+export const SharesFeasibilityTab = memo(function SharesFeasibilityTab() {
   const { token } = useAuth();
   const [state, setState] = useState<SharesFeasibilityState>(createDefaultSharesFeasibilityState);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
@@ -540,4 +540,4 @@ export function SharesFeasibilityTab() {
       </div>
     </div>
   );
-}
+});

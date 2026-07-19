@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { Dialog } from "@/components/Dialog";
 import { DropdownMenu } from "@/components/DropdownMenu";
 import { useAuth } from "@/lib/hooks/use-auth";
@@ -66,7 +66,7 @@ type ItemDialogMode = "add" | "edit";
 type ProjectDialogMode = "create" | "edit";
 type DestructiveConfirmKind = "delete-project" | "reset-worksheet";
 
-export function FeasibilityAnalysisTab() {
+export const FeasibilityAnalysisTab = memo(function FeasibilityAnalysisTab() {
   const { token } = useAuth();
   const [projects, setProjects] = useState<FeasibilityProject[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -934,4 +934,4 @@ export function FeasibilityAnalysisTab() {
       </Dialog>
     </div>
   );
-}
+});

@@ -16,6 +16,7 @@ from api.v1.endpoints import (
     shares_feasibility,
     resumes,
     time_entries,
+    time_tracker_subjects,
     reading_library,
     productivity_blog,
     ai_schedule,
@@ -44,6 +45,11 @@ api_router.include_router(feasibility_projects.router, prefix="/investments", ta
 api_router.include_router(shares_feasibility.router, prefix="/investments", tags=["investments"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(time_entries.router, prefix="/time-entries", tags=["time-entries"])
+api_router.include_router(
+    time_tracker_subjects.router,
+    prefix="/time-tracker-subjects",
+    tags=["time-tracker-subjects"],
+)
 api_router.include_router(reading_library.router, prefix="/reading-library", tags=["reading-library"])
 api_router.include_router(
     productivity_blog.router,

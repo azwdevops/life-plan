@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, memo } from "react";
 import { Dialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/hooks/use-auth";
 import {
@@ -39,7 +39,7 @@ function LocationIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-export function PlotProspectsTab() {
+export const PlotProspectsTab = memo(function PlotProspectsTab() {
   const { token } = useAuth();
   const [stages, setStages] = useState<PlotProspectStage[]>([]);
   const [newStageName, setNewStageName] = useState("");
@@ -731,4 +731,4 @@ export function PlotProspectsTab() {
       </Dialog>
     </div>
   );
-}
+});

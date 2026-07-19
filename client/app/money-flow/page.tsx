@@ -49,14 +49,15 @@ function MoneyFlowContent() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
-      <Header
-        onMenuClick={toggleSidebar}
-        isSidebarOpen={isSidebarOpen}
-        centerContent={
-          <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-3 md:overflow-x-auto md:whitespace-nowrap">
-            <h1 className="hidden shrink-0 text-base font-bold text-zinc-900 dark:text-zinc-100 md:block">
-              Money Flow
-            </h1>
+      <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} isLoggedIn={isAuthenticated} />
+      <main
+        className={`flex-1 transition-all duration-300 ${
+          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+        }`}
+      >
+        <div className="border-b border-zinc-200/80 bg-white py-3 dark:border-zinc-700/80 dark:bg-zinc-900">
+          <div className="px-4 md:hidden">
             <label className="sr-only" htmlFor="money-flow-tab-select">
               Money flow section
             </label>
@@ -67,7 +68,7 @@ function MoneyFlowContent() {
                 const next = e.target.value as MoneyFlowTab;
                 router.replace(`/money-flow?tab=${next}`);
               }}
-              className="md:hidden w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             >
               {TAB_CONFIG.map((tab) => (
                 <option key={tab.id} value={tab.id}>
@@ -75,34 +76,27 @@ function MoneyFlowContent() {
                 </option>
               ))}
             </select>
-            <div className="hidden gap-2 md:flex">
-              {TAB_CONFIG.map((tab) => {
-                const selected = tab.id === activeTab;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => router.replace(`/money-flow?tab=${tab.id}`)}
-                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                      selected
-                        ? "bg-blue-600 text-white dark:bg-blue-500"
-                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
-        }
-      />
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} isLoggedIn={isAuthenticated} />
-      <main
-        className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
-        }`}
-      >
+          <div className="hidden w-full md:flex">
+            {TAB_CONFIG.map((tab) => {
+              const selected = tab.id === activeTab;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => router.replace(`/money-flow?tab=${tab.id}`)}
+                  className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${
+                    selected
+                      ? "bg-blue-600 text-white dark:bg-blue-500"
+                      : "bg-white text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {activeTab === "expenses" && <ExpensesPage />}
         {activeTab === "income" && <IncomePage />}
         {activeTab === "transfers" && <TransfersPage />}

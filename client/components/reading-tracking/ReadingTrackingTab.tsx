@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { Dialog } from "@/components/Dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { getReadingLibrary, putReadingLibrary } from "@/lib/api/reading-library";
@@ -175,7 +175,7 @@ type ReadingTrackingTabProps = {
   embedded?: boolean;
 };
 
-export function ReadingTrackingTab({ embedded = true }: ReadingTrackingTabProps) {
+export const ReadingTrackingTab = memo(function ReadingTrackingTab({ embedded = true }: ReadingTrackingTabProps) {
   const [library, setLibrary] = useState<ReadingLibrary>({
     books: [],
     categories: [],
@@ -987,4 +987,4 @@ export function ReadingTrackingTab({ embedded = true }: ReadingTrackingTabProps)
       </Dialog>
     </div>
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, memo } from "react";
 import { useAuth } from "@/lib/hooks/use-auth";
 import {
   getAiScheduleJobStatus,
@@ -144,7 +144,7 @@ function readStoredPromptTestId(): string {
   }
 }
 
-export function AiSchedulePanel() {
+export const AiSchedulePanel = memo(function AiSchedulePanel() {
   const { token, user } = useAuth();
   const isAdmin = Boolean(user?.groups?.includes("admin"));
   const [stored, setStored] = useState<StoredAiDaySchedule | null>(null);
@@ -993,4 +993,4 @@ export function AiSchedulePanel() {
       ) : null}
     </div>
   );
-}
+});

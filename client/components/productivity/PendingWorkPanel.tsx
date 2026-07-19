@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import { createPortal } from "react-dom";
 import { Dialog } from "@/components/Dialog";
 import {
@@ -44,7 +44,7 @@ function IconPencil({ className }: { className?: string }) {
   );
 }
 
-export function PendingWorkPanel() {
+export const PendingWorkPanel = memo(function PendingWorkPanel() {
   const { token } = useAuth();
   const [store, setStore] = useState<PendingWorkStore>(() =>
     token ? createEmptyPendingWorkStore() : loadPendingWorkStore()
@@ -1191,4 +1191,4 @@ export function PendingWorkPanel() {
       </Dialog>
     </div>
   );
-}
+});

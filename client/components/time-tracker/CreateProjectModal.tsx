@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type TimeTrackerGoal,
   type TimeTrackerProject,
   newId,
-  saveProjects,
 } from "@/lib/time-tracker-storage";
+import {
+  useAddTimeTrackerProjectToCache,
+  useUpdateTimeTrackerProjectInCache,
+} from "@/lib/hooks/use-time-tracker-subjects";
+import { RightDrawer } from "@/components/RightDrawer";
 import { CreateGoalModal } from "./CreateGoalModal";
 import { SearchableSelectPicker } from "./SearchableSelectPicker";
 
@@ -19,6 +22,10 @@ type Props = {
   onClose: () => void;
   onCreated: (id: string, name: string) => void;
   refreshGoals: () => void;
+  /** When set, edits this project instead of creating a new one. */
+  editTarget?: TimeTrackerProject | null;
+  /** @default 0 */
+  stackLevel?: number;
 };
 
 export function CreateProjectModal({
@@ -29,12 +36,17 @@ export function CreateProjectModal({
   onClose,
   onCreated,
   refreshGoals,
+  editTarget = null,
+  stackLevel = 0,
 }: Props) {
   const [name, setName] = useState("");
   const [goalId, setGoalId] = useState<string>("");
   const [goalLabel, setGoalLabel] = useState("");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [goalModalInitial, setGoalModalInitial] = useState("");
+  const addProjectToCache = useAddTimeTrackerProjectToCache();
+  const updateProjectInCache = useUpdateTimeTrackerProjectInCache();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const goalPickerItems = useMemo(
     () =>
@@ -48,52 +60,62 @@ export function CreateProjectModal({
 
   useEffect(() => {
     if (open) {
-      setName(initialName);
-      setGoalId("");
-      setGoalLabel("");
+      setName(editTarget ? editTarget.name : initialName);
+      const targetGoalId = editTarget?.goalId ?? "";
+      setGoalId(targetGoalId);
+      setGoalLabel(
+        targetGoalId
+          ? goals.find((g) => g.id === targetGoalId)?.name ?? ""
+          : ""
+      );
       setGoalModalOpen(false);
       setGoalModalInitial("");
     }
-  }, [open, initialName]);
+  }, [open, initialName, editTarget, goals]);
 
-  if (!open) return null;
+  // RightDrawer stays mounted while closed, so native `autoFocus` (mount-time
+  // only) would fire while off-screen and scroll the page to it. Focus only
+  // when the drawer actually opens instead.
+  useEffect(() => {
+    if (open) nameInputRef.current?.focus();
+  }, [open]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const n = name.trim();
     if (!n) return;
-    if (projects.some((p) => p.name.toLowerCase() === n.toLowerCase())) {
+    if (
+      projects.some(
+        (p) =>
+          p.id !== editTarget?.id && p.name.toLowerCase() === n.toLowerCase()
+      )
+    ) {
       return;
     }
-    const id = newId();
     const gid = goalId === "" ? null : goalId;
-    const next: TimeTrackerProject[] = [
-      ...projects,
-      { id, name: n, goalId: gid },
-    ];
-    saveProjects(next);
-    onCreated(id, n);
+    if (editTarget) {
+      const project: TimeTrackerProject = { ...editTarget, name: n, goalId: gid };
+      updateProjectInCache(project);
+      onCreated(project.id, n);
+    } else {
+      const id = newId();
+      const project: TimeTrackerProject = { id, name: n, goalId: gid };
+      addProjectToCache(project);
+      onCreated(id, n);
+    }
     onClose();
   };
 
-  const projectOverlay = (
-    <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-project-title"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
-        <h2
-          id="create-project-title"
-          className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
-        >
-          New project
-        </h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+  return (
+    <>
+      <RightDrawer
+        open={open}
+        onClose={onClose}
+        title={editTarget ? "Edit project" : "New project"}
+        width="sm"
+        stackLevel={stackLevel}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
               htmlFor="create-project-name"
@@ -102,13 +124,13 @@ export function CreateProjectModal({
               Name
             </label>
             <input
+              ref={nameInputRef}
               id="create-project-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
               required
-              autoFocus
             />
           </div>
           <div>
@@ -157,19 +179,11 @@ export function CreateProjectModal({
               type="submit"
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
-              Save project
+              {editTarget ? "Save changes" : "Save project"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-
-  return (
-    <>
-      {typeof document !== "undefined"
-        ? createPortal(projectOverlay, document.body)
-        : null}
+      </RightDrawer>
 
       <CreateGoalModal
         open={goalModalOpen}
@@ -182,6 +196,7 @@ export function CreateProjectModal({
           setGoalLabel(newName);
           setGoalModalOpen(false);
         }}
+        stackLevel={stackLevel + 1}
       />
     </>
   );
