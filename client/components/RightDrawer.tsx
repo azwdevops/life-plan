@@ -12,7 +12,7 @@ interface RightDrawerProps {
   actions?: ReactNode;
   children: ReactNode;
   /** @default "sm" */
-  width?: "sm" | "md" | "lg" | "xl";
+  width?: "sm" | "md" | "lg" | "xl" | "full";
   /** Set to 1+ when this drawer can open on top of another already-open drawer, so z-index and Escape-to-close stack correctly. @default 0 */
   stackLevel?: number;
 }
@@ -22,6 +22,7 @@ const WIDTH_CLASSES: Record<NonNullable<RightDrawerProps["width"]>, string> = {
   md: "max-w-md",
   lg: "max-w-xl",
   xl: "max-w-2xl",
+  full: "",
 };
 
 /**

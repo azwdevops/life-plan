@@ -7,6 +7,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -17,6 +18,7 @@ import {
 import { Dialog } from "@/components/Dialog";
 import { FitnessProfileModal } from "@/components/FitnessProfileModal";
 import { Header } from "@/components/Header";
+import { RightDrawer } from "@/components/RightDrawer";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -31,7 +33,9 @@ import {
   distanceKmFromSpeed,
   fatEquivKgFromKcal,
   kcalRunningMassDistance,
+  stepsFromDistanceKm,
   KCAL_PER_KG_FAT_THEORY,
+  STEP_LENGTH_M,
 } from "@/lib/run-energy";
 import {
   clearActiveRun,
@@ -372,6 +376,7 @@ function toDateTimeLocalInputValue(d: Date): string {
 
 const CHART_AXIS = "#71717a";
 const CHART_LINE = "#2563eb";
+const CHART_STEPS_LINE = "#f59e0b";
 const CHART_GRID = "#d4d4d8";
 
 /** Profile default when `stats_refresh_interval_seconds` is unset (not stored). */
@@ -473,6 +478,7 @@ function ExerciseContent() {
   const [liveDistanceKm, setLiveDistanceKm] = useState(0);
   const [liveKcal, setLiveKcal] = useState(0);
   const [liveFatKg, setLiveFatKg] = useState(0);
+  const [showStepsPopout, setShowStepsPopout] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [discardRunError, setDiscardRunError] = useState<string | null>(null);
   const [deleteSavedSessionId, setDeleteSavedSessionId] = useState<number | null>(
@@ -517,11 +523,15 @@ function ExerciseContent() {
     const now = new Date();
     const wkStart = mondayOfContainingLocalDate(now);
     const wkEnd = addCalendarDays(wkStart, 6);
+    const todayIso = localISODate(now);
     const thisWeekSessions = runSessions.filter((r) => {
       const d = sessionLocalDate(r.created_at);
       return d >= wkStart && d <= wkEnd;
     }).length;
     const distanceKm = runSessions.reduce((s, r) => s + r.distance_km, 0);
+    const todayDistanceKm = runSessions
+      .filter((r) => sessionLocalDate(r.created_at) === todayIso)
+      .reduce((s, r) => s + r.distance_km, 0);
     const activeMinutes = runSessions.reduce(
       (s, r) => s + Math.floor(r.duration_seconds / 60),
       0
@@ -530,6 +540,7 @@ function ExerciseContent() {
     return {
       thisWeekSessions,
       distanceKm,
+      todaySteps: stepsFromDistanceKm(todayDistanceKm),
       activeMinutes,
       kcal,
     };
@@ -573,6 +584,7 @@ function ExerciseContent() {
       filteredDaily.map((d) => ({
         ...d,
         dayLabel: formatAxisDate(d.date),
+        steps: stepsFromDistanceKm(d.distanceKm),
       })),
     [filteredDaily]
   );
@@ -814,6 +826,13 @@ function ExerciseContent() {
       suffix: "",
     },
     {
+      key: "steps_today",
+      prefix: "Steps today",
+      value: totals ? totals.todaySteps.toLocaleString() : "-",
+      suffix: "",
+      title: `Estimated from today's distance, assuming a ${STEP_LENGTH_M}m step.`,
+    },
+    {
       key: "time",
       prefix: "Active time",
       value: totals ? formatMinutes(totals.activeMinutes) : "-",
@@ -963,6 +982,7 @@ function ExerciseContent() {
     setLiveDistanceKm(0);
     setLiveKcal(0);
     setLiveFatKg(0);
+    setShowStepsPopout(false);
     setRunSaveError(null);
   };
 
@@ -1102,12 +1122,12 @@ function ExerciseContent() {
               }`
         }
       >
-        <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
-          <div className="mb-4">
+        <div className="container mx-auto px-4 pb-8 pt-4 md:px-6 md:pb-12 md:pt-6">
+          <section className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                Exercise
-              </h1>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                Live run (constant speed)
+              </h2>
               <div className="flex flex-wrap items-center gap-2">
                 {token && (
                   <button
@@ -1130,12 +1150,6 @@ function ExerciseContent() {
                 </button>
               </div>
             </div>
-          </div>
-
-          <section className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              Live run (constant speed)
-            </h2>
 
             {metricsGateMessage && (
               <p
@@ -1222,7 +1236,7 @@ function ExerciseContent() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50">
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   Active elapsed
@@ -1269,8 +1283,78 @@ function ExerciseContent() {
                   {formatNumber(liveFatKg, 4)}
                 </p>
               </div>
+              <div
+                className="rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50"
+                title={`Estimated from distance, assuming a ${STEP_LENGTH_M}m step.`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Steps
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowStepsPopout((v) => !v)}
+                    disabled={!isRunActive}
+                    aria-label={
+                      showStepsPopout
+                        ? "Hide floating steps counter"
+                        : "Pop out steps counter"
+                    }
+                    aria-pressed={showStepsPopout}
+                    title={
+                      !isRunActive
+                        ? "Start a run to pop out the steps counter"
+                        : showStepsPopout
+                          ? "Hide floating steps counter"
+                          : "Pop out steps counter so you can see just this while you run"
+                    }
+                    className={`shrink-0 rounded p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                      showStepsPopout
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    <svg
+                      className="h-3.5 w-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+                  {stepsFromDistanceKm(liveDistanceKm).toLocaleString()}
+                </p>
+              </div>
             </div>
           </section>
+
+          <RightDrawer
+            open={showStepsPopout && isRunActive}
+            onClose={() => setShowStepsPopout(false)}
+            title={`Steps${isRunPaused ? " (paused)" : ""}`}
+            width="full"
+          >
+            <div className="flex h-full flex-col items-center justify-center gap-2 py-12">
+              <p className="text-sm font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                Steps so far
+              </p>
+              <p className="font-mono text-6xl font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
+                {stepsFromDistanceKm(liveDistanceKm).toLocaleString()}
+              </p>
+              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Estimated from live distance, assuming a {STEP_LENGTH_M}m step.
+              </p>
+            </div>
+          </RightDrawer>
 
           <div className="mb-6 flex flex-wrap gap-x-8 gap-y-1 border-b border-zinc-200 pb-3 text-sm dark:border-zinc-800">
             {summaryLines.map(({ key, prefix, value, suffix, title }) => (
@@ -1414,10 +1498,11 @@ function ExerciseContent() {
               <div className="mt-6 grid gap-6 lg:grid-cols-2">
                 <div>
                   <h3 className="mb-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Daily distance (km)
+                    Daily distance (km) &amp; steps
                   </h3>
                   <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    Click a day to inspect that day&apos;s sessions.
+                    Click a day to inspect that day&apos;s sessions. Steps are
+                    estimated from distance, assuming a {STEP_LENGTH_M}m step.
                   </p>
                   <div className="h-96 w-full min-w-0">
                     {lineSeries.length === 0 ? (
@@ -1445,8 +1530,16 @@ function ExerciseContent() {
                             interval="preserveStartEnd"
                           />
                           <YAxis
+                            yAxisId="distance"
                             tick={{ fontSize: 11, fill: CHART_AXIS }}
                             width={36}
+                            domain={[0, "auto"]}
+                          />
+                          <YAxis
+                            yAxisId="steps"
+                            orientation="right"
+                            tick={{ fontSize: 11, fill: CHART_STEPS_LINE }}
+                            width={44}
                             domain={[0, "auto"]}
                           />
                           <Tooltip
@@ -1454,18 +1547,33 @@ function ExerciseContent() {
                               borderRadius: 8,
                               border: "1px solid #e4e4e7",
                             }}
-                            formatter={(value) => [
-                              `${formatNumber(Number(value ?? 0), 2)} km`,
-                              "Distance",
-                            ]}
+                            formatter={(value, name) =>
+                              name === "Steps"
+                                ? [Math.round(Number(value ?? 0)).toLocaleString(), "Steps"]
+                                : [`${formatNumber(Number(value ?? 0), 2)} km`, "Distance"]
+                            }
                             labelFormatter={(_, payload) =>
                               payload?.[0]?.payload?.date ?? ""
                             }
                           />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
                           <Line
+                            yAxisId="distance"
                             type="monotone"
                             dataKey="distanceKm"
+                            name="Distance"
                             stroke={CHART_LINE}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                            connectNulls
+                          />
+                          <Line
+                            yAxisId="steps"
+                            type="monotone"
+                            dataKey="steps"
+                            name="Steps"
+                            stroke={CHART_STEPS_LINE}
                             strokeWidth={2}
                             dot={{ r: 3 }}
                             activeDot={{ r: 5 }}

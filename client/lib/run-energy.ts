@@ -23,3 +23,10 @@ export function distanceKmFromSpeed(
 ): number {
   return speedKmh * (durationSeconds / 3600);
 }
+
+/** Assumed average step length used to estimate step count from distance — no GPS/pedometer input exists, so steps are always derived. */
+export const STEP_LENGTH_M = 0.75;
+
+export function stepsFromDistanceKm(distanceKm: number): number {
+  return Math.round((distanceKm * 1000) / STEP_LENGTH_M);
+}
