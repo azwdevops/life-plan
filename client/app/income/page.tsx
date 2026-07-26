@@ -20,11 +20,18 @@ import {
   useParentLedgerGroups,
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction, useTransactions } from "@/lib/hooks/use-transactions";
-import { useQuery } from "@tanstack/react-query";
-import { getTransaction } from "@/lib/api/transactions";
+import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
+import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
+import { usePersistedPeriodFilter } from "@/lib/hooks/use-persisted-period-filter";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
-type PeriodType = "month" | "custom";
+function formatKsh(value: number): string {
+  return `KSh ${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  })}`;
+}
 
 function IncomeContent() {
   const router = useRouter();
@@ -36,16 +43,21 @@ function IncomeContent() {
   const { data: ledgers = [], isLoading: ledgersLoading, refetch: refetchLedgers } = useLedgers();
   const { data: groups = [] } = useLedgerGroups();
   const { data: parentGroups = [] } = useParentLedgerGroups();
-  const { data: incomeTransactions = [], refetch: refetchIncomes } = useTransactions("MONEY_RECEIVED");
-  const { token } = useAuth();
+  const { data: incomeTransactions = [], refetch: refetchIncomes, isLoading: isLoadingTransactions } = useTransactions("MONEY_RECEIVED");
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [periodType, setPeriodType] = useState<PeriodType>("month");
-  const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(new Date());
-  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
-  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
+  const {
+    periodType,
+    selectedMonthDate,
+    customStartDate,
+    customEndDate,
+    setPeriodType,
+    setSelectedMonthDate,
+    setCustomStartDate,
+    setCustomEndDate,
+  } = usePersistedPeriodFilter("income-period-filter");
 
   // Filter ledgers: income ledgers and asset ledgers (for receiving account)
   const incomeGroups = groups.filter(
@@ -155,20 +167,8 @@ function IncomeContent() {
     return map;
   }, [ledgers]);
 
-  // Fetch transaction details for filtered income transactions to get items
-  const incomeTransactionIds = filteredIncomeTransactions.map(t => t.id).sort().join(',');
-  const { data: incomeTransactionsWithItems = [], isLoading: isLoadingTransactions, refetch: refetchIncomeTransactionsWithItems } = useQuery({
-    queryKey: ["incomeTransactionsWithItems", incomeTransactionIds],
-    queryFn: async () => {
-      if (!token || filteredIncomeTransactions.length === 0) return [];
-      
-      const transactions = await Promise.all(
-        filteredIncomeTransactions.map((t) => getTransaction(token, t.id))
-      );
-      return transactions;
-    },
-    enabled: filteredIncomeTransactions.length > 0 && !!token,
-  });
+  // filteredIncomeTransactions already carries items (list endpoint eager-loads them).
+  const incomeTransactionsWithItems = filteredIncomeTransactions;
 
   // Group incomes by ledger
   const incomesByLedger = useMemo(() => {
@@ -178,7 +178,7 @@ function IncomeContent() {
     if (incomeTransactionsWithItems.length > 0) {
       incomeTransactionsWithItems.forEach((transaction) => {
         // Find all CREDIT items that are income ledgers
-        transaction.items.forEach((item) => {
+        (transaction.items ?? []).forEach((item) => {
           if (item.entry_type === "CREDIT") {
             // Check if this ledger is an income ledger
             const ledger = ledgers.find(l => l.id === item.ledger_id);
@@ -211,10 +211,7 @@ function IncomeContent() {
         return {
           name: ledgerName,
           value: Number(total.toFixed(2)),
-          percentage:
-            totalIncomes > 0
-              ? Number(((total / totalIncomes) * 100).toFixed(1))
-              : 0,
+          percentage: totalIncomes > 0 ? (total / totalIncomes) * 100 : 0,
         };
       })
       .sort((a, b) => b.value - a.value);
@@ -226,6 +223,11 @@ function IncomeContent() {
     ledgers,
     incomeLedgers,
   ]);
+
+  const incomesByLedgerDisplay = useMemo(
+    () => withMinDisplayShare(incomesByLedger, 4),
+    [incomesByLedger]
+  );
 
   // Colors for the pie chart
   const COLORS = [
@@ -248,16 +250,45 @@ function IncomeContent() {
         refetchIncomes(),
         refetchLedgers(),
       ]);
-      // Refetch income transactions with items after incomes are refetched
-      if (filteredIncomeTransactions.length > 0) {
-        await refetchIncomeTransactionsWithItems();
-      }
     } catch (error) {
       console.error("Error refreshing data:", error);
     } finally {
       setIsRefreshing(false);
     }
   };
+
+  const headerActions = useMemo(
+    () => [
+      {
+        label: isRefreshing ? "Refreshing..." : "Refresh",
+        onClick: () => void handleRefresh(),
+        disabled: isRefreshing,
+        icon: (
+          <svg
+            className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        ),
+      },
+      {
+        label: "Post Income",
+        onClick: () => setShowPostIncomeDialog(true),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isRefreshing]
+  );
+  usePageHeaderActions(headerActions);
 
   // Don't show loading screen if we're just checking auth - only show if actually loading
   if (!isAuthenticated && !isLoading) {
@@ -503,54 +534,13 @@ function IncomeContent() {
               }`
         }
       >
-        <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                Income
-              </h1>
-              <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-                Record and manage income transactions
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                title="Refresh data"
-              >
-                <svg
-                  className={`h-5 w-5 ${isRefreshing ? "animate-spin" : ""}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
-              </button>
-            <button
-              onClick={() => setShowPostIncomeDialog(true)}
-              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              + Post Income
-            </button>
-            </div>
-          </div>
-
+        <div className="container mx-auto px-4 pb-8 md:px-6 md:pb-12">
           {/* Incomes by Ledger Chart */}
           <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 md:p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="mb-3">
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                  Incomes by Ledger
+                  Income
                 </h2>
               
                 {/* Period Filter */}
@@ -619,33 +609,6 @@ function IncomeContent() {
                   )}
                 </div>
               </div>
-              {/* Period Display */}
-              <div className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                {periodType === "month" ? (
-                  <span>
-                    {selectedMonthDate.toLocaleDateString("en-GB", {
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </span>
-                ) : customStartDate && customEndDate ? (
-                  <span>
-                    {customStartDate.toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })}{" "}
-                    to{" "}
-                    {customEndDate.toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })}
-                  </span>
-                ) : (
-                  <span>Select date range</span>
-                )}
-              </div>
             </div>
             {isLoadingTransactions ? (
               <div className="py-12 text-center">
@@ -655,29 +618,20 @@ function IncomeContent() {
               <div className="flex flex-col gap-8">
                 {/* Pie Chart */}
                 <div className="flex items-center justify-center min-h-0 p-0 sm:p-2 md:p-4">
-                  <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px]">
+                  <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 0, right: 15, bottom: 10, left: 15 }}>
+                      <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
                         <Pie
-                          data={incomesByLedger}
+                          data={incomesByLedgerDisplay}
                           cx="50%"
-                          cy="40%"
-                          labelLine={true}
-                          label={(props: any) => {
-                            const entry = incomesByLedger[props.index];
-                            if (!entry) return "";
-                            const amount = entry.value.toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                              useGrouping: true,
-                            });
-                            return `${entry.name}: ${entry.percentage}% (KSh ${amount})`;
-                          }}
-                          outerRadius="70%"
+                          cy="30%"
+                          outerRadius="60%"
+                          label={renderElbowPieLabel(incomesByLedgerDisplay, formatKsh)}
+                          labelLine={false}
                         fill="#8884d8"
-                        dataKey="value"
+                        dataKey="displayValue"
                       >
-                        {incomesByLedger.map((entry, index) => (
+                        {incomesByLedgerDisplay.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
                             fill={COLORS[index % COLORS.length]}
@@ -685,14 +639,7 @@ function IncomeContent() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: number | undefined) => {
-                          if (value === undefined) return "";
-                          return `KSh ${value.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                            useGrouping: true,
-                          })}`;
-                        }}
+                        formatter={(_value: any, _name: any, item: any) => formatKsh(item?.payload?.value ?? 0)}
                         contentStyle={{
                           backgroundColor: "rgba(255, 255, 255, 0.95)",
                           border: "1px solid #e4e4e7",
@@ -707,7 +654,7 @@ function IncomeContent() {
                 {/* Legend with amounts */}
                 <div className="flex flex-col justify-center">
                   <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                    {incomesByLedger.map((item, index) => (
+                    {incomesByLedgerDisplay.map((item, index) => (
                       <div
                         key={item.name}
                         className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
@@ -719,20 +666,20 @@ function IncomeContent() {
                               backgroundColor: COLORS[index % COLORS.length],
                             }}
                           />
-                          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                          <span className="text-base font-medium text-zinc-900 dark:text-zinc-100">
                             {item.name}
                           </span>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          <div className="font-bold text-zinc-900 dark:text-zinc-100">
                             KSh {item.value.toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                               useGrouping: true,
                             })}
                           </div>
-                          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                            {item.percentage}%
+                          <div className="text-sm font-bold text-zinc-600 dark:text-zinc-400">
+                            {item.percentage.toFixed(2)}%
                           </div>
                         </div>
                       </div>
@@ -745,8 +692,6 @@ function IncomeContent() {
                 <p className="text-zinc-600 dark:text-zinc-400">
                   {filteredIncomeTransactions.length === 0
                     ? "No income transactions yet. Start recording income to see income breakdown."
-                    : incomeTransactionsWithItems.length === 0
-                    ? "Loading transaction details..."
                     : incomeLedgers.length === 0
                     ? "No income ledgers found. Create income ledgers in the Accounts page."
                     : "No incomes found in the selected transactions."}

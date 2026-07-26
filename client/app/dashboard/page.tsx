@@ -13,8 +13,15 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { useTransactions } from "@/lib/hooks/use-transactions";
 import { useLedgers, useSpendingTypes, useLedgerGroups } from "@/lib/hooks/use-accounts";
 import { useUpcomingExpenses } from "@/lib/hooks/use-upcoming-expenses";
-import { useQuery } from "@tanstack/react-query";
-import { getTransaction } from "@/lib/api/transactions";
+import { renderElbowPieLabel } from "@/lib/charts/pie-label";
+
+function formatAmount(value: number): string {
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  });
+}
 
 type PeriodType = "month" | "custom";
 
@@ -23,13 +30,12 @@ export default function DashboardPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const { data: incomeTransactions = [], refetch: refetchIncome } = useTransactions("MONEY_RECEIVED");
-  const { data: expenseTransactions = [], refetch: refetchExpenses } = useTransactions("MONEY_PAID");
+  const { data: expenseTransactions = [], refetch: refetchExpenses, isLoading: isLoadingExpenseTransactions } = useTransactions("MONEY_PAID");
   const { data: transferTransactions = [], refetch: refetchTransfers } = useTransactions("JOURNAL");
   const { data: ledgers = [], refetch: refetchLedgers } = useLedgers();
   const { data: spendingTypes = [], refetch: refetchSpendingTypes } = useSpendingTypes();
   const { data: ledgerGroups = [] } = useLedgerGroups();
   const { data: upcomingExpenses = [] } = useUpcomingExpenses();
-  const { token } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [periodType, setPeriodType] = useState<PeriodType>("month");
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(new Date());
@@ -151,19 +157,9 @@ export default function DashboardPage() {
     0
   );
 
-  // Get all transactions to calculate cash/bank balances
-  const { data: allTransactions = [] } = useTransactions();
-  const { data: allTransactionsWithItems = [] } = useQuery({
-    queryKey: ["allTransactionsWithItems", allTransactions.map(t => t.id).sort().join(',')],
-    queryFn: async () => {
-      if (!token || allTransactions.length === 0) return [];
-      const transactions = await Promise.all(
-        allTransactions.map((t) => getTransaction(token, t.id))
-      );
-      return transactions;
-    },
-    enabled: allTransactions.length > 0 && !!token,
-  });
+  // Get all transactions (with items) to calculate cash/bank balances.
+  // The list endpoint now returns items eagerly, so no per-transaction fetch is needed.
+  const { data: allTransactionsWithItems = [] } = useTransactions();
 
   // Calculate cash/bank account balances
   const actualCashBankTotal = useMemo(() => {
@@ -185,7 +181,7 @@ export default function DashboardPage() {
 
     if (allTransactionsWithItems.length > 0) {
       allTransactionsWithItems.forEach((transaction) => {
-        transaction.items.forEach((item) => {
+        (transaction.items ?? []).forEach((item) => {
           if (bankCashLedgerIds.has(item.ledger_id)) {
             const amount =
               typeof item.amount === "string"
@@ -234,20 +230,9 @@ export default function DashboardPage() {
   }, [ledgers]);
 
   // Fetch transaction details for filtered expense transactions to get items
-  // We'll fetch them in parallel using Promise.all
-  const expenseTransactionIds = filteredExpenseTransactions.map(t => t.id).sort().join(',');
-  const { data: expenseTransactionsWithItems = [], isLoading: isLoadingTransactions, refetch: refetchExpenseTransactionsWithItems } = useQuery({
-    queryKey: ["expenseTransactionsWithItems", expenseTransactionIds],
-    queryFn: async () => {
-      if (!token || filteredExpenseTransactions.length === 0) return [];
-      
-      const transactions = await Promise.all(
-        filteredExpenseTransactions.map((t) => getTransaction(token, t.id))
-      );
-      return transactions;
-    },
-    enabled: filteredExpenseTransactions.length > 0 && !!token,
-  });
+  // filteredExpenseTransactions already carries items (list endpoint eager-loads them).
+  const expenseTransactionsWithItems = filteredExpenseTransactions;
+  const isLoadingTransactions = isLoadingExpenseTransactions;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -259,10 +244,6 @@ export default function DashboardPage() {
         refetchLedgers(),
         refetchSpendingTypes(),
       ]);
-      // Refetch expense transactions with items after expenses are refetched
-      if (filteredExpenseTransactions.length > 0) {
-        await refetchExpenseTransactionsWithItems();
-      }
     } catch (error) {
       console.error("Error refreshing data:", error);
     } finally {
@@ -280,7 +261,7 @@ export default function DashboardPage() {
       expenseTransactionsWithItems.forEach((transaction) => {
         // Find all DEBIT items that have spending types (expense ledgers)
         // Transaction charges don't have spending types, so they're excluded
-        transaction.items.forEach((item) => {
+        (transaction.items ?? []).forEach((item) => {
           if (item.entry_type === "DEBIT") {
             const spendingTypeId = ledgerSpendingTypeIdMap.get(item.ledger_id);
             if (spendingTypeId) {
@@ -617,23 +598,14 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-center min-h-0 p-0 sm:p-2 md:p-4">
                   <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 0, right: 15, bottom: 10, left: 15 }}>
+                      <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
                       <Pie
                         data={expensesBySpendingType}
                         cx="50%"
                           cy="40%"
-                          labelLine={true}
-                        label={(props: any) => {
-                          const entry = expensesBySpendingType[props.index];
-                            if (!entry) return "";
-                            const amount = entry.value.toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                              useGrouping: true,
-                            });
-                            return `${entry.name}: ${entry.percentage}% (${amount})`;
-                        }}
-                          outerRadius="70%"
+                          outerRadius="60%"
+                          label={renderElbowPieLabel(expensesBySpendingType, formatAmount)}
+                          labelLine={false}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -705,8 +677,6 @@ export default function DashboardPage() {
                 <p className="text-zinc-600 dark:text-zinc-400">
                   {filteredExpenseTransactions.length === 0
                     ? "No expense transactions yet. Start recording expenses to see spending breakdown."
-                    : expenseTransactionsWithItems.length === 0
-                    ? "Loading transaction details..."
                     : spendingTypes.length === 0
                     ? "No spending categories found. Create spending categories in the Accounts page."
                     : ledgerSpendingTypeIdMap.size === 0

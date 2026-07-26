@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { PageHeaderActionsProvider } from "@/contexts/PageHeaderActionsContext";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -26,7 +27,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <SidebarProvider>{children}</SidebarProvider>
+        <SidebarProvider>
+          <PageHeaderActionsProvider>{children}</PageHeaderActionsProvider>
+        </SidebarProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

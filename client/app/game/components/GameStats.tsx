@@ -8,12 +8,19 @@ function formatMonthYear(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
+function getDateFromMonth(startDate: Date, monthOffset: number): Date {
+  const date = new Date(startDate);
+  date.setMonth(date.getMonth() + monthOffset);
+  return date;
+}
+
 interface GameStatsProps {
   gameState: GameState;
   currentDate: Date;
+  onAdvanceMonth?: () => void;
 }
 
-export function GameStats({ gameState }: GameStatsProps) {
+export function GameStats({ gameState, currentDate, onAdvanceMonth }: GameStatsProps) {
   const totalPortfolioValue = gameState.portfolio.reduce(
     (sum, owned) => sum + (owned.currentValue || owned.purchaseCost),
     0
@@ -64,39 +71,40 @@ export function GameStats({ gameState }: GameStatsProps) {
   const netMonthlyCashflow = monthlyGrossCashflow - (gameState.monthlyTaxPaid || 0) - monthlyMaintenance - monthlyExpenses;
 
   return (
-    <div className="mb-8">
-      <div className="mb-6 flex flex-wrap gap-4">
-        {/* Available resources (cash + time in column) */}
+    <>
+        {/* Current Date */}
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Available resources
-          </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {gameState.currentMoney.toLocaleString()}
-              </span>
-              <span className="ml-1.5 text-sm text-zinc-500 dark:text-zinc-400">cash</span>
+              <div className="text-sm text-zinc-600 dark:text-zinc-400">Current Date</div>
+              <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                {formatMonthYear(currentDate)}
+              </div>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                Month {gameState.currentMonth} from start
+              </div>
             </div>
-            <div>
-              <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {(gameState.hoursAvailable ?? 300).toLocaleString()} h
-              </span>
-              <span className="ml-1.5 text-sm text-zinc-500 dark:text-zinc-400">time</span>
-            </div>
+            {!gameState.gameOver && onAdvanceMonth && (
+              <button
+                onClick={onAdvanceMonth}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+              >
+                Advance to {formatMonthYear(getDateFromMonth(gameState.startDate, gameState.currentMonth + 1))}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Portfolio Value */}
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Portfolio Value
-          </div>
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {totalPortfolioValue.toLocaleString()}
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">Portfolio Value</span>
+            <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {totalPortfolioValue.toLocaleString()}
+            </span>
           </div>
           {totalAppreciation !== 0 && (
-            <div className={`text-xs ${
+            <div className={`mt-1 text-right text-xs ${
               totalAppreciation > 0
                 ? "text-green-600 dark:text-green-400"
                 : "text-red-600 dark:text-red-400"
@@ -106,8 +114,11 @@ export function GameStats({ gameState }: GameStatsProps) {
               ({totalAppreciation > 0 ? "+" : ""}{((totalAppreciation / totalPurchaseCost) * 100).toFixed(1)}%)
             </div>
           )}
-          <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            Purchase cost: {totalPurchaseCost.toLocaleString()}
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Purchase cost</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {totalPurchaseCost.toLocaleString()}
+            </span>
           </div>
         </div>
 
@@ -216,8 +227,6 @@ export function GameStats({ gameState }: GameStatsProps) {
           );
         })()}
         </div>
-      </div>
-
-    </div>
+    </>
   );
 }

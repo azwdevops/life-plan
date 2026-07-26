@@ -1,49 +1,25 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import ExpensesPage from "@/app/expenses/page";
-import IncomePage from "@/app/income/page";
-import TransfersPage from "@/app/transfers/page";
-import JournalPage from "@/app/journal/page";
-import { AIPostingTab } from "./AIPostingTab";
-
-type MoneyFlowTab = "expenses" | "income" | "transfers" | "journal" | "ai-posting";
-
-const TAB_CONFIG: Array<{ id: MoneyFlowTab; label: string }> = [
-  { id: "expenses", label: "Expenses" },
-  { id: "income", label: "Income" },
-  { id: "transfers", label: "Transfers" },
-  { id: "journal", label: "Journal" },
-  { id: "ai-posting", label: "AI Posting" },
-];
 
 function MoneyFlowContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
 
-  const activeTab = useMemo<MoneyFlowTab>(() => {
-    const requested = searchParams.get("tab");
-    if (
-      requested === "expenses" ||
-      requested === "income" ||
-      requested === "transfers" ||
-      requested === "journal" ||
-      requested === "ai-posting"
-    ) {
-      return requested;
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
     }
-    return "expenses";
-  }, [searchParams]);
+  }, [isAuthenticated, isLoading, router]);
 
   if (!isAuthenticated && !isLoading) {
-    router.push("/login");
     return null;
   }
 
@@ -56,52 +32,7 @@ function MoneyFlowContent() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        <div className="border-b border-zinc-200/80 bg-white py-3 dark:border-zinc-700/80 dark:bg-zinc-900">
-          <div className="px-4 md:hidden">
-            <label className="sr-only" htmlFor="money-flow-tab-select">
-              Money flow section
-            </label>
-            <select
-              id="money-flow-tab-select"
-              value={activeTab}
-              onChange={(e) => {
-                const next = e.target.value as MoneyFlowTab;
-                router.replace(`/money-flow?tab=${next}`);
-              }}
-              className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            >
-              {TAB_CONFIG.map((tab) => (
-                <option key={tab.id} value={tab.id}>
-                  {tab.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="hidden w-full md:flex">
-            {TAB_CONFIG.map((tab) => {
-              const selected = tab.id === activeTab;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => router.replace(`/money-flow?tab=${tab.id}`)}
-                  className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${
-                    selected
-                      ? "bg-blue-600 text-white dark:bg-blue-500"
-                      : "bg-white text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {activeTab === "expenses" && <ExpensesPage />}
-        {activeTab === "income" && <IncomePage />}
-        {activeTab === "transfers" && <TransfersPage />}
-        {activeTab === "journal" && <JournalPage />}
-        {activeTab === "ai-posting" && <AIPostingTab />}
+        <ExpensesPage />
       </main>
     </div>
   );

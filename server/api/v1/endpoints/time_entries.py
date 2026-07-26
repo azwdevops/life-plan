@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.v1.endpoints.auth import get_current_user
@@ -11,6 +12,7 @@ from models.user import User
 from models.time_tracker_entry import TimeTrackerEntry as TimeTrackerEntryModel
 from schemas.time_tracker_entry import (
     TimeTrackerEntryCreate,
+    TimeTrackerEntryDurationSummary,
     TimeTrackerEntryResponse,
     TimeTrackerEntryUpdate,
 )
@@ -31,6 +33,36 @@ def _row_to_response(row: TimeTrackerEntryModel) -> TimeTrackerEntryResponse:
         ended_at=row.ended_at,
         duration_ms=row.duration_ms,
     )
+
+
+@router.get("/summary", response_model=TimeTrackerEntryDurationSummary)
+async def get_time_entries_duration_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    from_started_at: datetime = Query(
+        ...,
+        alias="from",
+        description="Inclusive lower bound on started_at (ISO 8601)",
+    ),
+    to_started_at_exclusive: datetime = Query(
+        ...,
+        alias="to_exclusive",
+        description="Exclusive upper bound on started_at (ISO 8601)",
+    ),
+):
+    """Sum duration_ms for entries in [from, to_exclusive), computed server-side
+    so callers that only need a total (e.g. the header's daily tracker) don't
+    have to fetch and transfer full row data."""
+    total_duration_ms = (
+        db.query(func.coalesce(func.sum(TimeTrackerEntryModel.duration_ms), 0))
+        .filter(
+            TimeTrackerEntryModel.user_id == current_user.id,
+            TimeTrackerEntryModel.started_at >= from_started_at,
+            TimeTrackerEntryModel.started_at < to_started_at_exclusive,
+        )
+        .scalar()
+    )
+    return TimeTrackerEntryDurationSummary(total_duration_ms=int(total_duration_ms))
 
 
 @router.get("/", response_model=List[TimeTrackerEntryResponse])

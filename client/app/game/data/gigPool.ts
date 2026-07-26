@@ -1,6 +1,23 @@
 /**
- * Pool of gig templates for software and accounting/audit/tax.
- * Amounts: software 1,000–20,000 KSh; accounting 500–10,000 KSh.
+ * Pool of gig templates for software and accounting/audit/tax, calibrated to
+ * the Kenyan market for a software developer who also does occasional
+ * accounting consulting and SME bookkeeping.
+ *
+ * Amounts: software 1,000–20,000 KSh (local freelance dev rates for Kenyan
+ * SME clients run ~KSh 1,000–5,000/hr per project pricing guides, not the
+ * $20–45/hr international-outsourcing rate quoted on platforms like
+ * lemon.io — that band is for remote work billed to foreign clients);
+ * accounting 500–20,000 KSh (independent bookkeepers charge ~KSh 200–3,500/hr
+ * depending on firm size vs. solo practice; a basic small-entity audit runs
+ * ~KSh 50,000+, financial due diligence for a small acquisition can run
+ * higher — both reflected at the top of the accounting range).
+ *
+ * Payroll/tax entries use Kenya's actual 2026 statutory regime: PAYE bands,
+ * NSSF Tier I & II, SHIF (2.75% of gross, replaced NHIF), and the 1.5%
+ * Affordable Housing Levy (AHL) — plus KRA's eTIMS e-invoicing mandate
+ * (expenses without an eTIMS-compliant invoice are no longer deductible) and
+ * Turnover Tax (TOT, 1.5% on gross for KSh 1M–25M-turnover businesses not
+ * VAT-registered), both major, current SME compliance pain points.
  */
 
 import type { GigCategory } from "../types";
@@ -166,7 +183,7 @@ export const GIG_TEMPLATES: GigTemplate[] = [
     estimatedHoursMax: 4,
     shortDescription: "Process one payroll run and produce payslips and summary.",
     fullDescription:
-      "Process one payroll run: calculate gross and net pay, statutory deductions (e.g. PAYE, NSSF), and produce payslips and a payroll summary. Assumes employee list and rates are provided. One-off or first-month gig.",
+      "Process one payroll run: calculate gross and net pay, statutory deductions (PAYE, NSSF Tier I & II, SHIF, Affordable Housing Levy), and produce payslips and a payroll summary. Assumes employee list and rates are provided. One-off or first-month gig.",
   },
   {
     title: "Internal audit – small area",
@@ -279,7 +296,7 @@ export const GIG_TEMPLATES: GigTemplate[] = [
   // --- Additional accounting variants (51–100) ---
   { title: "Bookkeeping – quarter", category: "accounting", amountMin: 4000, amountMax: 14000, shortDescription: "Prepare books and reconciliations for one quarter for a small business.", fullDescription: "Record transactions, reconcile bank and key accounts, produce trial balance and management accounts for the quarter. Client provides statements and supporting documents." },
   { title: "VAT return – multiple periods", category: "accounting", amountMin: 2500, amountMax: 9000, shortDescription: "Prepare and file VAT returns for 2–3 periods.", fullDescription: "Prepare returns from client records, reconcile to ledger, file and advise on payment. Scope agreed upfront." },
-  { title: "Payroll – three months", category: "accounting", amountMin: 1500, amountMax: 8000, shortDescription: "Process payroll for three consecutive months.", fullDescription: "Three payroll runs: gross/net, statutory deductions, payslips and summary. Employee data provided by client." },
+  { title: "Payroll – three months", category: "accounting", amountMin: 1500, amountMax: 8000, shortDescription: "Process payroll for three consecutive months.", fullDescription: "Three payroll runs: gross/net, statutory deductions (PAYE, NSSF Tier I & II, SHIF, Housing Levy), payslips and summary. Employee data provided by client." },
   { title: "Internal audit – two areas", category: "accounting", amountMin: 5000, amountMax: 15000, shortDescription: "Review two processes or areas and write a short report.", fullDescription: "Audit two areas (e.g. cash and inventory), document and test controls, deliver report with recommendations." },
   { title: "Tax computation – full year", category: "accounting", amountMin: 4000, amountMax: 12000, shortDescription: "Draft full-year income tax computation and schedules.", fullDescription: "Full-year computation and key schedules from client accounts. No filing unless agreed. One round of revisions." },
   { title: "Reconciliation – multi-account", category: "accounting", amountMin: 1500, amountMax: 6000, shortDescription: "Reconcile bank and several ledger accounts for a period.", fullDescription: "Bank and multiple control accounts, list unreconciled items. Client provides statements and ledger export." },
@@ -300,7 +317,7 @@ export const GIG_TEMPLATES: GigTemplate[] = [
   { title: "Cost allocation model", category: "accounting", amountMin: 3500, amountMax: 11000, shortDescription: "Design a simple cost allocation model (e.g. by department).", fullDescription: "Design allocation basis and model, document assumptions. Implement in spreadsheet or with client." },
   { title: "Due diligence – financial", category: "accounting", amountMin: 8000, amountMax: 20000, shortDescription: "Perform financial due diligence for a small acquisition.", fullDescription: "Review accounts, key contracts, and trends. Written report with findings and adjustments. Scope agreed." },
   { title: "Revenue recognition review", category: "accounting", amountMin: 4000, amountMax: 12000, shortDescription: "Review revenue recognition for a few key contracts.", fullDescription: "Apply policy to selected contracts, document treatment. One round of questions." },
-  { title: "Statutory accounts – draft", category: "accounting", amountMin: 5000, amountMax: 15000, shortDescription: "Draft statutory accounts for a small company.", fullDescription: "Draft accounts and notes per local GAAP. One round of director/auditor feedback." },
+  { title: "Statutory accounts – draft", category: "accounting", amountMin: 5000, amountMax: 15000, shortDescription: "Draft statutory accounts for a small company.", fullDescription: "Draft accounts and notes per IFRS for SMEs, as required for Kenyan private companies. One round of director/auditor feedback." },
   { title: "Training – accounting software", category: "accounting", amountMin: 1500, amountMax: 6000, shortDescription: "Train staff on accounting software (e.g. QuickBooks, Xero).", fullDescription: "1–2 sessions on day-to-day use: posting, reconciliations, reports. Materials provided." },
   { title: "Expense policy draft", category: "accounting", amountMin: 2000, amountMax: 6000, shortDescription: "Draft an expense and approval policy.", fullDescription: "Policy document: categories, limits, approval flow. One round of edits." },
   { title: "Credit control review", category: "accounting", amountMin: 2500, amountMax: 8000, shortDescription: "Review receivables and suggest credit control improvements.", fullDescription: "Age analysis, bad debt risk, suggest process changes. Short report and optional templates." },
@@ -309,7 +326,7 @@ export const GIG_TEMPLATES: GigTemplate[] = [
   { title: "Depreciation schedule", category: "accounting", amountMin: 1500, amountMax: 5500, shortDescription: "Prepare or update depreciation schedule for the year.", fullDescription: "Schedule of assets, rates, and depreciation. Reconcile to ledger. One round of changes." },
   { title: "Trial balance review", category: "accounting", amountMin: 1500, amountMax: 6000, shortDescription: "Review trial balance and suggest reclass or correction entries.", fullDescription: "Review TB for misclassifications and errors. List suggested entries. No posting unless agreed." },
   { title: "Petty cash reconciliation", category: "accounting", amountMin: 500, amountMax: 2500, shortDescription: "Reconcile petty cash and document procedures.", fullDescription: "Count cash, reconcile to records, note discrepancies. Short procedure note." },
-  { title: "Payroll year-end", category: "accounting", amountMin: 2500, amountMax: 8000, shortDescription: "Process payroll year-end and produce P60/equivalent.", fullDescription: "Year-end payroll run, statutory forms, and summary. One entity, one tax year." },
+  { title: "Payroll year-end", category: "accounting", amountMin: 2500, amountMax: 8000, shortDescription: "Process payroll year-end and produce P9 tax deduction cards.", fullDescription: "Year-end payroll run, P9 forms for each employee, and a summary. One entity, one tax year." },
   { title: "VAT registration support", category: "accounting", amountMin: 2000, amountMax: 6000, shortDescription: "Support VAT registration application and initial return.", fullDescription: "Gather info, complete application, prepare first return. No ongoing compliance unless agreed." },
   { title: "Management report – KPIs", category: "accounting", amountMin: 3000, amountMax: 9000, shortDescription: "Design and produce a one-off management report with KPIs.", fullDescription: "Define KPIs with management, build report (spreadsheet or BI). One round of revisions." },
   { title: "Contract review – payment terms", category: "accounting", amountMin: 2000, amountMax: 7000, shortDescription: "Review contracts for payment terms and accounting impact.", fullDescription: "Extract payment terms and key dates, note accounting implications. Summary report." },
@@ -318,6 +335,16 @@ export const GIG_TEMPLATES: GigTemplate[] = [
   { title: "Audit inquiry responses", category: "accounting", amountMin: 2500, amountMax: 8000, shortDescription: "Draft responses to auditor inquiries and provide support.", fullDescription: "Draft responses to audit questions, gather supporting evidence. Scope per audit plan." },
   { title: "Segment or division report", category: "accounting", amountMin: 3500, amountMax: 10000, shortDescription: "Prepare segment or division P&L and balance sheet.", fullDescription: "Allocate revenue and costs to segments, produce report. One period, agreed allocation basis." },
   { title: "Tax incentive review", category: "accounting", amountMin: 3000, amountMax: 10000, shortDescription: "Review eligibility for a specific tax incentive or relief.", fullDescription: "Assess eligibility, document position, optional application support. One relief type." },
+  // --- Kenya-specific compliance & fintech (101+) ---
+  { title: "eTIMS invoicing setup", category: "accounting", amountMin: 2000, amountMax: 8000, estimatedHoursMin: 2, estimatedHoursMax: 6, shortDescription: "Set up KRA eTIMS-compliant invoicing for a small business.", fullDescription: "Register and configure eTIMS (e.g. eTIMS Client Lite or an integrated OSCU) so sales invoices are KRA-compliant. Without this, the client's own purchase expenses on unregistered suppliers also risk losing deductibility. Includes a short staff walkthrough." },
+  { title: "eTIMS – POS/accounting system integration", category: "software", amountMin: 4000, amountMax: 16000, estimatedHoursMin: 5, estimatedHoursMax: 12, shortDescription: "Integrate eTIMS invoicing into an existing POS or accounting system.", fullDescription: "Wire up the KRA eTIMS OSCU/VSCU API into the client's existing point-of-sale or accounting software so invoices are generated and transmitted automatically instead of via manual eTIMS Client Lite entry. Includes error handling for offline/retry and a short handover." },
+  { title: "Turnover Tax (TOT) computation and filing", category: "accounting", amountMin: 1000, amountMax: 4000, estimatedHoursMin: 1, estimatedHoursMax: 3, shortDescription: "Compute and file monthly Turnover Tax for a small trader.", fullDescription: "For a business with KSh 1M–25M annual turnover not registered for VAT, compute Turnover Tax at 1.5% of gross monthly sales and file via iTax by the 20th. Recurring monthly gig, priced per period unless a retainer is agreed." },
+  { title: "KRA PIN and iTax registration", category: "accounting", amountMin: 1000, amountMax: 3500, estimatedHoursMin: 1, estimatedHoursMax: 3, shortDescription: "Register a new business for a KRA PIN and set up its iTax profile.", fullDescription: "Register the business (or individual) for a KRA PIN, activate the iTax profile, and set up the correct obligations (e.g. Turnover Tax, PAYE, VAT) based on the business type and expected turnover. One-off registration gig." },
+  { title: "Withholding tax computation and filing", category: "accounting", amountMin: 1000, amountMax: 4000, estimatedHoursMin: 1, estimatedHoursMax: 3, shortDescription: "Compute and file withholding tax on a batch of payments.", fullDescription: "Identify payments subject to withholding tax (e.g. professional fees, rent, contractor payments), compute the correct rate, and file via iTax. Client provides the payment schedule and supplier PINs." },
+  { title: "Tax Compliance Certificate (TCC) application", category: "accounting", amountMin: 1000, amountMax: 3500, estimatedHoursMin: 1, estimatedHoursMax: 3, shortDescription: "Resolve outstanding filings and apply for a KRA Tax Compliance Certificate.", fullDescription: "Review the iTax account for outstanding returns or ledger issues blocking a TCC, resolve or advise on them, then submit the TCC application. Needed by SMEs for tenders, bank loans, and some supplier contracts." },
+  { title: "SHIF, NSSF and Housing Levy payroll migration", category: "accounting", amountMin: 2000, amountMax: 7000, estimatedHoursMin: 2, estimatedHoursMax: 6, shortDescription: "Update an existing payroll to current SHIF/NSSF Tier I & II/AHL rates.", fullDescription: "Review the client's payroll setup against current statutory rates (SHIF at 2.75% of gross, NSSF Tier I & II, the 1.5% Affordable Housing Levy) and correct any outdated NHIF-era configuration. One entity, current payroll software." },
+  { title: "M-Pesa Daraja payments integration", category: "software", amountMin: 3500, amountMax: 15000, estimatedHoursMin: 4, estimatedHoursMax: 10, shortDescription: "Integrate M-Pesa STK Push/C2B payments via the Daraja API.", fullDescription: "Integrate Safaricom's Daraja API (STK Push and/or C2B) into the client's app or website for accepting payments, including callback handling and reconciliation against orders. Sandbox testing before go-live." },
+  { title: "USSD menu app – orders or support", category: "software", amountMin: 4000, amountMax: 16000, estimatedHoursMin: 5, estimatedHoursMax: 12, shortDescription: "Build a USSD menu for customers without smartphones or data.", fullDescription: "Design and implement a USSD session flow (via a gateway like Africa's Talking) for a defined use case (e.g. placing orders, checking balance, support). Reaches customers on basic phones or with limited data. Includes gateway setup docs." },
 ];
 
 export const RECENTLY_USED_GIG_MAX = 40;

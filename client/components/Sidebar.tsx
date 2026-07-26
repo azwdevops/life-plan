@@ -30,35 +30,102 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
 
   const [expandedMenus, setExpandedMenus] = useState<string[]>(() => {
     // Auto-expand menus if we're on their pages
-    return [];
+    const initial: string[] = [];
+    if (pathname.startsWith("/investments")) initial.push("investments");
+    if (pathname.startsWith("/liabilities")) initial.push("liabilities");
+    if (
+      pathname.startsWith("/money-flow") ||
+      pathname.startsWith("/expenses") ||
+      pathname.startsWith("/income") ||
+      pathname.startsWith("/transfers") ||
+      pathname.startsWith("/journal")
+    ) {
+      initial.push("moneyFlow");
+    }
+    if (pathname.startsWith("/assets")) initial.push("assets");
+    if (
+      pathname.startsWith("/personal-growth") ||
+      pathname.startsWith("/exercise") ||
+      pathname.startsWith("/game/self-discovery")
+    ) {
+      initial.push("personalGrowth");
+    }
+    if (pathname.startsWith("/productivity")) initial.push("productivity");
+    if (
+      pathname.startsWith("/support-settings") ||
+      pathname.startsWith("/settings") ||
+      pathname.startsWith("/admin/users")
+    ) {
+      initial.push("supportSettings");
+    }
+    return initial;
   });
-  
+
   type NavItem =
     | { icon: string; label: string; href: string; type: "link" }
-    | { icon: string; label: string; href: null; type: "expandable"; subMenuKey: string };
+    | { icon: string; label: string; href: null; type: "expandable"; subMenuKey: string; matchPrefixes: string[] };
 
   const navItems: NavItem[] = [
     { icon: "📊", label: "Dashboard", href: "/dashboard", type: "link" as const },
     { icon: "🏦", label: "Accounts", href: "/accounts", type: "link" as const },
-    { icon: "💱", label: "Money Flow", href: "/money-flow", type: "link" as const },
-    { icon: "🏢", label: "Assets", href: "/assets", type: "link" as const },
-    { icon: "📋", label: "Liabilities", href: "/liabilities", type: "link" as const },
+    { icon: "💱", label: "Money Flow", href: null, type: "expandable" as const, subMenuKey: "moneyFlow", matchPrefixes: ["/money-flow", "/expenses", "/income", "/transfers", "/journal"] },
+    { icon: "🏢", label: "Assets", href: null, type: "expandable" as const, subMenuKey: "assets", matchPrefixes: ["/assets"] },
+    { icon: "📋", label: "Liabilities", href: null, type: "expandable" as const, subMenuKey: "liabilities", matchPrefixes: ["/liabilities"] },
     { icon: "📈", label: "Reports", href: "/reports", type: "link" as const },
-    { icon: "💼", label: "Investments", href: "/investments", type: "link" as const },
+    { icon: "💼", label: "Investments", href: null, type: "expandable" as const, subMenuKey: "investments", matchPrefixes: ["/investments"] },
     ...(isLoggedIn
-      ? [{ icon: "✨", label: "Productivity", href: "/productivity", type: "link" as const }]
+      ? [{ icon: "✨", label: "Productivity", href: null, type: "expandable" as const, subMenuKey: "productivity", matchPrefixes: ["/productivity"] }]
       : []),
     ...(isAdmin
       ? [
-          { icon: "🌱", label: "Personal Growth", href: "/personal-growth", type: "link" as const },
+          { icon: "🌱", label: "Personal Growth", href: null, type: "expandable" as const, subMenuKey: "personalGrowth", matchPrefixes: ["/personal-growth", "/exercise", "/game/self-discovery"] },
           { icon: "📚", label: "Developer Growth", href: "/developer-growth", type: "link" as const },
         ]
       : []),
-    { icon: "🛠️", label: "Support & Settings", href: "/support-settings", type: "link" as const },
+    { icon: "🛠️", label: "Support & Settings", href: null, type: "expandable" as const, subMenuKey: "supportSettings", matchPrefixes: ["/support-settings", "/settings", "/admin/users"] },
   ].sort((a, b) => a.label.localeCompare(b.label));
 
   const subMenuItems = {
-    liabilities: [] as Array<{ icon: string; label: string; href: string }>,
+    investments: [
+      { icon: "🎮", label: "Investment Game", href: "/investments" },
+      { icon: "📍", label: "Plot Prospects", href: "/investments/plots" },
+      { icon: "📐", label: "Feasibility Analysis", href: "/investments/feasibility" },
+      { icon: "📑", label: "Shares Feasibility", href: "/investments/shares-feasibility" },
+    ] as Array<{ icon: string; label: string; href: string }>,
+    assets: [
+      { icon: "💵", label: "Current Assets", href: "/assets" },
+      { icon: "🏛️", label: "Fixed Assets", href: "/assets/fixed" },
+    ] as Array<{ icon: string; label: string; href: string }>,
+    liabilities: [
+      { icon: "📆", label: "Long Term", href: "/liabilities" },
+      { icon: "🗓️", label: "Short Term", href: "/liabilities/short-term" },
+    ] as Array<{ icon: string; label: string; href: string }>,
+    moneyFlow: [
+      { icon: "💸", label: "Expenses", href: "/money-flow" },
+      { icon: "💰", label: "Income", href: "/income" },
+      { icon: "🔁", label: "Transfers", href: "/transfers" },
+      { icon: "📓", label: "Journal", href: "/journal" },
+      { icon: "🤖", label: "AI Posting", href: "/money-flow/ai-posting" },
+    ] as Array<{ icon: string; label: string; href: string }>,
+    personalGrowth: [
+      { icon: "🏃", label: "Exercise", href: "/personal-growth" },
+      { icon: "🧭", label: "Self Discovery", href: "/game/self-discovery" },
+      { icon: "📖", label: "Reading", href: "/personal-growth/reading" },
+    ] as Array<{ icon: string; label: string; href: string }>,
+    productivity: [
+      { icon: "⏱️", label: "Time tracking", href: "/productivity" },
+      { icon: "📝", label: "Blog", href: "/productivity/blog" },
+      { icon: "🗓️", label: "AI schedule", href: "/productivity/schedule" },
+      { icon: "📌", label: "Pending work", href: "/productivity/pending" },
+      { icon: "🎯", label: "Discipline", href: "/productivity/discipline" },
+    ] as Array<{ icon: string; label: string; href: string }>,
+    supportSettings: [
+      { icon: "💬", label: "Feedback", href: "/support-settings" },
+      { icon: "⚙️", label: "Settings", href: "/settings" },
+      ...(isAdmin
+        ? [{ icon: "👥", label: "Users", href: "/admin/users" }]
+        : []),
+    ] as Array<{ icon: string; label: string; href: string }>,
   };
 
   const toggleMenu = (menuKey: string) => {
@@ -93,18 +160,18 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
           onScroll={(e) => {
             lastScrollTop = e.currentTarget.scrollTop;
           }}
-          className="flex h-full flex-col overflow-y-auto overscroll-contain p-4"
+          className="flex h-full flex-col overflow-y-auto overscroll-contain py-4 pr-4 pl-0.5"
         >
           <div className="pb-6">
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {navItems.map((item) => {
                 if (item.type === "expandable" && item.subMenuKey) {
-                  const isActive = false;
+                  const isActive = item.matchPrefixes.some((prefix) => pathname.startsWith(prefix));
                   return (
                     <li key={item.label}>
                       <button
                         onClick={() => toggleMenu(item.subMenuKey)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-lg px-4 py-3 transition-colors ${
+                        className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors ${
                           isActive
                             ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                             : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -121,14 +188,14 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                         </span>
                       </button>
                       {expandedMenus.includes(item.subMenuKey) && (
-                        <ul className="mt-1 ml-4 space-y-1">
+                        <ul className="mt-1 ml-4 space-y-0.5">
                           {subMenuItems[item.subMenuKey as keyof typeof subMenuItems].map((subItem) => {
                             const isSubActive = pathname === subItem.href;
                             return (
                               <li key={subItem.label}>
                                 <Link
                                   href={subItem.href}
-                                  className={`flex items-center gap-3 rounded-lg px-4 py-2 transition-colors ${
+                                  className={`flex items-center gap-3 rounded-lg px-2 py-2 transition-colors ${
                                     isSubActive
                                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                                       : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
@@ -153,8 +220,6 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                   const href = item.href;
                   const isActive =
                     pathname === href ||
-                    (href === "/productivity" &&
-                      pathname.startsWith("/productivity")) ||
                     (href === "/developer-growth" &&
                       (pathname.startsWith("/game/revision") ||
                         pathname.startsWith("/developer-growth/")));
@@ -162,7 +227,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                     <li key={item.label}>
                       <Link
                         href={href}
-                        className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
+                        className={`flex items-center gap-3 rounded-lg px-2 py-2 transition-colors ${
                           isActive
                             ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                             : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"

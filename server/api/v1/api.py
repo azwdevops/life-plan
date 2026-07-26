@@ -14,6 +14,7 @@ from api.v1.endpoints import (
     investments,
     feasibility_projects,
     shares_feasibility,
+    game_save,
     resumes,
     time_entries,
     time_tracker_subjects,
@@ -43,6 +44,7 @@ api_router.include_router(run_sessions.router, prefix="/run-sessions", tags=["ru
 api_router.include_router(investments.router, prefix="/investments", tags=["investments"])
 api_router.include_router(feasibility_projects.router, prefix="/investments", tags=["investments"])
 api_router.include_router(shares_feasibility.router, prefix="/investments", tags=["investments"])
+api_router.include_router(game_save.router, prefix="/investments", tags=["investments"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(time_entries.router, prefix="/time-entries", tags=["time-entries"])
 api_router.include_router(

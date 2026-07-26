@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
+import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
+import { usePageHeaderActionsValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
   currentMonthLabel: string;
@@ -42,6 +44,113 @@ interface HeaderProps {
   advanceMonthLabel?: string;
 }
 
+/**
+ * "More actions" menu for page-level buttons registered via usePageHeaderActions.
+ * Mirrors SubjectItemMenu in TimeTrackingPanel.tsx (fixed-positioned dropdown,
+ * getBoundingClientRect + useLayoutEffect, click-outside-to-close), per the
+ * project's "More actions (kebab) menus" convention.
+ */
+function HeaderMoreActionsMenu({ actions }: { actions: PageHeaderAction[] }) {
+  const [open, setOpen] = useState(false);
+  const [menuFixed, setMenuFixed] = useState<{ top: number; right: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const el = buttonRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const gapBelowButton = 4;
+    // offset follows the same convention as SubjectItemMenu/biz-poa's DropdownMenu:
+    // negative x/y nudge the menu left/up from its default right-aligned, gap-below position.
+    const offset = { x: 0, y: 0 };
+    setMenuFixed({
+      top: r.bottom + gapBelowButton + offset.y,
+      right: window.innerWidth - r.right - offset.x,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuFixed(null);
+      return;
+    }
+    updateMenuPosition();
+    const onScrollOrResize = () => updateMenuPosition();
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [open, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [open]);
+
+  if (actions.length === 0) return null;
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="More actions"
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 17 17" fill="currentColor" aria-hidden>
+          <path d="M16 2v2h-11v-2h11zM5 9h11v-2h-11v2zM5 14h11v-2h-11v2zM2 2c-0.552 0-1 0.447-1 1s0.448 1 1 1 1-0.447 1-1-0.448-1-1-1zM2 7c-0.552 0-1 0.447-1 1s0.448 1 1 1 1-0.447 1-1-0.448-1-1-1zM2 12c-0.552 0-1 0.447-1 1s0.448 1 1 1 1-0.447 1-1-0.448-1-1-1z" />
+        </svg>
+      </button>
+      {open && menuFixed ? (
+        <ul
+          className="fixed z-[70] min-w-44 rounded-lg border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
+          style={{ top: menuFixed.top, right: menuFixed.right }}
+          role="menu"
+        >
+          {actions.map((action) => (
+            <li key={action.label} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={action.disabled}
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  action.variant === "danger"
+                    ? "text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                    : "text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                }`}
+                onClick={() => {
+                  setOpen(false);
+                  action.onClick();
+                }}
+              >
+                {action.icon}
+                {action.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderContent, availableCash, hoursAvailable, portfolioValue, cashAnalysis, onViewCurrentDetails, onViewNextDetails, onAdvanceMonth, advanceMonthLabel }: HeaderProps) {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
@@ -50,6 +159,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const showHeaderTimeTracker = useMediaQuery("(min-width: 768px)");
+  const pageHeaderActions = usePageHeaderActionsValue();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -74,8 +184,8 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
       id="app-site-header"
       className="sticky top-0 z-50 w-full border-b-2 border-zinc-400 bg-white/80 shadow-[0_1px_0_0_rgba(0,0,0,0.08)] backdrop-blur-sm dark:border-zinc-500 dark:bg-zinc-900/80 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.1)]"
     >
-      <div className="flex h-16 items-center gap-3 px-4 md:px-6">
-        <div className="flex shrink-0 items-center gap-4">
+      <div className="flex h-16 items-center gap-3 pl-1.5 pr-4 md:pl-2 md:pr-6">
+        <div className="flex shrink-0 items-center gap-1">
           {isAuthenticated && (
             <button
               onClick={onMenuClick}
@@ -158,19 +268,15 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
           )}
           {(availableCash !== undefined || hoursAvailable !== undefined) && (
             <div className="min-w-0 shrink overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-900/30">
-              <span className="block text-[11px] font-medium leading-tight text-emerald-600 dark:text-emerald-400">Available resources</span>
-              <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <div className="flex flex-col gap-0.5">
                 {availableCash !== undefined && (
-                  <span className="text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
+                  <span className="text-xs font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
                     {availableCash.toLocaleString()} cash
                   </span>
                 )}
-                {availableCash !== undefined && hoursAvailable !== undefined && (
-                  <span className="text-emerald-400 dark:text-emerald-500">·</span>
-                )}
                 {hoursAvailable !== undefined && (
-                  <span className="text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
-                    {(hoursAvailable ?? 300).toLocaleString()} h
+                  <span className="text-xs font-semibold tabular-nums text-emerald-800 dark:text-emerald-200">
+                    {(hoursAvailable ?? 300).toLocaleString()} hours
                   </span>
                 )}
               </div>
@@ -230,68 +336,8 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
               Advance to {advanceMonthLabel}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setCalculatorOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            aria-label="Open calculator"
-            title="Calculator (keyboard: digits and operators when open)"
-          >
-            <svg
-              className="h-5 w-5 text-zinc-700 dark:text-zinc-300"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <rect x="4" y="3" width="16" height="18" rx="2" />
-              <path d="M8 7h8M8 11h2M12 11h2M16 11h2M8 15h2M12 15h2M16 15h2" />
-            </svg>
-          </button>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleTheme();
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            aria-label="Toggle theme"
-            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-          >
-            {theme === "light" ? (
-              // Moon icon for dark mode
-              <svg
-                className="h-5 w-5 text-zinc-700 dark:text-zinc-300"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            ) : (
-              // Sun icon for light mode
-              <svg
-                className="h-5 w-5 text-zinc-700 dark:text-zinc-300"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <circle cx="12" cy="12" r="5" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-            )}
-          </button>
+          <HeaderMoreActionsMenu actions={pageHeaderActions} />
+          <HeaderWithdrawalBank />
 
           {isAuthenticated ? (
             <div className="relative" ref={avatarMenuRef}>
@@ -304,7 +350,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
                 {user?.first_name?.[0]?.toUpperCase() || "U"}
               </button>
               {avatarMenuOpen && (
-                <div className="absolute right-0 top-12 z-50 min-w-[160px] rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                <div className="absolute right-0 top-12 z-50 min-w-[180px] rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
                   <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-700">
                     <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {user?.first_name}
@@ -312,6 +358,68 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
                     <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                       {user?.email}
                     </p>
+                  </div>
+                  <div className="border-b border-zinc-100 py-1 dark:border-zinc-700">
+                    <button
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                        setCalculatorOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700/50"
+                    >
+                      <svg
+                        className="h-4 w-4 text-zinc-500 dark:text-zinc-400"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <rect x="4" y="3" width="16" height="18" rx="2" />
+                        <path d="M8 7h8M8 11h2M12 11h2M16 11h2M8 15h2M12 15h2M16 15h2" />
+                      </svg>
+                      Calculator
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleTheme();
+                      }}
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700/50"
+                    >
+                      {theme === "light" ? (
+                        <svg
+                          className="h-4 w-4 text-zinc-500 dark:text-zinc-400"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="h-4 w-4 text-zinc-500 dark:text-zinc-400"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="5" />
+                          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                        </svg>
+                      )}
+                      {theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+                    </button>
                   </div>
                   <div className="py-1">
                     <button

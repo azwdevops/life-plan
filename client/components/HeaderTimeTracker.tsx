@@ -717,26 +717,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           />
         </div>
 
-        <div
-          className={
-            inline
-              ? "min-w-[12rem] flex-1 basis-44 max-w-[22rem] sm:min-w-[14rem] sm:max-w-md md:min-w-[18rem] md:max-w-lg"
-              : "flex min-w-[14rem] flex-1 basis-48 flex-col gap-0.5 sm:min-w-[18rem] md:min-w-[22rem] md:max-w-xl"
-          }
-        >
-          <label htmlFor="time-tracker-desc" className={labelClass}>
-            Description
-          </label>
-          <input
-            id="time-tracker-desc"
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Notes…"
-            className="w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-          />
-        </div>
-
         <button
           type="button"
           disabled={!canStart}

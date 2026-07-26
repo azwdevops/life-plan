@@ -191,19 +191,14 @@ export function BorrowingManager({
 
   return (
     <>
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Borrowing Options
-            </h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Access credit based on your cashflow history
-            </p>
-          </div>
+      <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Borrowing Options
+          </h2>
           <button
             onClick={() => setShowDialog(true)}
-            className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="self-start rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             View Options
           </button>

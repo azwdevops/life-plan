@@ -83,7 +83,7 @@ export async function getTransactions(
   transaction_type?: TransactionType,
   limit: number = 100,
   offset: number = 0
-): Promise<Transaction[]> {
+): Promise<TransactionWithItems[]> {
   const params = new URLSearchParams();
   if (transaction_type) params.append("transaction_type", transaction_type);
   params.append("limit", limit.toString());

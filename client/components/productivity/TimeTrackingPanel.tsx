@@ -1,5 +1,6 @@
 "use client";
 
+import moment from "moment";
 import {
   memo,
   useCallback,
@@ -41,7 +42,6 @@ import {
 } from "@/lib/hooks/use-time-tracker-subjects";
 import { CreateGoalModal } from "@/components/time-tracker/CreateGoalModal";
 import { CreateProjectModal } from "@/components/time-tracker/CreateProjectModal";
-import { backfillTimeTrackerSubjects } from "@/lib/api/time-tracker-subjects";
 import { TimeTrackingCharts } from "@/components/productivity/TimeTrackingCharts";
 
 function IconPlay({ className }: { className?: string }) {
@@ -129,26 +129,9 @@ function localDateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function ordinalDay(n: number): string {
-  if (n >= 11 && n <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
-}
-
 function formatLongDateFromDayKey(dayKey: string): string {
-  const [Y, M, D] = dayKey.split("-").map(Number);
-  if (!Y || !M || !D) return dayKey;
-  const d = new Date(Y, M - 1, D);
-  const month = d.toLocaleString(undefined, { month: "long" });
-  return `${ordinalDay(d.getDate())} ${month} ${d.getFullYear()}`;
+  const m = moment(dayKey, "YYYY-MM-DD");
+  return m.isValid() ? m.format("dddd, LL") : dayKey;
 }
 
 function daySectionTitle(dayKey: string, now: Date): string {
@@ -427,7 +410,7 @@ function SubjectItemMenu({
 function bucketEntriesByStartedDay(
   entries: TimeTrackerEntry[],
   now: Date
-): { dayKey: string; title: string; items: TimeTrackerEntry[] }[] {
+): { dayKey: string; title: string; items: TimeTrackerEntry[]; totalMs: number }[] {
   const dayMap = new Map<string, TimeTrackerEntry[]>();
   for (const e of entries) {
     const k = localDateKey(new Date(e.startedAt));
@@ -436,11 +419,15 @@ function bucketEntriesByStartedDay(
     else dayMap.set(k, [e]);
   }
   const keys = [...dayMap.keys()].sort((a, b) => b.localeCompare(a));
-  return keys.map((dayKey) => ({
-    dayKey,
-    title: daySectionTitle(dayKey, now),
-    items: dayMap.get(dayKey)!,
-  }));
+  return keys.map((dayKey) => {
+    const items = dayMap.get(dayKey)!;
+    return {
+      dayKey,
+      title: daySectionTitle(dayKey, now),
+      items,
+      totalMs: items.reduce((sum, e) => sum + e.durationMs, 0),
+    };
+  });
 }
 
 type SubjectGroup = {
@@ -865,35 +852,10 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
   const [entryActionBusy, setEntryActionBusy] = useState(false);
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [sidePanelKind, setSidePanelKind] = useState<TimeTrackerKind>("goal");
-  // TEMPORARY: remove this button + handler once the goal/project FK backfill
-  // has been run successfully against production data.
-  const [backfilling, setBackfilling] = useState(false);
-  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
-
   const openSidePanel = useCallback((kind: TimeTrackerKind) => {
     setSidePanelKind(kind);
     setSidePanelOpen(true);
   }, []);
-
-  const runBackfill = useCallback(async () => {
-    if (!token) return;
-    setBackfilling(true);
-    setBackfillMessage(null);
-    try {
-      const result = await backfillTimeTrackerSubjects(token);
-      setBackfillMessage(
-        `Created ${result.goals_created} goal(s), ${result.projects_created} project(s); linked ${result.entries_linked} entr${
-          result.entries_linked === 1 ? "y" : "ies"
-        }, ${result.projects_linked_to_goal} project(s) to a goal.`
-      );
-    } catch (err) {
-      setBackfillMessage(
-        err instanceof Error ? err.message : "Backfill failed"
-      );
-    } finally {
-      setBackfilling(false);
-    }
-  }, [token]);
 
   const startTrackingSubject = useCallback(
     (
@@ -1089,12 +1051,6 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
               {fetchError}
             </p>
           ) : null}
-          {backfillMessage ? (
-            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-              {backfillMessage}
-            </p>
-          ) : null}
-
           <TimeTrackingCharts
             entries={entries}
             headerActions={
@@ -1133,16 +1089,6 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                   <IconFolder className="h-4 w-4" />
                   Projects
                 </button>
-                {/* TEMPORARY: remove once the goal/project FK backfill has been run successfully. */}
-                <button
-                  type="button"
-                  disabled={!token || backfilling}
-                  onClick={() => void runBackfill()}
-                  title="One-time: derive Goal/Project rows from existing time entries and link them"
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
-                >
-                  {backfilling ? "Backfilling…" : "Backfill goals/projects"}
-                </button>
                 {!token ? (
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     Sign in to load entries from the server.
@@ -1159,7 +1105,7 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
             </p>
           ) : (
             <>
-            <div className="mt-6 flex min-h-0 flex-1 flex-col gap-10">
+            <div className="mt-6 flex min-h-0 flex-1 flex-col gap-4">
               {dayBuckets.map((day) => {
                 const subjectGroups = groupDayItemsBySubject(day.items);
                 const projectGroups = subjectGroups.filter(
@@ -1176,7 +1122,7 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                   return (
                     <li
                       key={g.groupKey}
-                      className="min-w-0 w-full overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                      className="min-w-0 w-full overflow-hidden bg-white dark:bg-zinc-900"
                     >
                             <div className="flex items-stretch">
                               <button
@@ -1345,24 +1291,35 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
 
                 return (
                   <section key={day.dayKey} className="min-w-0">
-                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                      {day.title}
-                    </h2>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                      <h2 className="flex items-baseline justify-between gap-2 text-lg font-semibold">
+                        <span className="text-indigo-700 dark:text-indigo-400">
+                          {day.title}
+                        </span>
+                        <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                          {formatDurationMs(day.totalMs)}
+                        </span>
+                      </h2>
+                    </div>
                     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start sm:gap-4">
-                      <ul
-                        role="list"
-                        className="flex min-w-0 flex-col gap-3"
-                        aria-label="Projects"
-                      >
-                        {projectGroups.map(renderGroupLi)}
-                      </ul>
-                      <ul
-                        role="list"
-                        className="flex min-w-0 flex-col gap-3"
-                        aria-label="Goals"
-                      >
-                        {goalGroups.map(renderGroupLi)}
-                      </ul>
+                      {projectGroups.length > 0 ? (
+                        <ul
+                          role="list"
+                          className="flex min-w-0 flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800"
+                          aria-label="Projects"
+                        >
+                          {projectGroups.map(renderGroupLi)}
+                        </ul>
+                      ) : null}
+                      {goalGroups.length > 0 ? (
+                        <ul
+                          role="list"
+                          className="flex min-w-0 flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800"
+                          aria-label="Goals"
+                        >
+                          {goalGroups.map(renderGroupLi)}
+                        </ul>
+                      ) : null}
                     </div>
                   </section>
                 );

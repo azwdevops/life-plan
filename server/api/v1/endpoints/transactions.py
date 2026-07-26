@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 from decimal import Decimal
 
@@ -94,7 +94,7 @@ async def create_transaction(
     return new_transaction
 
 
-@router.get("/", response_model=List[TransactionResponse])
+@router.get("/", response_model=List[TransactionWithItems])
 async def get_transactions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -102,9 +102,10 @@ async def get_transactions(
     limit: int = 100,
     offset: int = 0,
 ):
-    """Get all transactions for the current user."""
+    """Get all transactions (with items) for the current user."""
     query = (
         db.query(Transaction)
+        .options(selectinload(Transaction.items))
         .filter(Transaction.user_id == current_user.id)
     )
 

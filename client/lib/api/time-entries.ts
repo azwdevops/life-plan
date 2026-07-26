@@ -66,6 +66,32 @@ export async function listTimeEntries(
   return getTimeEntriesQuery(token, params.toString());
 }
 
+/** Server-side sum of duration_ms in [from, to_exclusive) — avoids fetching/transferring full rows when only a total is needed. */
+export async function getTimeEntriesDurationSum(
+  token: string,
+  fromStartedAtIso: string,
+  toStartedAtExclusiveIso: string
+): Promise<number> {
+  const params = new URLSearchParams();
+  params.set("from", fromStartedAtIso);
+  params.set("to_exclusive", toStartedAtExclusiveIso);
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/time-entries/summary?${params.toString()}`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error("Failed to load time entry summary");
+  }
+  const data = (await response.json()) as { total_duration_ms: number };
+  return data.total_duration_ms;
+}
+
 /** Most recent rows (no date filter). */
 export async function listRecentTimeEntries(
   token: string,

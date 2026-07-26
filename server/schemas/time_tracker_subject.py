@@ -4,13 +4,6 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class TimeTrackerSubjectBackfillResult(BaseModel):
-    goals_created: int
-    projects_created: int
-    projects_linked_to_goal: int
-    entries_linked: int
-
-
 class TimeTrackerGoalOut(BaseModel):
     id: int
     name: str

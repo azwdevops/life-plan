@@ -21,7 +21,17 @@ import {
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction } from "@/lib/hooks/use-transactions";
 import { useLedgerBalances } from "@/lib/hooks/use-reports";
+import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
+import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
+
+function formatKsh(value: number): string {
+  return `KSh ${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  })}`;
+}
 
 function LoansContent() {
   const router = useRouter();
@@ -397,6 +407,11 @@ function LoansContent() {
       .sort((a, b) => b.value - a.value);
   }, [ledgerBalancesData?.items]);
 
+  const liabilitiesByLedgerDisplay = useMemo(
+    () => withMinDisplayShare(liabilitiesByLedger, 4),
+    [liabilitiesByLedger]
+  );
+
   // Colors for pie chart
   const COLORS = [
     "#8884d8",
@@ -484,6 +499,43 @@ function LoansContent() {
       setIsRefreshing(false);
     }
   };
+
+  const headerActions = useMemo(
+    () => [
+      {
+        label: isRefreshing ? "Refreshing..." : "Refresh",
+        onClick: () => void handleRefresh(),
+        disabled: isRefreshing,
+        icon: (
+          <svg
+            className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        ),
+      },
+      {
+        label: "Repay Loan",
+        onClick: () => setShowRepayLoanDialog(true),
+      },
+      {
+        label: "Record Loan",
+        onClick: () => setShowPostLoanDialog(true),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isRefreshing]
+  );
+  usePageHeaderActions(headerActions);
 
   const handleRepayLoan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -608,97 +660,37 @@ function LoansContent() {
               }`
         }
       >
-        <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                Long Term Liabilities
-              </h1>
-              <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-                Record and manage long-term liability transactions
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                title="Refresh data"
-              >
-                <svg
-                  className={`h-5 w-5 ${isRefreshing ? "animate-spin" : ""}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
-              </button>
-              <button
-                onClick={() => setShowRepayLoanDialog(true)}
-                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-              >
-                Repay Loan
-              </button>
-              <button
-                onClick={() => setShowPostLoanDialog(true)}
-                className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                + Record Loan
-              </button>
-            </div>
-          </div>
-
+        <div className="container mx-auto px-4 pb-8 md:px-6 md:pb-12">
           {/* Long Term Liabilities by Ledger Chart */}
           {liabilitiesByLedger.length > 0 && (
             <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 md:p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="mb-3">
               <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                Long Term Liabilities by Ledger
+                Long Term Liabilities
               </h2>
             </div>
 
             <div className="flex flex-col">
-              <div className="h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px]">
+              <div className="h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 15, bottom: 10, left: 15 }}>
+                  <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
                     <Pie
-                      data={liabilitiesByLedger}
+                      data={liabilitiesByLedgerDisplay}
                       cx="50%"
-                      cy="40%"
-                      labelLine={true}
-                      label={(props: any) => {
-                        const entry = liabilitiesByLedger[props.index];
-                        if (!entry) return "";
-                        const amount = entry.value.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                          useGrouping: true,
-                        });
-                        return `${entry.name}: ${entry.percentage.toFixed(1)}% (KSh ${amount})`;
-                      }}
-                      outerRadius="70%"
+                      cy="30%"
+                      outerRadius="60%"
+                      label={renderElbowPieLabel(liabilitiesByLedgerDisplay, formatKsh)}
+                      labelLine={false}
                       fill="#8884d8"
-                      dataKey="value"
+                      dataKey="displayValue"
                     >
-                      {liabilitiesByLedger.map((entry, index) => (
+                      {liabilitiesByLedgerDisplay.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number | undefined) => [
-                        `KSh ${(value || 0).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                          useGrouping: true,
-                        })}`,
+                      formatter={(_value: any, _name: any, item: any) => [
+                        formatKsh(item?.payload?.value ?? 0),
                         "Balance",
                       ]}
                     />
@@ -708,7 +700,7 @@ function LoansContent() {
 
               {/* Legend */}
               <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                {liabilitiesByLedger.map((entry, index) => (
+                {liabilitiesByLedgerDisplay.map((entry, index) => (
                   <div
                     key={entry.ledger_id}
                     className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800"
@@ -718,11 +710,11 @@ function LoansContent() {
                       style={{ backgroundColor: COLORS[index % COLORS.length] }}
                     />
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      <div className="text-base font-medium text-zinc-900 dark:text-zinc-100">
                         {entry.name}
                       </div>
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                        {entry.percentage.toFixed(1)}% • KSh{" "}
+                      <div className="text-sm font-bold text-zinc-600 dark:text-zinc-400">
+                        {entry.percentage.toFixed(2)}% • KSh{" "}
                         {entry.value.toLocaleString("en-US", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,

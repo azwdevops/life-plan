@@ -43,3 +43,7 @@ class TimeTrackerEntryUpdate(BaseModel):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     duration_ms: Optional[int] = None
+
+
+class TimeTrackerEntryDurationSummary(BaseModel):
+    total_duration_ms: int

@@ -1,30 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { TimeTrackingPanel } from "@/components/productivity/TimeTrackingPanel";
-import { ProductivityBlogPanel } from "@/components/productivity/ProductivityBlogPanel";
-import { AiSchedulePanel } from "@/components/productivity/AiSchedulePanel";
-import { PendingWorkPanel } from "@/components/productivity/PendingWorkPanel";
-import { DisciplinePanel } from "@/components/productivity/DisciplinePanel";
-
-type ProductivityTab = "tracking" | "blog" | "schedule" | "pending" | "discipline";
-
-const TAB_CONFIG: Array<{ id: ProductivityTab; label: string }> = [
-  { id: "tracking", label: "Time tracking" },
-  { id: "blog", label: "Blog" },
-  { id: "schedule", label: "AI schedule" },
-  { id: "pending", label: "Pending work" },
-  { id: "discipline", label: "Discipline" },
-];
 
 function ProductivityPageInner() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useAuth();
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   /** Avoid SSR vs client mismatch: auth reads localStorage only on the client. */
@@ -32,19 +17,6 @@ function ProductivityPageInner() {
   useEffect(() => {
     setHasMounted(true);
   }, []);
-
-  const tab = useMemo((): ProductivityTab => {
-    const t = searchParams.get("tab");
-    if (t === "blog") return "blog";
-    if (t === "schedule") return "schedule";
-    if (t === "pending") return "pending";
-    if (t === "discipline") return "discipline";
-    return "tracking";
-  }, [searchParams]);
-
-  const setTab = (next: ProductivityTab) => {
-    router.replace(`/productivity?tab=${next}`);
-  };
 
   useEffect(() => {
     if (!hasMounted || isLoading) return;
@@ -79,63 +51,10 @@ function ProductivityPageInner() {
             isSidebarOpen && isAuthenticated ? "lg:pl-64" : ""
           }`}
         >
-          <div className="border-b border-zinc-200/80 bg-white py-3 dark:border-zinc-700/80 dark:bg-zinc-900">
-            <div className="px-4 md:hidden">
-              <label className="sr-only" htmlFor="productivity-tab-select">
-                Productivity section
-              </label>
-              <select
-                id="productivity-tab-select"
-                value={tab}
-                onChange={(e) => {
-                  setTab(e.target.value as ProductivityTab);
-                }}
-                className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              >
-                {TAB_CONFIG.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="hidden w-full md:flex" role="tablist" aria-label="Productivity sections">
-              {TAB_CONFIG.map((t) => {
-                const selected = t.id === tab;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    onClick={() => setTab(t.id)}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${
-                      selected
-                        ? "bg-blue-600 text-white dark:bg-blue-500"
-                        : "bg-white text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
           <div
             className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-4 py-4"
-            role="tabpanel"
           >
-            {tab === "tracking" ? (
-              <TimeTrackingPanel />
-            ) : tab === "blog" ? (
-              <ProductivityBlogPanel />
-            ) : tab === "schedule" ? (
-              <AiSchedulePanel />
-            ) : tab === "pending" ? (
-              <PendingWorkPanel />
-            ) : (
-              <DisciplinePanel />
-            )}
+            <TimeTrackingPanel />
           </div>
         </main>
       </div>

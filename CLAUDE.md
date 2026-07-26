@@ -73,6 +73,10 @@ setMenuFixed({
 
 This is the same alignment principle — and the same `offset` shape — as `biz-poa`'s `DropdownMenu` `align="right"` (its base formula, before any per-instance `offset`, is identical: `trigger.bottom + 4`, right-aligned). Do **not** copy `biz-poa`'s exact `offset` pixel values (e.g. `{ x: -60, y: -48 }`) into this project — those are corrections tuned to their `ResourceCard`'s specific trigger size/position and will misplace the menu here (our trigger buttons are much smaller, so a `-48` y-offset would push the menu above/behind the trigger instead of below it). If a specific menu needs a correction because its trigger sits near a viewport/container edge, tune `offset` locally for that trigger's actual geometry — see `TimeEntryRowMenu` (large offset, trigger near a table's edge) and `SubjectItemMenu` (small offset, just a nudge) for examples.
 
+## Never run build/compile checks
+
+Do not run `tsc`/`tsc --noEmit`, `next build`, `eslint`, or any other type-check/lint/build/compile command in this project — not even to "verify" an edit worked. Make the change and stop. If something is broken, the user will run their own checks/server and report back; fix it then, based on their report. This is a hard rule for this project, not just the general "don't reflexively re-verify after every edit" guidance — do not run these commands here even when that general guidance would otherwise allow it (e.g. "part of the task" or a build/test suite request) unless the user explicitly asks for that exact command in this project.
+
 ## Backend conventions
 
 ### Never touch Alembic migrations
