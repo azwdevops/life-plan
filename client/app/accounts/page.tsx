@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/hooks/use-accounts";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
 import { DropdownMenu } from "@/components/DropdownMenu";
 import type {
   LedgerCreate,
@@ -68,12 +69,34 @@ export default function AccountsPage() {
     category: "other",
   });
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push("/login");
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedSearchQuery(searchQuery), 250);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  const headerActions = useMemo(
+    () => [
+      {
+        label: "Add Ledger Group",
+        onClick: () => setShowLedgerGroupForm(true),
+      },
+      {
+        label: "Add Account",
+        onClick: () => setShowForm(true),
+      },
+    ],
+    []
+  );
+  usePageHeaderActions(headerActions);
 
   // Don't show loading screen if we're just checking auth - only show if actually loading
   if (!isAuthenticated && !isLoading) {
@@ -241,6 +264,24 @@ export default function AccountsPage() {
     return acc;
   }, {} as Record<number, typeof ledgers>);
 
+  // Frontend-only search (no backend call) since groups/ledgers are already fully loaded.
+  const normalizedSearch = debouncedSearchQuery.trim().toLowerCase();
+  const filteredGroups = normalizedSearch
+    ? groups.filter((group) =>
+        `${group.name} ${group.parent_ledger_group?.name ?? ""} ${group.category}`
+          .toLowerCase()
+          .includes(normalizedSearch)
+      )
+    : groups;
+  const filteredLedgers = normalizedSearch
+    ? ledgers.filter((ledger) => {
+        const ledgerGroup = groups.find((g) => g.id === ledger.ledger_group_id);
+        return `${ledger.name} ${ledgerGroup?.name ?? ""} ${ledger.spending_type?.name ?? ""}`
+          .toLowerCase()
+          .includes(normalizedSearch);
+      })
+    : ledgers;
+
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
       <Header onMenuClick={toggleSidebar} isSidebarOpen={isSidebarOpen} />
@@ -254,32 +295,7 @@ export default function AccountsPage() {
           isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
         }`}
       >
-        <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-            Accounts
-          </h1>
-          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-            Manage your chart of accounts
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowLedgerGroupForm(true)}
-            className="rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            + Add Ledger Group
-          </button>
-          <button
-            onClick={() => setShowForm(true)}
-            className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-          >
-            + Add Account
-          </button>
-        </div>
-      </div>
-
+        <div className="container mx-auto px-4 pb-8 md:px-6 md:pb-12">
       <Dialog
         isOpen={showForm}
         onClose={() => setShowForm(false)}
@@ -577,85 +593,101 @@ export default function AccountsPage() {
         </form>
       </Dialog>
 
-      {/* Ledger Groups List */}
-      <div className="mb-8">
-        <h2 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          Ledger Groups
-        </h2>
-        {groups.length === 0 ? (
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-zinc-600 dark:text-zinc-400">
-              No ledger groups yet. Create your first ledger group to get started.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {groups.map((group) => (
-              <div
-                key={group.id}
-                className="relative rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <div className="absolute right-1 top-1">
-                  <DropdownMenu
-                    items={[
-                      {
-                        label: "Edit",
-                        onClick: () => handleEditLedgerGroup(group),
-                      },
-                      {
-                        label: "Delete",
-                        onClick: () => setDeletingLedgerGroup(group),
-                        danger: true,
-                      },
-                    ]}
-                  />
-                </div>
-                <div className="pr-8">
-                  <h3 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
-                    {group.name}
-                  </h3>
-                  {group.parent_ledger_group && (
-                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                      {group.parent_ledger_group.name}
-                    </p>
-                  )}
-                  <div className="mt-2">
-                    <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
-                      {group.category}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
-                    {(ledgersByGroup[group.id] || []).length} account(s)
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Search */}
+      <div className="mb-8 pt-1">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search ledger groups and accounts..."
+          className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+        />
       </div>
 
-      {/* Accounts List */}
-      <div>
-        <h2 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          Accounts
-        </h2>
-        {ledgersLoading ? (
-          <div className="text-center text-zinc-600 dark:text-zinc-400">
-            Loading accounts...
-          </div>
-        ) : ledgers.length === 0 ? (
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-zinc-600 dark:text-zinc-400">
-              No accounts yet. Create your first account to get started.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {ledgers.map((ledger) => {
-              const ledgerGroup = groups.find((g) => g.id === ledger.ledger_group_id);
-              return (
+      <div className="grid gap-8 lg:grid-cols-2">
+        {/* Accounts List */}
+        <div>
+          <h2 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Accounts
+          </h2>
+          {ledgersLoading ? (
+            <div className="text-center text-zinc-600 dark:text-zinc-400">
+              Loading accounts...
+            </div>
+          ) : filteredLedgers.length === 0 ? (
+            <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center dark:border-zinc-800 dark:bg-zinc-900">
+              <p className="text-zinc-600 dark:text-zinc-400">
+                {ledgers.length === 0
+                  ? "No accounts yet. Create your first account to get started."
+                  : "No accounts match your search."}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {filteredLedgers.map((ledger) => {
+                const ledgerGroup = groups.find((g) => g.id === ledger.ledger_group_id);
+                return (
+                  <div
+                    key={ledger.id}
+                    className="relative rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+                  >
+                    <div className="absolute right-1 top-1">
+                      <DropdownMenu
+                        items={[
+                          {
+                            label: "Edit",
+                            onClick: () => handleEditLedger(ledger),
+                          },
+                          {
+                            label: "Delete",
+                            onClick: () => setDeletingLedger(ledger),
+                            danger: true,
+                          },
+                        ]}
+                      />
+                    </div>
+                    <div className="pr-8">
+                      <h3 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
+                        {ledger.name}
+                      </h3>
+                      {ledgerGroup && (
+                        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                          {ledgerGroup.name}
+                        </p>
+                      )}
+                      {ledger.spending_type && (
+                        <div className="mt-2">
+                          <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-200">
+                            {ledger.spending_type.name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Ledger Groups List */}
+        <div>
+          <h2 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Ledger Groups
+          </h2>
+          {filteredGroups.length === 0 ? (
+            <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center dark:border-zinc-800 dark:bg-zinc-900">
+              <p className="text-zinc-600 dark:text-zinc-400">
+                {groups.length === 0
+                  ? "No ledger groups yet. Create your first ledger group to get started."
+                  : "No ledger groups match your search."}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {filteredGroups.map((group) => (
                 <div
-                  key={ledger.id}
+                  key={group.id}
                   className="relative rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
                 >
                   <div className="absolute right-1 top-1">
@@ -663,11 +695,11 @@ export default function AccountsPage() {
                       items={[
                         {
                           label: "Edit",
-                          onClick: () => handleEditLedger(ledger),
+                          onClick: () => handleEditLedgerGroup(group),
                         },
                         {
                           label: "Delete",
-                          onClick: () => setDeletingLedger(ledger),
+                          onClick: () => setDeletingLedgerGroup(group),
                           danger: true,
                         },
                       ]}
@@ -675,26 +707,27 @@ export default function AccountsPage() {
                   </div>
                   <div className="pr-8">
                     <h3 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
-                      {ledger.name}
+                      {group.name}
                     </h3>
-                    {ledgerGroup && (
+                    {group.parent_ledger_group && (
                       <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                        {ledgerGroup.name}
+                        {group.parent_ledger_group.name}
                       </p>
                     )}
-                    {ledger.spending_type && (
-                      <div className="mt-2">
-                        <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                          {ledger.spending_type.name}
-                        </span>
-                      </div>
-                    )}
+                    <div className="mt-2">
+                      <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                        {group.category}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+                      {(ledgersByGroup[group.id] || []).length} account(s)
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Delete Confirmation Dialogs */}

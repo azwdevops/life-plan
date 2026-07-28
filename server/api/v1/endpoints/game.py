@@ -1,4 +1,5 @@
 import json
+import random
 import re
 from typing import List, Literal, Optional, Tuple
 
@@ -271,6 +272,15 @@ def _parse_questions_json(raw: str) -> List[GameQuestion]:
                         options.append(QuestionOption(key=chr(97 + j), text=str(o)))
             else:
                 options = []
+            if options:
+                # Shuffle in code rather than trusting the LLM's own randomization —
+                # models frequently ignore that instruction and cluster the same
+                # option position across questions, defeating the assessment.
+                random.shuffle(options)
+                options = [
+                    QuestionOption(key=chr(97 + idx), text=opt.text)
+                    for idx, opt in enumerate(options)
+                ]
             if q:
                 out.append(GameQuestion(question=q, options=options or [QuestionOption(key="a", text="")]))
     return out

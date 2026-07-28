@@ -53,9 +53,16 @@ export function SelfDiscoveryAssessmentsEditor({
   const [analysisHtml, setAnalysisHtml] = useState("");
   const [llmRequestBodyTemplate, setLlmRequestBodyTemplate] = useState("");
   const [sortOrder, setSortOrder] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const heading = sectionTitle ?? "Tests";
   const blurb = sectionDescription ?? null;
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const visibleAssessments = normalizedSearch
+    ? assessments.filter((a) =>
+        `${a.title} ${a.tagline}`.toLowerCase().includes(normalizedSearch)
+      )
+    : assessments;
   const showRequestTemplate = kind === "self_discovery" || kind === "ai_schedule";
 
   const questionsLabel =
@@ -140,7 +147,16 @@ export function SelfDiscoveryAssessmentsEditor({
 
   return (
     <div className="mt-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{heading}</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="shrink-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{heading}</h2>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search tests by title or description…"
+          className="w-full flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+        />
+      </div>
       {blurb ? <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{blurb}</p> : null}
       {error ? (
         <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200">
@@ -148,7 +164,7 @@ export function SelfDiscoveryAssessmentsEditor({
         </p>
       ) : null}
       <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {assessments.map((a) => (
+        {visibleAssessments.map((a) => (
           <div
             key={a.test_id}
             className="flex min-h-[180px] flex-col justify-between rounded-xl border border-zinc-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, memo } from "react";
 import { Dialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
 import {
   createPlotProspect,
   deletePlotProspect,
@@ -15,10 +16,6 @@ import {
   updatePlotProspect,
   updatePlotStage,
 } from "@/lib/api/investments";
-
-/** Stacked row cells on small screens; thead hidden via parent */
-const prospectTd =
-  "px-2 py-2 md:table-cell max-md:flex max-md:flex-row max-md:justify-between max-md:items-start max-md:gap-3 max-md:border-b max-md:border-zinc-100 max-md:py-2.5 last:max-md:border-b-0 dark:max-md:border-zinc-800 md:border-0 before:max-md:inline before:max-md:content-[attr(data-label)] before:max-md:shrink-0 before:max-md:text-xs before:max-md:font-medium before:max-md:text-zinc-500 dark:before:max-md:text-zinc-400";
 
 function LocationIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -101,6 +98,25 @@ export const PlotProspectsTab = memo(function PlotProspectsTab() {
     () => [...prospects].sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [prospects]
   );
+
+  const headerActions = useMemo(
+    () => [
+      {
+        label: "Add prospect",
+        onClick: () => {
+          resetForm();
+          setShowCreateDialog(true);
+        },
+      },
+      {
+        label: "Manage stages",
+        onClick: () => setStageDialogOpen(true),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  usePageHeaderActions(headerActions);
 
   const addPhoneField = () => {
     if (phones.length >= 5) return;
@@ -315,153 +331,104 @@ export const PlotProspectsTab = memo(function PlotProspectsTab() {
 
   return (
     <div className="container mx-auto px-4 py-8 md:px-6 md:py-10">
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Plot prospects</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  resetForm();
-                  setShowCreateDialog(true);
-                }}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                + Add prospect
-              </button>
-            </div>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Save and track potential plot investments.
-            </p>
-          </div>
-
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Recorded prospects</h3>
-            <div className="mt-4 md:overflow-x-auto">
-              <table className="w-full text-left text-sm md:min-w-[900px]">
-                <thead className="hidden border-b border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300 md:table-header-group">
-                  <tr>
-                    <th className="px-2 py-2">Name</th>
-                    <th className="px-2 py-2">Phones</th>
-                    <th className="px-2 py-2">Dealer</th>
-                    <th className="px-2 py-2">Location</th>
-                    <th className="px-2 py-2">Size</th>
-                    <th className="px-2 py-2">Price</th>
-                    <th className="px-2 py-2">Stage</th>
-                    <th className="px-2 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedProspects.map((p) => (
-                    <tr
-                      key={p.id}
-                      className="border-b border-zinc-100 dark:border-zinc-800 max-md:mb-4 max-md:block max-md:rounded-xl max-md:border max-md:border-zinc-200 max-md:bg-white max-md:p-0 max-md:shadow-sm dark:max-md:border-zinc-700 dark:max-md:bg-zinc-900 md:table-row md:border-0 md:bg-transparent md:p-0 md:shadow-none"
-                    >
-                      <td data-label="Name" className={`${prospectTd} text-zinc-900 dark:text-zinc-100`}>
-                        <span className="max-md:text-right md:inline">{p.name}</span>
-                      </td>
-                      <td data-label="Phones" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:max-w-[65%] max-md:text-right md:inline">{p.phones.join(", ")}</span>
-                      </td>
-                      <td data-label="Dealer" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:text-right md:inline">{p.dealer_name || "-"}</span>
-                      </td>
-                      <td data-label="Location" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:max-w-[65%] max-md:text-right md:inline">
-                          {p.location}
-                          {p.map_pin ? (
-                            <a
-                              href={p.map_pin}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ml-2 inline text-blue-600 hover:underline dark:text-blue-400"
-                            >
-                              map
-                            </a>
-                          ) : null}
-                        </span>
-                      </td>
-                      <td data-label="Size" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:text-right md:inline">{p.plot_size || "-"}</span>
-                      </td>
-                      <td data-label="Price" className={`${prospectTd} text-zinc-700 dark:text-zinc-300`}>
-                        <span className="max-md:text-right md:inline">{p.price}</span>
-                      </td>
-                      <td data-label="Stage" className={prospectTd}>
-                        <span className="max-md:text-right md:inline">
-                          <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            {p.stage_name}
-                          </span>
-                        </span>
-                      </td>
-                      <td
-                        data-label="Actions"
-                        className={`${prospectTd} relative md:text-right`}
+            {sortedProspects.length === 0 ? (
+              <p className="mt-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                No prospects recorded yet.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {sortedProspects.map((p) => (
+                  <div
+                    key={p.id}
+                    className="relative rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+                  >
+                    <div className="absolute right-2 top-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenProspectMenuId((prev) => (prev === p.id ? null : p.id))
+                        }
+                        className="rounded p-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        aria-label="Prospect actions"
                       >
-                        <span className="max-md:flex max-md:justify-end md:inline">
+                        &#8942;
+                      </button>
+                      {openProspectMenuId === p.id ? (
+                        <div className="absolute right-0 top-full z-10 mt-1 w-24 rounded-lg border border-zinc-200 bg-white p-1 text-left shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                           <button
                             type="button"
-                            onClick={() =>
-                              setOpenProspectMenuId((prev) => (prev === p.id ? null : p.id))
-                            }
-                            className="rounded p-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                            aria-label="Prospect actions"
+                            onClick={() => beginEditProspect(p)}
+                            className="w-full rounded px-2 py-1 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
                           >
-                            &#8942;
+                            Edit
                           </button>
-                        </span>
-                        {openProspectMenuId === p.id ? (
-                          <div className="absolute right-2 top-full z-10 mt-1 w-24 rounded-lg border border-zinc-200 bg-white p-1 text-left shadow-lg dark:border-zinc-700 dark:bg-zinc-900 max-md:right-0 md:top-9 md:mt-0">
-                            <button
-                              type="button"
-                              onClick={() => beginEditProspect(p)}
-                              className="w-full rounded px-2 py-1 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteProspect(p.id)}
-                              className="w-full rounded px-2 py-1 text-left text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                  {sortedProspects.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="block px-2 py-6 text-center text-zinc-500 dark:text-zinc-400 md:table-cell"
-                      >
-                        No prospects recorded yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProspect(p.id)}
+                            className="w-full rounded px-2 py-1 text-left text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Stages</h3>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Manage stages from dialog.
-          </p>
-          <button
-            type="button"
-            onClick={() => setStageDialogOpen(true)}
-            className="mt-4 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Manage stages
-          </button>
-        </div>
-      </div>
+                    <div className="pr-8">
+                      <h4 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
+                        {p.name}
+                      </h4>
+                      <div className="mt-1">
+                        <span className="inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          {p.stage_name}
+                        </span>
+                      </div>
+
+                      <dl className="mt-3 space-y-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                        <div className="flex justify-between gap-2">
+                          <dt className="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">Phones</dt>
+                          <dd className="text-right text-zinc-700 dark:text-zinc-300">{p.phones.join(", ")}</dd>
+                        </div>
+                        {p.dealer_name && (
+                          <div className="flex justify-between gap-2">
+                            <dt className="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">Dealer</dt>
+                            <dd className="text-right text-zinc-700 dark:text-zinc-300">{p.dealer_name}</dd>
+                          </div>
+                        )}
+                        <div className="flex justify-between gap-2">
+                          <dt className="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">Location</dt>
+                          <dd className="text-right text-zinc-700 dark:text-zinc-300">
+                            {p.location}
+                            {p.map_pin ? (
+                              <a
+                                href={p.map_pin}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="ml-1 text-blue-600 hover:underline dark:text-blue-400"
+                              >
+                                map
+                              </a>
+                            ) : null}
+                          </dd>
+                        </div>
+                        {p.plot_size && (
+                          <div className="flex justify-between gap-2">
+                            <dt className="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">Size</dt>
+                            <dd className="text-right text-zinc-700 dark:text-zinc-300">{p.plot_size}</dd>
+                          </div>
+                        )}
+                        <div className="flex justify-between gap-2">
+                          <dt className="shrink-0 font-medium text-zinc-500 dark:text-zinc-400">Price</dt>
+                          <dd className="text-right font-semibold text-zinc-900 dark:text-zinc-100">{p.price}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
       <Dialog
         isOpen={showCreateDialog}

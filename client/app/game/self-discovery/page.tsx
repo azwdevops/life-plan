@@ -194,15 +194,7 @@ function SelfDiscoveryListContent() {
         }
       >
         <div className="container mx-auto px-4 py-6 md:px-6 md:py-8">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 md:text-3xl">
-                Self Discovery
-              </h1>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                Understand myself through short assessments and get a personalized analysis.
-              </p>
-            </div>
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-end">
             <div className="flex w-full max-w-3xl flex-col gap-3 sm:items-end">
               {providersLoading ? (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading providers…</p>

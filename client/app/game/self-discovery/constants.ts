@@ -20,6 +20,18 @@ export const SELF_DISCOVERY_TEST_IDS = [
   "kind_of_wife",
   "attachment_style",
   "what_drives_me",
+  "eq_test",
+  "emotional_triggers",
+  "locus_of_control",
+  "self_compassion",
+  "inner_critic",
+  "core_wounds",
+  "cognitive_distortions",
+  "defense_mechanisms",
+  "stoic_mindset",
+  "shame_resilience",
+  "boundaries",
+  "values_clarification",
 ] as const;
 
 export type TestId = (typeof SELF_DISCOVERY_TEST_IDS)[number];
