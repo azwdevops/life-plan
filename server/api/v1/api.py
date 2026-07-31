@@ -24,6 +24,7 @@ from api.v1.endpoints import (
     pending_work,
     discipline,
     user_api_credentials,
+    azw_books,
 )
 
 api_router = APIRouter()
@@ -77,5 +78,10 @@ api_router.include_router(
     user_api_credentials.router,
     prefix="/settings",
     tags=["settings"],
+)
+api_router.include_router(
+    azw_books.router,
+    prefix="/azw-books",
+    tags=["azw-books"],
 )
 

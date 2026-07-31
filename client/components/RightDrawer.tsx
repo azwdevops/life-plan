@@ -12,7 +12,7 @@ interface RightDrawerProps {
   actions?: ReactNode;
   children: ReactNode;
   /** @default "sm" */
-  width?: "sm" | "md" | "lg" | "xl" | "full";
+  width?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
   /** Set to 1+ when this drawer can open on top of another already-open drawer, so z-index and Escape-to-close stack correctly. @default 0 */
   stackLevel?: number;
 }
@@ -22,6 +22,8 @@ const WIDTH_CLASSES: Record<NonNullable<RightDrawerProps["width"]>, string> = {
   md: "max-w-md",
   lg: "max-w-xl",
   xl: "max-w-2xl",
+  "2xl": "max-w-3xl",
+  "3xl": "max-w-4xl",
   full: "",
 };
 
@@ -90,7 +92,7 @@ export function RightDrawer({
         }`}
         style={{ zIndex: zPanel }}
       >
-        <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
           <h2 className="shrink-0 text-base font-semibold text-zinc-900 dark:text-zinc-100">
             {title}
           </h2>

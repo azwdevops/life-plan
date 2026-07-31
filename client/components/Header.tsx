@@ -9,7 +9,7 @@ import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
-import { usePageHeaderActionsValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
+import { usePageHeaderActionsValue, usePageHeaderExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
   currentMonthLabel: string;
@@ -160,6 +160,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const showHeaderTimeTracker = useMediaQuery("(min-width: 768px)");
   const pageHeaderActions = usePageHeaderActionsValue();
+  const pageHeaderExtra = usePageHeaderExtraValue();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -336,6 +337,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
               Advance to {advanceMonthLabel}
             </button>
           )}
+          {pageHeaderExtra}
           <HeaderMoreActionsMenu actions={pageHeaderActions} />
           <HeaderWithdrawalBank />
 

@@ -506,8 +506,8 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
 
   const subjectItems: SearchablePickerItem[] =
     kind === "goal"
-      ? goals.map((g) => ({ id: g.id, name: g.name }))
-      : projects.map((p) => ({ id: p.id, name: p.name }));
+      ? goals.map((g) => ({ id: g.id, name: g.name })).sort((a, b) => a.name.localeCompare(b.name))
+      : projects.map((p) => ({ id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name));
 
   const refreshGoals = useCallback(() => {
     setGoals(loadGoals());

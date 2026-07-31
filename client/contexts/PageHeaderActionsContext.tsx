@@ -13,14 +13,17 @@ export interface PageHeaderAction {
 interface PageHeaderActionsContextType {
   actions: PageHeaderAction[];
   setActions: (actions: PageHeaderAction[]) => void;
+  extra: ReactNode;
+  setExtra: (extra: ReactNode) => void;
 }
 
 const PageHeaderActionsContext = createContext<PageHeaderActionsContextType | undefined>(undefined);
 
 export function PageHeaderActionsProvider({ children }: { children: ReactNode }) {
   const [actions, setActions] = useState<PageHeaderAction[]>([]);
+  const [extra, setExtra] = useState<ReactNode>(null);
   return (
-    <PageHeaderActionsContext.Provider value={{ actions, setActions }}>
+    <PageHeaderActionsContext.Provider value={{ actions, setActions, extra, setExtra }}>
       {children}
     </PageHeaderActionsContext.Provider>
   );
@@ -33,6 +36,15 @@ export function usePageHeaderActionsValue(): PageHeaderAction[] {
     throw new Error("usePageHeaderActionsValue must be used within a PageHeaderActionsProvider");
   }
   return context.actions;
+}
+
+/** Internal: consumed by <Header> to render page-registered extra header content. */
+export function usePageHeaderExtraValue(): ReactNode {
+  const context = useContext(PageHeaderActionsContext);
+  if (context === undefined) {
+    throw new Error("usePageHeaderExtraValue must be used within a PageHeaderActionsProvider");
+  }
+  return context.extra;
 }
 
 /**
@@ -55,4 +67,27 @@ export function usePageHeaderActions(actions: PageHeaderAction[]): void {
     return () => setActions([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actions, setActions]);
+}
+
+/**
+ * Registers a small page-level widget (e.g. a filter dropdown) to render in
+ * the shared Header itself, just to the left of the "more actions" menu —
+ * for controls that need to stay visible/interactive rather than living
+ * inside the actions dropdown (which only supports simple click actions).
+ * Pass a stable/memoized node — call sites should wrap the node in `useMemo`
+ * so this doesn't re-register (and re-render the Header) every render.
+ * Automatically clears on unmount.
+ */
+export function usePageHeaderExtra(node: ReactNode): void {
+  const context = useContext(PageHeaderActionsContext);
+  if (context === undefined) {
+    throw new Error("usePageHeaderExtra must be used within a PageHeaderActionsProvider");
+  }
+  const { setExtra } = context;
+
+  useEffect(() => {
+    setExtra(node);
+    return () => setExtra(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node, setExtra]);
 }

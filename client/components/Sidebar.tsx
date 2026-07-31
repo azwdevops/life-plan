@@ -111,6 +111,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       { icon: "🏃", label: "Exercise", href: "/personal-growth" },
       { icon: "🧭", label: "Self Discovery", href: "/game/self-discovery" },
       { icon: "📖", label: "Reading", href: "/personal-growth/reading" },
+      { icon: "✍️", label: "AZW Books", href: "/personal-growth/books" },
     ] as Array<{ icon: string; label: string; href: string }>,
     productivity: [
       { icon: "⏱️", label: "Time tracking", href: "/productivity" },

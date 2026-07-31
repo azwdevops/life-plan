@@ -1,4 +1,7 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.v1.endpoints.auth import get_current_user
@@ -10,14 +13,111 @@ from models.reading_library import (
 )
 from models.user import User
 from schemas.reading_library import (
+    ReadingAuthorCreate,
     ReadingAuthorOut,
     ReadingBookOut,
+    ReadingCategoryCreate,
     ReadingCategoryOut,
     ReadingLibraryOut,
     ReadingLibraryPayload,
 )
 
 router = APIRouter()
+
+
+def _normalize_name(name: str) -> str:
+    return name.strip()
+
+
+# --- Granular author/category endpoints ---
+#
+# ReadingAuthor/ReadingCategory are shared lookup models: any feature that needs
+# an "author" or "category" picker (reading tracking, AZW books, ...) reuses
+# these same tables via these endpoints instead of defining its own. See
+# CLAUDE.md "Reuse shared lookup models" for the reasoning.
+#
+# These sit alongside the bulk GET/PUT "/`" endpoints below (which the reading
+# tracker uses to sync its whole local-first library in one shot) — both read
+# and write the same `reading_authors`/`reading_categories` tables, so an
+# author/category created through either path is visible to both.
+
+
+@router.get("/authors", response_model=list[ReadingAuthorOut])
+async def list_reading_authors(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(ReadingAuthorModel)
+        .filter(ReadingAuthorModel.user_id == current_user.id)
+        .order_by(ReadingAuthorModel.name)
+        .all()
+    )
+
+
+@router.post("/authors", response_model=ReadingAuthorOut, status_code=status.HTTP_201_CREATED)
+async def create_reading_author(
+    body: ReadingAuthorCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    name = _normalize_name(body.name)
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Author name is required")
+    existing = (
+        db.query(ReadingAuthorModel)
+        .filter(
+            ReadingAuthorModel.user_id == current_user.id,
+            func.lower(ReadingAuthorModel.name) == name.lower(),
+        )
+        .first()
+    )
+    if existing:
+        return existing
+    author = ReadingAuthorModel(id=str(uuid.uuid4()), user_id=current_user.id, name=name[:512])
+    db.add(author)
+    db.commit()
+    db.refresh(author)
+    return author
+
+
+@router.get("/categories", response_model=list[ReadingCategoryOut])
+async def list_reading_categories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(ReadingCategoryModel)
+        .filter(ReadingCategoryModel.user_id == current_user.id)
+        .order_by(ReadingCategoryModel.name)
+        .all()
+    )
+
+
+@router.post("/categories", response_model=ReadingCategoryOut, status_code=status.HTTP_201_CREATED)
+async def create_reading_category(
+    body: ReadingCategoryCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    name = _normalize_name(body.name)
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category name is required")
+    existing = (
+        db.query(ReadingCategoryModel)
+        .filter(
+            ReadingCategoryModel.user_id == current_user.id,
+            func.lower(ReadingCategoryModel.name) == name.lower(),
+        )
+        .first()
+    )
+    if existing:
+        return existing
+    category = ReadingCategoryModel(id=str(uuid.uuid4()), user_id=current_user.id, name=name[:512])
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return category
 
 
 def _library_to_out(db: Session, user_id: int) -> ReadingLibraryOut:

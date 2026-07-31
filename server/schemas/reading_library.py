@@ -16,6 +16,20 @@ class ReadingCategoryPayload(BaseModel):
     name: str = Field(max_length=512)
 
 
+class ReadingAuthorCreate(BaseModel):
+    """For the granular POST /reading-library/authors endpoint (shared by any
+    feature that needs an author picker, e.g. reading tracking, AZW books)."""
+
+    name: str = Field(max_length=512)
+
+
+class ReadingCategoryCreate(BaseModel):
+    """For the granular POST /reading-library/categories endpoint (shared by any
+    feature that needs a category picker, e.g. reading tracking, AZW books)."""
+
+    name: str = Field(max_length=512)
+
+
 class ReadingBookPayload(BaseModel):
     id: str = Field(max_length=64)
     title: str = Field(max_length=1024)

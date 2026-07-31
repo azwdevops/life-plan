@@ -91,6 +91,67 @@ export async function getReadingLibrary(token: string): Promise<ReadingLibrary> 
   return apiToLibrary(data);
 }
 
+// --- Shared author/category lookups ---
+//
+// ReadingAuthor/ReadingCategory are shared lookup models: any feature that
+// needs an "author" or "category" picker (reading tracking, AZW books, ...)
+// reuses these same endpoints/tables instead of defining its own. See
+// CLAUDE.md "Reuse shared lookup models".
+
+export interface LibraryAuthor {
+  id: string;
+  name: string;
+}
+
+export interface LibraryCategory {
+  id: string;
+  name: string;
+}
+
+async function throwOnLibraryError(response: Response, fallback: string): Promise<void> {
+  if (handleApiResponse(response)) throw new Error("Unauthorized");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: fallback }));
+    throw new Error(err.detail || fallback);
+  }
+}
+
+export async function getLibraryAuthors(token: string): Promise<LibraryAuthor[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/reading-library/authors`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await throwOnLibraryError(response, "Failed to fetch authors");
+  return response.json();
+}
+
+export async function createLibraryAuthor(token: string, name: string): Promise<LibraryAuthor> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/reading-library/authors`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await throwOnLibraryError(response, "Failed to create author");
+  return response.json();
+}
+
+export async function getLibraryCategories(token: string): Promise<LibraryCategory[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/reading-library/categories`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await throwOnLibraryError(response, "Failed to fetch categories");
+  return response.json();
+}
+
+export async function createLibraryCategory(token: string, name: string): Promise<LibraryCategory> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/reading-library/categories`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await throwOnLibraryError(response, "Failed to create category");
+  return response.json();
+}
+
 export async function putReadingLibrary(
   token: string,
   lib: ReadingLibrary

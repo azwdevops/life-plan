@@ -37,6 +37,7 @@ from models.shares_feasibility import SharesFeasibilityWorkspace
 from models.game_save import GameSave
 from models.user_api_credentials import UserLlmApiKey
 from models.self_discovery_assessment import SelfDiscoveryAssessment
+from models.azw_book import AzwBook, AzwBookChapter, azw_book_categories
 
 __all__ = [
     "User",
@@ -78,4 +79,7 @@ __all__ = [
     "GameSave",
     "UserLlmApiKey",
     "SelfDiscoveryAssessment",
+    "AzwBook",
+    "AzwBookChapter",
+    "azw_book_categories",
 ]
