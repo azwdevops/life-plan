@@ -93,7 +93,12 @@ export function RightDrawer({
         style={{ zIndex: zPanel }}
       >
         <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
-          <h2 className="shrink-0 text-base font-semibold text-zinc-900 dark:text-zinc-100">
+          <h2
+            className={`min-w-0 shrink truncate text-base font-semibold text-zinc-900 dark:text-zinc-100 ${
+              actions ? "max-w-[45%]" : ""
+            }`}
+            title={typeof title === "string" ? title : undefined}
+          >
             {title}
           </h2>
           {actions ? (

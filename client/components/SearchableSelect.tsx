@@ -289,6 +289,7 @@ export function SearchableSelect({
             width: `${dropdownPosition.width}px`,
           }}
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Search Input */}
           <div className="border-b border-zinc-200 p-2 dark:border-zinc-700">

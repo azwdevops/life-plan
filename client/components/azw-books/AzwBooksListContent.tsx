@@ -7,7 +7,7 @@ import { TiptapRichTextEditor } from "@/components/editor/TiptapRichTextEditor";
 import { RowActionsMenu } from "./RowActionsMenu";
 import { ChaptersDrawer } from "./ChaptersDrawer";
 import { useAuth } from "@/lib/hooks/use-auth";
-import { usePageHeaderActions, usePageHeaderExtra } from "@/contexts/PageHeaderActionsContext";
+import { usePageHeaderActions, usePageHeaderExtra, usePageHeaderMenuExtra } from "@/contexts/PageHeaderActionsContext";
 import {
   createAzwBook,
   deleteAzwBook,
@@ -52,6 +52,7 @@ export function AzwBooksListContent() {
   const [error, setError] = useState<string | null>(null);
 
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [bookSearch, setBookSearch] = useState("");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<AzwBook | null>(null);
@@ -96,26 +97,20 @@ export function AzwBooksListContent() {
     loadAll();
   }, [loadAll]);
 
-  const categoryFilterOptions = useMemo(
-    () => [
-      { value: "", label: "All categories", searchText: "all" },
-      ...categories.map((c) => ({ value: c.name, label: c.name, searchText: c.name })),
-    ],
-    [categories]
-  );
-
   const authorOptions = useMemo(
     () => authors.map((a) => ({ value: String(a.id), label: a.name, searchText: a.name })),
     [authors]
   );
 
-  const visibleBooks = useMemo(
-    () =>
-      categoryFilter
-        ? books.filter((b) => b.category_names.includes(categoryFilter))
-        : books,
-    [books, categoryFilter]
-  );
+  const visibleBooks = useMemo(() => {
+    const q = bookSearch.trim().toLowerCase();
+    return books.filter((b) => {
+      if (categoryFilter && !b.category_names.includes(categoryFilter)) return false;
+      if (!q) return true;
+      const plainSummary = b.summary ? b.summary.replace(/<[^>]+>/g, " ") : "";
+      return b.title.toLowerCase().includes(q) || plainSummary.toLowerCase().includes(q);
+    });
+  }, [books, categoryFilter, bookSearch]);
 
   const resetForm = () => {
     setTitle("");
@@ -254,20 +249,45 @@ export function AzwBooksListContent() {
   );
   usePageHeaderActions(headerActions);
 
-  const categorySelectorNode = useMemo(
+  const bookSearchNode = useMemo(
     () => (
-      <SearchableSelect
-        options={categoryFilterOptions}
-        value={categoryFilter}
-        onChange={(v) => setCategoryFilter(String(v))}
-        placeholder="Filter by category"
-        searchPlaceholder="Search categories…"
-        className="w-36 sm:w-48"
+      <input
+        type="search"
+        value={bookSearch}
+        onChange={(e) => setBookSearch(e.target.value)}
+        placeholder="Search books by title or description…"
+        className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 sm:w-64"
       />
+    ),
+    [bookSearch]
+  );
+  usePageHeaderExtra(bookSearchNode);
+
+  const categoryFilterOptions = useMemo(
+    () => [
+      { value: "", label: "All categories", searchText: "all" },
+      ...categories.map((c) => ({ value: c.name, label: c.name, searchText: c.name })),
+    ],
+    [categories]
+  );
+
+  const categoryFilterNode = useMemo(
+    () => (
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Category</span>
+        <SearchableSelect
+          options={categoryFilterOptions}
+          value={categoryFilter}
+          onChange={(v) => setCategoryFilter(String(v))}
+          placeholder="Filter by category"
+          searchPlaceholder="Search categories…"
+          className="w-full"
+        />
+      </div>
     ),
     [categoryFilterOptions, categoryFilter]
   );
-  usePageHeaderExtra(categorySelectorNode);
+  usePageHeaderMenuExtra(categoryFilterNode);
 
   return (
     <div className="container mx-auto px-4 pb-8 pt-6 md:px-6 md:pb-12 md:pt-8">
@@ -282,7 +302,9 @@ export function AzwBooksListContent() {
       ) : visibleBooks.length === 0 ? (
         <div className="rounded-lg border border-zinc-200 bg-white p-6 text-center dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-zinc-600 dark:text-zinc-400">
-            {books.length === 0 ? "No books yet. Create your first book to get started." : "No books match this category."}
+            {books.length === 0
+              ? "No books yet. Create your first book to get started."
+              : "No books match your search/filter."}
           </p>
         </div>
       ) : (

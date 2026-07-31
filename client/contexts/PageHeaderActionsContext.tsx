@@ -15,6 +15,8 @@ interface PageHeaderActionsContextType {
   setActions: (actions: PageHeaderAction[]) => void;
   extra: ReactNode;
   setExtra: (extra: ReactNode) => void;
+  menuExtra: ReactNode;
+  setMenuExtra: (menuExtra: ReactNode) => void;
 }
 
 const PageHeaderActionsContext = createContext<PageHeaderActionsContextType | undefined>(undefined);
@@ -22,8 +24,9 @@ const PageHeaderActionsContext = createContext<PageHeaderActionsContextType | un
 export function PageHeaderActionsProvider({ children }: { children: ReactNode }) {
   const [actions, setActions] = useState<PageHeaderAction[]>([]);
   const [extra, setExtra] = useState<ReactNode>(null);
+  const [menuExtra, setMenuExtra] = useState<ReactNode>(null);
   return (
-    <PageHeaderActionsContext.Provider value={{ actions, setActions, extra, setExtra }}>
+    <PageHeaderActionsContext.Provider value={{ actions, setActions, extra, setExtra, menuExtra, setMenuExtra }}>
       {children}
     </PageHeaderActionsContext.Provider>
   );
@@ -45,6 +48,15 @@ export function usePageHeaderExtraValue(): ReactNode {
     throw new Error("usePageHeaderExtraValue must be used within a PageHeaderActionsProvider");
   }
   return context.extra;
+}
+
+/** Internal: consumed by <Header> to render page-registered content inside the "more actions" dropdown panel. */
+export function usePageHeaderMenuExtraValue(): ReactNode {
+  const context = useContext(PageHeaderActionsContext);
+  if (context === undefined) {
+    throw new Error("usePageHeaderMenuExtraValue must be used within a PageHeaderActionsProvider");
+  }
+  return context.menuExtra;
 }
 
 /**
@@ -90,4 +102,27 @@ export function usePageHeaderExtra(node: ReactNode): void {
     return () => setExtra(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node, setExtra]);
+}
+
+/**
+ * Registers a small widget (e.g. a `<select>` filter) to render inside the
+ * shared Header's "more actions" dropdown panel itself — for controls that
+ * belong in that menu (to save header space) but aren't a simple click
+ * action, so they can't be one of the `usePageHeaderActions` buttons.
+ * Pass a stable/memoized node — call sites should wrap it in `useMemo` so
+ * this doesn't re-register (and re-render the Header) every render.
+ * Automatically clears on unmount.
+ */
+export function usePageHeaderMenuExtra(node: ReactNode): void {
+  const context = useContext(PageHeaderActionsContext);
+  if (context === undefined) {
+    throw new Error("usePageHeaderMenuExtra must be used within a PageHeaderActionsProvider");
+  }
+  const { setMenuExtra } = context;
+
+  useEffect(() => {
+    setMenuExtra(node);
+    return () => setMenuExtra(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node, setMenuExtra]);
 }

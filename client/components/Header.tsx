@@ -9,7 +9,7 @@ import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
-import { usePageHeaderActionsValue, usePageHeaderExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
+import { usePageHeaderActionsValue, usePageHeaderExtraValue, usePageHeaderMenuExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
   currentMonthLabel: string;
@@ -50,7 +50,7 @@ interface HeaderProps {
  * getBoundingClientRect + useLayoutEffect, click-outside-to-close), per the
  * project's "More actions (kebab) menus" convention.
  */
-function HeaderMoreActionsMenu({ actions }: { actions: PageHeaderAction[] }) {
+function HeaderMoreActionsMenu({ actions, menuExtra }: { actions: PageHeaderAction[]; menuExtra?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [menuFixed, setMenuFixed] = useState<{ top: number; right: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -101,7 +101,7 @@ function HeaderMoreActionsMenu({ actions }: { actions: PageHeaderAction[] }) {
     };
   }, [open]);
 
-  if (actions.length === 0) return null;
+  if (actions.length === 0 && !menuExtra) return null;
 
   return (
     <div className="relative" ref={rootRef}>
@@ -119,33 +119,38 @@ function HeaderMoreActionsMenu({ actions }: { actions: PageHeaderAction[] }) {
         </svg>
       </button>
       {open && menuFixed ? (
-        <ul
-          className="fixed z-[70] min-w-44 rounded-lg border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
+        <div
+          role="dialog"
+          className="fixed z-[55] min-w-44 rounded-lg border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
           style={{ top: menuFixed.top, right: menuFixed.right }}
-          role="menu"
         >
-          {actions.map((action) => (
-            <li key={action.label} role="none">
-              <button
-                type="button"
-                role="menuitem"
-                disabled={action.disabled}
-                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                  action.variant === "danger"
-                    ? "text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
-                    : "text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                }`}
-                onClick={() => {
-                  setOpen(false);
-                  action.onClick();
-                }}
-              >
-                {action.icon}
-                {action.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+          {menuExtra ? (
+            <div className="border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">{menuExtra}</div>
+          ) : null}
+          <ul role="menu">
+            {actions.map((action) => (
+              <li key={action.label} role="none">
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={action.disabled}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    action.variant === "danger"
+                      ? "text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                      : "text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  }`}
+                  onClick={() => {
+                    setOpen(false);
+                    action.onClick();
+                  }}
+                >
+                  {action.icon}
+                  {action.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </div>
   );
@@ -161,6 +166,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const showHeaderTimeTracker = useMediaQuery("(min-width: 768px)");
   const pageHeaderActions = usePageHeaderActionsValue();
   const pageHeaderExtra = usePageHeaderExtraValue();
+  const pageHeaderMenuExtra = usePageHeaderMenuExtraValue();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -338,7 +344,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
             </button>
           )}
           {pageHeaderExtra}
-          <HeaderMoreActionsMenu actions={pageHeaderActions} />
+          <HeaderMoreActionsMenu actions={pageHeaderActions} menuExtra={pageHeaderMenuExtra} />
           <HeaderWithdrawalBank />
 
           {isAuthenticated ? (
