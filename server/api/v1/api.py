@@ -25,6 +25,7 @@ from api.v1.endpoints import (
     discipline,
     user_api_credentials,
     azw_books,
+    youtube,
 )
 
 api_router = APIRouter()
@@ -83,5 +84,10 @@ api_router.include_router(
     azw_books.router,
     prefix="/azw-books",
     tags=["azw-books"],
+)
+api_router.include_router(
+    youtube.router,
+    prefix="/youtube",
+    tags=["youtube"],
 )
 

@@ -9,6 +9,9 @@ app = FastAPI(title="Life Plan API", version="1.0.0")
 # CORS origins - update these URLs for your production frontend
 CORS_ORIGINS = [
     "http://localhost:3000",
+    # Dev only: the laptop's LAN IP, so the app is reachable from other
+    # devices on the network (e.g. testing from a phone) via that IP.
+    "http://192.168.150.176:3000",
     "https://lifeplan.azwgroup.com",
 ]
 

@@ -38,6 +38,7 @@ from models.game_save import GameSave
 from models.user_api_credentials import UserLlmApiKey
 from models.self_discovery_assessment import SelfDiscoveryAssessment
 from models.azw_book import AzwBook, AzwBookChapter, azw_book_categories
+from models.youtube_channel import YoutubeAccount, YoutubeChannel, YoutubeChannelStat
 
 __all__ = [
     "User",
@@ -82,4 +83,7 @@ __all__ = [
     "AzwBook",
     "AzwBookChapter",
     "azw_book_categories",
+    "YoutubeAccount",
+    "YoutubeChannel",
+    "YoutubeChannelStat",
 ]

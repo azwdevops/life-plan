@@ -4,11 +4,9 @@ import { useState, useRef, useEffect, useCallback, useLayoutEffect, type ReactNo
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
-import { useTheme } from "@/contexts/ThemeContext";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
-import { FloatingCalculator } from "@/components/FloatingCalculator";
 import { usePageHeaderActionsValue, usePageHeaderExtraValue, usePageHeaderMenuExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
@@ -158,33 +156,11 @@ function HeaderMoreActionsMenu({ actions, menuExtra }: { actions: PageHeaderActi
 
 export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderContent, availableCash, hoursAvailable, portfolioValue, cashAnalysis, onViewCurrentDetails, onViewNextDetails, onAdvanceMonth, advanceMonthLabel }: HeaderProps) {
   const router = useRouter();
-  const { isAuthenticated, user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const [calculatorOpen, setCalculatorOpen] = useState(false);
-  const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const { isAuthenticated } = useAuth();
   const showHeaderTimeTracker = useMediaQuery("(min-width: 768px)");
   const pageHeaderActions = usePageHeaderActionsValue();
   const pageHeaderExtra = usePageHeaderExtraValue();
   const pageHeaderMenuExtra = usePageHeaderMenuExtraValue();
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    if (avatarMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [avatarMenuOpen]);
-
-  const handleLogout = () => {
-    setAvatarMenuOpen(false);
-    logout();
-    router.push("/login");
-  };
 
   return (
     <header
@@ -347,100 +323,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
           <HeaderMoreActionsMenu actions={pageHeaderActions} menuExtra={pageHeaderMenuExtra} />
           <HeaderWithdrawalBank />
 
-          {isAuthenticated ? (
-            <div className="relative" ref={avatarMenuRef}>
-              <button
-                onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white font-semibold text-sm transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
-                aria-label="Account menu"
-                aria-expanded={avatarMenuOpen}
-              >
-                {user?.first_name?.[0]?.toUpperCase() || "U"}
-              </button>
-              {avatarMenuOpen && (
-                <div className="absolute right-0 top-12 z-50 min-w-[180px] rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
-                  <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-700">
-                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {user?.first_name}
-                    </p>
-                    <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                      {user?.email}
-                    </p>
-                  </div>
-                  <div className="border-b border-zinc-100 py-1 dark:border-zinc-700">
-                    <button
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                        setCalculatorOpen(true);
-                      }}
-                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700/50"
-                    >
-                      <svg
-                        className="h-4 w-4 text-zinc-500 dark:text-zinc-400"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <rect x="4" y="3" width="16" height="18" rx="2" />
-                        <path d="M8 7h8M8 11h2M12 11h2M16 11h2M8 15h2M12 15h2M16 15h2" />
-                      </svg>
-                      Calculator
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleTheme();
-                      }}
-                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700/50"
-                    >
-                      {theme === "light" ? (
-                        <svg
-                          className="h-4 w-4 text-zinc-500 dark:text-zinc-400"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="h-4 w-4 text-zinc-500 dark:text-zinc-400"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <circle cx="12" cy="12" r="5" />
-                          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                        </svg>
-                      )}
-                      {theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-                    </button>
-                  </div>
-                  <div className="py-1">
-                    <button
-                      onClick={handleLogout}
-                      className="w-full px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
+          {!isAuthenticated && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => router.push("/login")}
@@ -457,11 +340,6 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
           <div className="px-4 py-2 md:px-6">{subHeaderContent}</div>
         </div>
       )}
-
-      <FloatingCalculator
-        open={calculatorOpen}
-        onClose={() => setCalculatorOpen(false)}
-      />
     </header>
   );
 }

@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { InstallAppButton } from "@/components/InstallAppButton";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -51,10 +52,13 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       initial.push("personalGrowth");
     }
     if (pathname.startsWith("/productivity")) initial.push("productivity");
+    if (pathname.startsWith("/music-business")) initial.push("musicBusiness");
     if (
       pathname.startsWith("/support-settings") ||
       pathname.startsWith("/settings") ||
-      pathname.startsWith("/admin/users")
+      pathname.startsWith("/admin/users") ||
+      pathname.startsWith("/privacy") ||
+      pathname.startsWith("/terms")
     ) {
       initial.push("supportSettings");
     }
@@ -74,7 +78,10 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
     { icon: "📈", label: "Reports", href: "/reports", type: "link" as const },
     { icon: "💼", label: "Investments", href: null, type: "expandable" as const, subMenuKey: "investments", matchPrefixes: ["/investments"] },
     ...(isLoggedIn
-      ? [{ icon: "✨", label: "Productivity", href: null, type: "expandable" as const, subMenuKey: "productivity", matchPrefixes: ["/productivity"] }]
+      ? [
+          { icon: "✨", label: "Productivity", href: null, type: "expandable" as const, subMenuKey: "productivity", matchPrefixes: ["/productivity"] },
+          { icon: "🎵", label: "Music Business", href: null, type: "expandable" as const, subMenuKey: "musicBusiness", matchPrefixes: ["/music-business"] },
+        ]
       : []),
     ...(isAdmin
       ? [
@@ -82,7 +89,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
           { icon: "📚", label: "Developer Growth", href: "/developer-growth", type: "link" as const },
         ]
       : []),
-    { icon: "🛠️", label: "Support & Settings", href: null, type: "expandable" as const, subMenuKey: "supportSettings", matchPrefixes: ["/support-settings", "/settings", "/admin/users"] },
+    { icon: "🛠️", label: "Support & Settings", href: null, type: "expandable" as const, subMenuKey: "supportSettings", matchPrefixes: ["/support-settings", "/settings", "/admin/users", "/privacy", "/terms"] },
   ].sort((a, b) => a.label.localeCompare(b.label));
 
   const subMenuItems = {
@@ -120,9 +127,14 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       { icon: "📌", label: "Pending work", href: "/productivity/pending" },
       { icon: "🎯", label: "Discipline", href: "/productivity/discipline" },
     ] as Array<{ icon: string; label: string; href: string }>,
+    musicBusiness: [
+      { icon: "📺", label: "YouTube", href: "/music-business/youtube" },
+    ] as Array<{ icon: string; label: string; href: string }>,
     supportSettings: [
       { icon: "💬", label: "Feedback", href: "/support-settings" },
       { icon: "⚙️", label: "Settings", href: "/settings" },
+      { icon: "🔒", label: "Privacy Policy", href: "/privacy" },
+      { icon: "📜", label: "Terms of Service", href: "/terms" },
       ...(isAdmin
         ? [{ icon: "👥", label: "Users", href: "/admin/users" }]
         : []),
@@ -152,7 +164,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       {/* Sidebar */}
       <aside
         id="app-site-sidebar"
-        className={`fixed left-0 top-16 bottom-0 z-40 w-64 transform border-r border-zinc-200 bg-white transition-transform duration-300 ease-in-out dark:border-zinc-800 dark:bg-zinc-900 ${
+        className={`fixed left-0 top-16 bottom-0 z-40 flex w-64 flex-col transform border-r border-zinc-200 bg-white transition-transform duration-300 ease-in-out dark:border-zinc-800 dark:bg-zinc-900 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -161,7 +173,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
           onScroll={(e) => {
             lastScrollTop = e.currentTarget.scrollTop;
           }}
-          className="flex h-full flex-col overflow-y-auto overscroll-contain py-4 pr-4 pl-0.5"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-4 pl-0.5"
         >
           <div className="pb-6">
             <ul className="space-y-0.5">
@@ -249,6 +261,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
             </ul>
           </div>
         </nav>
+        <InstallAppButton />
       </aside>
     </>
   );

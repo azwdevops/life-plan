@@ -281,7 +281,7 @@
         type: "migrations",
         title: "Apply database migrations",
         description: "Runs all pending Alembic migrations to the latest revision.",
-        command: "cd server && alembic upgrade head",
+        command: "alembic upgrade head",
         source: "server/alembic/",
       },
       {
@@ -290,7 +290,7 @@
         title: "Generate migration (autogenerate)",
         description:
           "Creates a new Alembic revision from model changes. Review the generated file before applying.",
-        command: 'cd server && alembic revision --autogenerate -m "describe change"',
+        command: 'alembic revision --autogenerate -m "describe change"',
         source: "server/alembic/",
       },
       {
@@ -298,7 +298,7 @@
         type: "migrations",
         title: "Rollback one migration",
         description: "Reverts the database by one Alembic revision.",
-        command: "cd server && alembic downgrade -1",
+        command: "alembic downgrade -1",
         source: "server/alembic/",
       },
       {
@@ -306,7 +306,7 @@
         type: "migrations",
         title: "Show current migration revision",
         description: "Prints the Alembic revision currently applied to the database.",
-        command: "cd server && alembic current",
+        command: "alembic current",
         source: "server/alembic/",
       },
       {
@@ -323,7 +323,7 @@
         title: "Run API (development)",
         description:
           "Starts the FastAPI app with auto-reload. Requires LIFE_PLAN_DATABASE_URL and other .env values.",
-        command: "cd server && uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+        command: "uvicorn main:app --reload --host 0.0.0.0 --port 8000",
         source: "server/main.py",
       },
       {
@@ -332,8 +332,7 @@
         title: "Run API (production-style)",
         description:
           "Runs the API with Gunicorn and Uvicorn workers. Adjust bind address and worker count for your host.",
-        command:
-          "cd server && gunicorn main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000",
+        command: "gunicorn main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000",
         source: "requirements.txt (gunicorn)",
       },
       {
@@ -341,7 +340,7 @@
         type: "frontend",
         title: "Install frontend dependencies",
         description: "Installs Node packages for the Next.js client.",
-        command: "cd client && npm install",
+        command: "npm install",
         source: "client/package.json",
       },
       {
@@ -350,14 +349,14 @@
         title: "Run frontend (development)",
         description:
           "Starts Next.js dev server (default port 3000). Set NEXT_PUBLIC_API_URL in client/.env.local.",
-        command: "cd client && npm run dev",
+        command: "npm run dev",
         source: "client/package.json",
       },
       {
         id: "npm-build",
         type: "frontend",
         title: "Build frontend for production",
-        command: "cd client && npm run build",
+        command: "npm run build",
         source: "client/package.json",
       },
       {
@@ -365,14 +364,14 @@
         type: "frontend",
         title: "Run production frontend build",
         description: "Serves the output of npm run build.",
-        command: "cd client && npm run start",
+        command: "npm run start",
         source: "client/package.json",
       },
       {
         id: "npm-lint",
         type: "frontend",
         title: "Lint frontend",
-        command: "cd client && npm run lint",
+        command: "npm run lint",
         source: "client/package.json",
       },
       {
@@ -381,8 +380,7 @@
         title: "Full database setup (reset + migrate + seed)",
         description:
           "Typical flow after reset_db: recreate schema, then seed ledger groups. Run migrations yourself between steps.",
-        command:
-          "python scripts/reset_db.py && cd server && alembic upgrade head && cd .. && python scripts/create_default_ledger_groups.py",
+        command: "python scripts/create_default_ledger_groups.py",
         source: "workflow",
       },
     ];

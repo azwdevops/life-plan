@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { RegisterServiceWorker } from "@/components/RegisterServiceWorker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,14 +14,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const isDev = process.env.NODE_ENV !== "production";
+
 export const metadata: Metadata = {
-  title: "Life Plan",
+  title: isDev ? "Life Plan (Dev)" : "Life Plan",
   description: "Life Plan Application",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: "/icon.svg",
+    apple: isDev ? "/icon-192-dev.png" : "/icon-192.png",
     shortcut: "/icon.svg",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -63,6 +70,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <RegisterServiceWorker />
         <Providers>{children}</Providers>
       </body>
     </html>
