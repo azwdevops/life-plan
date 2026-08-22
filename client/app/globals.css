@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Tailwind's text-*/spacing-* utilities are rem-based, so nudging the root
+/* Tailwind's text- and spacing- utilities are rem-based, so nudging the root
    font-size down scales all of them together (a app-wide "more compact" feel)
    rather than needing per-component text-size overrides. 14px instead of the
    browser default 16px - still modest enough not to break px-sized icons/controls. */
