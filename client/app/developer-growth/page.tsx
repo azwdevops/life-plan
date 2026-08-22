@@ -61,7 +61,7 @@ function DeveloperGrowthContent() {
       />
       <main
         className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+          isSidebarOpen && isAuthenticated ? "lg:ml-60" : "lg:ml-0"
         }`}
       >
         <div className="border-b border-zinc-200/80 bg-white py-3 dark:border-zinc-700/80 dark:bg-zinc-900">

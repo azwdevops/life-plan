@@ -16,6 +16,7 @@ from models.user import User
 from models.youtube_channel import YoutubeAccount, YoutubeChannel, YoutubeChannelStat
 from schemas.youtube_channel import (
     YoutubeAccountOut,
+    YoutubeAccountUpdate,
     YoutubeChannelOut,
     YoutubeChannelStatOut,
     YoutubeChannelUpdate,
@@ -43,6 +44,27 @@ def _channel_to_out(channel: YoutubeChannel) -> YoutubeChannelOut:
         created_at=channel.created_at,
         updated_at=channel.updated_at,
     )
+
+
+def _account_to_out(account: YoutubeAccount) -> YoutubeAccountOut:
+    return YoutubeAccountOut(
+        id=account.id,
+        google_email=account.google_email,
+        group_label=account.group_label,
+        channels=[_channel_to_out(c) for c in account.channels],
+        created_at=account.created_at,
+    )
+
+
+def _get_owned_account(db: Session, current_user: User, account_id: int) -> YoutubeAccount:
+    account = (
+        db.query(YoutubeAccount)
+        .filter(YoutubeAccount.id == account_id, YoutubeAccount.user_id == current_user.id)
+        .first()
+    )
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    return account
 
 
 def _get_owned_channel(db: Session, current_user: User, channel_id: int) -> YoutubeChannel:
@@ -195,15 +217,27 @@ async def list_accounts(
         .order_by(YoutubeAccount.google_email)
         .all()
     )
-    return [
-        YoutubeAccountOut(
-            id=a.id,
-            google_email=a.google_email,
-            channels=[_channel_to_out(c) for c in a.channels],
-            created_at=a.created_at,
-        )
-        for a in accounts
-    ]
+    return [_account_to_out(a) for a in accounts]
+
+
+@router.patch("/accounts/{account_id}", response_model=YoutubeAccountOut)
+async def update_account(
+    account_id: int,
+    body: YoutubeAccountUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Currently only supports setting/clearing `group_label`, used to display
+    multiple connected accounts (e.g. a personal Gmail and a Brand Account
+    that Google reports as separate identities) together as one channel owner."""
+    account = _get_owned_account(db, current_user, account_id)
+    patch = body.model_dump(exclude_unset=True)
+    if "group_label" in patch:
+        label = (patch["group_label"] or "").strip()
+        account.group_label = label or None
+    db.commit()
+    db.refresh(account)
+    return _account_to_out(account)
 
 
 @router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -212,13 +246,7 @@ async def disconnect_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    account = (
-        db.query(YoutubeAccount)
-        .filter(YoutubeAccount.id == account_id, YoutubeAccount.user_id == current_user.id)
-        .first()
-    )
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    account = _get_owned_account(db, current_user, account_id)
     db.delete(account)
     db.commit()
     return None

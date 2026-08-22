@@ -39,6 +39,13 @@ class YoutubeAccount(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     google_email = Column(String(255), nullable=False)
+    # Google treats a personal Gmail login and each Brand Account channel it
+    # manages as separate identities (separate google_email values, sometimes
+    # a synthetic "...@pages.plusgoogle.com" address) - there's no reliable
+    # signal from the OAuth response to auto-detect they belong to the same
+    # person. This is a user-set label so accounts that are really "the same
+    # channel owner" can be displayed grouped together anyway.
+    group_label = Column(String(120), nullable=True, index=True)
     access_token = Column(Text, nullable=False)
     refresh_token = Column(Text, nullable=False)
     token_expires_at = Column(DateTime(timezone=True), nullable=False)

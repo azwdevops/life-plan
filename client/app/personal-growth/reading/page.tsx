@@ -36,7 +36,7 @@ export default function PersonalGrowthReadingPage() {
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} isLoggedIn={isAuthenticated} />
       <main
         className={`flex min-h-0 flex-1 flex-col transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+          isSidebarOpen && isAuthenticated ? "lg:ml-60" : "lg:ml-0"
         }`}
       >
         <ReadingTrackingTab />

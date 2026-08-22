@@ -48,7 +48,7 @@ function ProductivityPageInner() {
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         <main
           className={`min-h-0 min-w-0 max-w-full flex-1 transition-all duration-300 ${
-            isSidebarOpen && isAuthenticated ? "lg:pl-64" : ""
+            isSidebarOpen && isAuthenticated ? "lg:pl-60" : ""
           }`}
         >
           <div

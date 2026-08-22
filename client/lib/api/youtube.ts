@@ -32,6 +32,7 @@ export interface YoutubeChannel {
 export interface YoutubeAccount {
   id: number;
   google_email: string;
+  group_label: string | null;
   channels: YoutubeChannel[];
   created_at: string;
 }
@@ -39,6 +40,10 @@ export interface YoutubeAccount {
 export interface YoutubeChannelUpdate {
   is_monetized?: boolean;
   estimated_rpm?: number | null;
+}
+
+export interface YoutubeAccountUpdate {
+  group_label?: string | null;
 }
 
 function authHeaders(token: string): HeadersInit {
@@ -67,6 +72,20 @@ export async function getYoutubeAccounts(token: string): Promise<YoutubeAccount[
     headers: { Authorization: `Bearer ${token}` },
   });
   await throwOnError(response, "Failed to fetch connected accounts");
+  return response.json();
+}
+
+export async function updateYoutubeAccount(
+  token: string,
+  accountId: number,
+  data: YoutubeAccountUpdate
+): Promise<YoutubeAccount> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/youtube/accounts/${accountId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+  await throwOnError(response, "Failed to update account");
   return response.json();
 }
 

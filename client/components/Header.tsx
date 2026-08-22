@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useLayoutEffect, type ReactNo
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { usePwaInstall } from "@/lib/hooks/use-pwa-install";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
@@ -161,6 +162,14 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const pageHeaderActions = usePageHeaderActionsValue();
   const pageHeaderExtra = usePageHeaderExtraValue();
   const pageHeaderMenuExtra = usePageHeaderMenuExtraValue();
+  const { canInstall, promptInstall } = usePwaInstall();
+  // "Install App" lives in the same global "more actions" menu rather than a
+  // fixed sidebar footer button - it's a one-off utility action, not page
+  // content, so it belongs alongside page-registered actions here instead of
+  // permanently occupying sidebar space.
+  const moreActions = canInstall
+    ? [...pageHeaderActions, { label: "Install App", onClick: promptInstall, icon: <span aria-hidden>⬇️</span> }]
+    : pageHeaderActions;
 
   return (
     <header
@@ -320,7 +329,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
             </button>
           )}
           {pageHeaderExtra}
-          <HeaderMoreActionsMenu actions={pageHeaderActions} menuExtra={pageHeaderMenuExtra} />
+          <HeaderMoreActionsMenu actions={moreActions} menuExtra={pageHeaderMenuExtra} />
           <HeaderWithdrawalBank />
 
           {!isAuthenticated && (

@@ -4,7 +4,6 @@ import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/use-auth";
-import { InstallAppButton } from "@/components/InstallAppButton";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -164,7 +163,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
       {/* Sidebar */}
       <aside
         id="app-site-sidebar"
-        className={`fixed left-0 top-16 bottom-0 z-40 flex w-64 flex-col transform border-r border-zinc-200 bg-white transition-transform duration-300 ease-in-out dark:border-zinc-800 dark:bg-zinc-900 ${
+        className={`fixed left-0 top-16 bottom-0 z-40 flex w-60 flex-col transform border-r border-zinc-200 bg-white transition-transform duration-300 ease-in-out dark:border-zinc-800 dark:bg-zinc-900 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -173,7 +172,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
           onScroll={(e) => {
             lastScrollTop = e.currentTarget.scrollTop;
           }}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-4 pl-0.5"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-4 pl-0.5 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700"
         >
           <div className="pb-6">
             <ul className="space-y-0.5">
@@ -184,15 +183,15 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                     <li key={item.label}>
                       <button
                         onClick={() => toggleMenu(item.subMenuKey)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors ${
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 transition-colors ${
                           isActive
                             ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                             : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">{item.icon}</span>
-                          <span className="font-medium">{item.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{item.icon}</span>
+                          <span className="text-base font-medium">{item.label}</span>
                         </div>
                         <span
                           className={`transition-transform ${expandedMenus.includes(item.subMenuKey) ? "rotate-90" : ""}`}
@@ -208,7 +207,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                               <li key={subItem.label}>
                                 <Link
                                   href={subItem.href}
-                                  className={`flex items-center gap-3 rounded-lg px-2 py-2 transition-colors ${
+                                  className={`flex items-center gap-2 rounded-lg px-2 py-1 transition-colors ${
                                     isSubActive
                                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                                       : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
@@ -219,7 +218,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                                     }
                                   }}
                                 >
-                                  <span className="text-lg">{subItem.icon}</span>
+                                  <span className="text-sm">{subItem.icon}</span>
                                   <span className="text-sm font-medium">{subItem.label}</span>
                                 </Link>
                               </li>
@@ -240,7 +239,7 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                     <li key={item.label}>
                       <Link
                         href={href}
-                        className={`flex items-center gap-3 rounded-lg px-2 py-2 transition-colors ${
+                        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors ${
                           isActive
                             ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                             : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -251,8 +250,8 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
                           }
                         }}
                       >
-                        <span className="text-xl">{item.icon}</span>
-                        <span className="font-medium">{item.label}</span>
+                        <span className="text-base">{item.icon}</span>
+                        <span className="text-base font-medium">{item.label}</span>
                       </Link>
                     </li>
                   );
@@ -261,7 +260,6 @@ export function Sidebar({ isOpen, onClose, isLoggedIn = false }: SidebarProps) {
             </ul>
           </div>
         </nav>
-        <InstallAppButton />
       </aside>
     </>
   );

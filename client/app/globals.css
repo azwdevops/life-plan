@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind's text-*/spacing-* utilities are rem-based, so nudging the root
+   font-size down scales all of them together (a app-wide "more compact" feel)
+   rather than needing per-component text-size overrides. 14px instead of the
+   browser default 16px - still modest enough not to break px-sized icons/controls. */
+html {
+  font-size: 14px;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -20,7 +28,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 /* React DatePicker Styles */

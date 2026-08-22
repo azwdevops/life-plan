@@ -336,7 +336,7 @@ export default function DashboardPage() {
       />
       <main
         className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+          isSidebarOpen && isAuthenticated ? "lg:ml-60" : "lg:ml-0"
         }`}
       >
         <div className="container mx-auto px-4 py-8 md:px-6 md:py-12">

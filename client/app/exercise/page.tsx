@@ -1118,7 +1118,7 @@ function ExerciseContent() {
           isEmbedded
             ? "flex-1"
             : `flex-1 transition-all duration-300 ${
-                isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+                isSidebarOpen && isAuthenticated ? "lg:ml-60" : "lg:ml-0"
               }`
         }
       >

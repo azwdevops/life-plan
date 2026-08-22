@@ -43,6 +43,7 @@ class YoutubeChannelOut(BaseModel):
 class YoutubeAccountOut(BaseModel):
     id: int
     google_email: str
+    group_label: Optional[str] = None
     channels: list[YoutubeChannelOut] = []
     created_at: datetime
 
@@ -56,3 +57,10 @@ class YoutubeChannelUpdate(BaseModel):
 
     is_monetized: Optional[bool] = None
     estimated_rpm: Optional[float] = None
+
+
+class YoutubeAccountUpdate(BaseModel):
+    """Set to a name to group this account with others sharing the same label
+    (displayed together in the UI); set to null/empty to ungroup it."""
+
+    group_label: Optional[str] = None

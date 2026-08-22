@@ -29,7 +29,7 @@ function LiabilitiesContent() {
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} isLoggedIn={isAuthenticated} />
       <main
         className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen && isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+          isSidebarOpen && isAuthenticated ? "lg:ml-60" : "lg:ml-0"
         }`}
       >
         <LoansPage />
