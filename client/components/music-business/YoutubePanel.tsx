@@ -21,7 +21,53 @@ import {
   type YoutubeChannel,
 } from "@/lib/api/youtube";
 
-const TABLE_COLUMN_COUNT = 7;
+const TABLE_COLUMN_COUNT = 9;
+
+// Always-on earnings estimate, independent of the per-channel `is_monetized`
+// toggle/custom RPM above - this content is Kikuyu-language Kenyan music
+// videos with a ~90% Kenya-based audience, so it uses a fixed blended RPM
+// researched for that specific mix rather than the user-entered one:
+//   - Kenya's country-level CPM sits around $3.20 (vs. $10+ for the US/UK/CA/AU
+//     tier), and entertainment/music is itself a lower-paying content niche
+//     ($2-8 CPM vs. $10-25 for finance/education).
+//   - Creator RPM (what actually gets paid out, after YouTube's ~45% cut) runs
+//     roughly 45-55% of CPM.
+//   - Combining a low-CPM country with a low-CPM niche, then blending in the
+//     ~10% non-Kenya views (assumed closer to a $2-4 CPM mix), lands on
+//     roughly $1.00 per 1,000 views as a defensible blended RPM estimate.
+// Source: Lenostube & SMM Africa YouTube CPM/RPM country + niche breakdowns
+// (2026), which put Kenya CPM at ~$3.20 and entertainment niche CPM at $2-8.
+const ASSUMED_RPM_USD = 1.0;
+const USD_TO_KES = 127;
+
+function formatUsd(n: number | null): string {
+  if (n === null) return "—";
+  return `$${n.toFixed(2)}`;
+}
+
+function formatKes(n: number | null): string {
+  if (n === null) return "—";
+  return `KES ${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+// Same blended-RPM math as useChannelController's per-channel estimate, but
+// treating a channel with no synced views yet as $0 rather than "—" - correct
+// for summing into an account/grand total, where an unsynced channel should
+// just not contribute rather than making the whole total unknown.
+function estimateEarningsFromViews(mtdViews: number | null | undefined): { usd: number; kes: number } {
+  const usd = mtdViews != null ? (mtdViews / 1000) * ASSUMED_RPM_USD : 0;
+  return { usd, kes: usd * USD_TO_KES };
+}
+
+function sumEarnings(channels: YoutubeChannel[]): { usd: number; kes: number } {
+  return channels.reduce(
+    (acc, channel) => {
+      const { usd, kes } = estimateEarningsFromViews(channel.latest_stat?.month_to_date_views);
+      return { usd: acc.usd + usd, kes: acc.kes + kes };
+    },
+    { usd: 0, kes: 0 }
+  );
+}
 
 interface AccountDisplayGroup {
   key: string;
@@ -183,6 +229,13 @@ function useChannelController(channel: YoutubeChannel, token: string) {
   const estimatedRevenue =
     channel.is_monetized && mtdViews != null && rpm != null ? (mtdViews / 1000) * rpm : null;
 
+  // Blended-RPM earnings estimate - always shown, regardless of the
+  // is_monetized toggle above (that one reflects the user's own real RPM once
+  // a channel is actually monetized; this one is a rough "what could this be
+  // worth" figure for every channel, monetized or not).
+  const estimatedEarningsUsd = mtdViews != null ? (mtdViews / 1000) * ASSUMED_RPM_USD : null;
+  const estimatedEarningsKes = estimatedEarningsUsd != null ? estimatedEarningsUsd * USD_TO_KES : null;
+
   const refreshAccounts = () => queryClient.invalidateQueries({ queryKey: ["youtube-accounts", token] });
 
   const handleSync = async () => {
@@ -226,6 +279,8 @@ function useChannelController(channel: YoutubeChannel, token: string) {
     stat,
     mtdViews,
     estimatedRevenue,
+    estimatedEarningsUsd,
+    estimatedEarningsKes,
     syncing,
     handleSync,
     monetizeConfirm,
@@ -359,6 +414,8 @@ function ChannelCardMobile({
         <StatRow label="Total views" value={formatCount(c.stat?.view_count)} />
         <StatRow label="Watch time (hrs)" value={formatCount(c.stat?.watch_time_hours ?? null)} />
         <StatRow label="Views this month" value={formatCount(c.mtdViews)} />
+        <StatRow label="Est. earnings (USD)" value={formatUsd(c.estimatedEarningsUsd)} />
+        <StatRow label="Est. earnings (KES)" value={formatKes(c.estimatedEarningsKes)} />
       </div>
 
       <div className="mt-3 flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/50">
@@ -458,6 +515,12 @@ function ChannelTableRow({
         </td>
         <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-zinc-900 dark:text-zinc-100">
           {formatCount(c.mtdViews)}
+        </td>
+        <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-zinc-900 dark:text-zinc-100">
+          {formatUsd(c.estimatedEarningsUsd)}
+        </td>
+        <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-zinc-900 dark:text-zinc-100">
+          {formatKes(c.estimatedEarningsKes)}
         </td>
         <td className="px-3 py-2">
           <div className="flex flex-col items-start gap-1.5">
@@ -772,6 +835,21 @@ function AccountSectionMobile({
   );
 }
 
+// One total, summed across every account in a display group (a lone
+// ungrouped account counts as its own one-account group) - shown once after
+// all of that group's account sections, not per account.
+function GroupTotalMobile({ totals }: { totals: { usd: number; kes: number } }) {
+  return (
+    <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/40">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Group total</p>
+      <div className="mt-1 divide-y divide-zinc-200 dark:divide-zinc-700">
+        <StatRow label="Est. earnings (USD)" value={formatUsd(totals.usd)} />
+        <StatRow label="Est. earnings (KES)" value={formatKes(totals.kes)} />
+      </div>
+    </div>
+  );
+}
+
 // Desktop (md: and up): one table section per account - a column header row
 // then that account's channel rows, each carrying its own account actions
 // menu (no raw account email, which for a Brand Account is an ugly synthetic
@@ -808,6 +886,12 @@ function AccountTableGroup({
           <th scope="col" className="px-3 py-2 text-right font-medium">
             Views (month)
           </th>
+          <th scope="col" className="px-3 py-2 text-right font-medium">
+            Est. earnings (USD)
+          </th>
+          <th scope="col" className="px-3 py-2 text-right font-medium">
+            Est. earnings (KES)
+          </th>
           <th scope="col" className="px-3 py-2 font-medium">
             Monetized
           </th>
@@ -825,6 +909,28 @@ function AccountTableGroup({
           <ChannelTableRow key={channel.id} channel={channel} token={token} account={account} allAccounts={allAccounts} />
         ))
       )}
+    </tbody>
+  );
+}
+
+// One total row, summed across every account in a display group (a lone
+// ungrouped account counts as its own one-account group) - rendered once
+// after all of that group's <AccountTableGroup> tbody blocks, not per account.
+function GroupTotalRow({ totals }: { totals: { usd: number; kes: number } }) {
+  return (
+    <tbody>
+      <tr className="border-t border-zinc-200 bg-zinc-50/60 dark:border-zinc-700 dark:bg-zinc-800/30">
+        <td colSpan={5} className="px-3 py-2 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+          Group total
+        </td>
+        <td className="px-3 py-2 text-right font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+          {formatUsd(totals.usd)}
+        </td>
+        <td className="px-3 py-2 text-right font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+          {formatKes(totals.kes)}
+        </td>
+        <td colSpan={2} />
+      </tr>
     </tbody>
   );
 }
@@ -888,6 +994,7 @@ export function YoutubePanel() {
 
   const accounts = accountsQuery.data ?? [];
   const accountGroups = groupAccounts(accounts);
+  const grandTotals = sumEarnings(accounts.flatMap((a) => a.channels));
 
   return (
     <div className="space-y-6 px-4 py-4 md:px-6">
@@ -932,54 +1039,78 @@ export function YoutubePanel() {
         </div>
       ) : (
         <>
+          {/* Shown once regardless of viewport - grand total across every
+              connected account's channels. */}
+          <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
+              Estimated total earnings (all channels)
+            </p>
+            <div className="flex items-center gap-4">
+              <span className="font-mono text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                {formatUsd(grandTotals.usd)}
+              </span>
+              <span className="font-mono text-sm text-zinc-500 dark:text-zinc-400">
+                {formatKes(grandTotals.kes)}
+              </span>
+            </div>
+          </div>
+
           {/* Mobile: stacked account sections, one bordered card per channel. */}
           <div className="space-y-8 md:hidden">
-            {accountGroups.map((group) => (
-              <div key={group.key} className="space-y-4">
-                {group.label && group.accounts.length > 1 && (
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{group.label}</h2>
-                )}
-                <div
-                  className={
-                    group.label && group.accounts.length > 1
-                      ? "space-y-6 border-l-2 border-zinc-200 pl-4 dark:border-zinc-700"
-                      : "space-y-6"
-                  }
-                >
-                  {group.accounts.map((account) => (
-                    <AccountSectionMobile key={account.id} account={account} token={token} allAccounts={accounts} />
-                  ))}
+            {accountGroups.map((group) => {
+              const groupTotals = sumEarnings(group.accounts.flatMap((a) => a.channels));
+              return (
+                <div key={group.key} className="space-y-4">
+                  {group.label && group.accounts.length > 1 && (
+                    <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{group.label}</h2>
+                  )}
+                  <div
+                    className={
+                      group.label && group.accounts.length > 1
+                        ? "space-y-6 border-l-2 border-zinc-200 pl-4 dark:border-zinc-700"
+                        : "space-y-6"
+                    }
+                  >
+                    {group.accounts.map((account) => (
+                      <AccountSectionMobile key={account.id} account={account} token={token} allAccounts={accounts} />
+                    ))}
+                    <GroupTotalMobile totals={groupTotals} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Desktop: one table, channels grouped under a header row per account
               (and under a group-name row first, when 2+ accounts share a label). */}
           <div className="hidden overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800 md:block">
             <table className="w-full min-w-180 border-collapse">
-              {accountGroups.map((group) => (
-                <Fragment key={group.key}>
-                  {group.label && group.accounts.length > 1 && (
-                    <tbody>
-                      <tr className="border-t-4 border-zinc-300 dark:border-zinc-600">
-                        <td colSpan={TABLE_COLUMN_COUNT} className="bg-zinc-100 px-3 py-2 dark:bg-zinc-800">
-                          <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.label}</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  )}
-                  {group.accounts.map((account, idx) => (
-                    <AccountTableGroup
-                      key={account.id}
-                      account={account}
-                      token={token}
-                      allAccounts={accounts}
-                      showHeader={idx === 0}
-                    />
-                  ))}
-                </Fragment>
-              ))}
+              {accountGroups.map((group) => {
+                const groupTotals = sumEarnings(group.accounts.flatMap((a) => a.channels));
+                return (
+                  <Fragment key={group.key}>
+                    {group.label && group.accounts.length > 1 && (
+                      <tbody>
+                        <tr className="border-t-4 border-zinc-300 dark:border-zinc-600">
+                          <td colSpan={TABLE_COLUMN_COUNT} className="bg-zinc-100 px-3 py-2 dark:bg-zinc-800">
+                            <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.label}</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    )}
+                    {group.accounts.map((account, idx) => (
+                      <AccountTableGroup
+                        key={account.id}
+                        account={account}
+                        token={token}
+                        allAccounts={accounts}
+                        showHeader={idx === 0}
+                      />
+                    ))}
+                    <GroupTotalRow totals={groupTotals} />
+                  </Fragment>
+                );
+              })}
             </table>
           </div>
         </>
