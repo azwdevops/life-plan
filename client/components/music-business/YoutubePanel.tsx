@@ -103,6 +103,13 @@ function formatCount(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
+function formatSyncedAt(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return `Last synced ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
 function IconSync({ spinning }: { spinning?: boolean }) {
   return (
     <svg
@@ -170,14 +177,25 @@ function ChannelGrowthChart({ channelId, token }: { channelId: number; token: st
     enabled: !!token,
   });
 
+  // Backend already returns the full sync history, oldest first (no
+  // limit/windowing) - the chart plots every synced point, so it naturally
+  // spans from the first sync ever done to the most recent one.
   const data = useMemo(
     () =>
       (historyQuery.data ?? []).map((s) => ({
         label: new Date(s.synced_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
         subscribers: s.subscriber_count,
+        views: s.month_to_date_views,
       })),
     [historyQuery.data]
   );
+
+  const rangeLabel = useMemo(() => {
+    const rows = historyQuery.data ?? [];
+    if (rows.length < 2) return null;
+    const format = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return `${format(rows[0].synced_at)} – ${format(rows[rows.length - 1].synced_at)}`;
+  }, [historyQuery.data]);
 
   if (historyQuery.isLoading) {
     return <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading history…</p>;
@@ -185,29 +203,57 @@ function ChannelGrowthChart({ channelId, token }: { channelId: number; token: st
   if (data.length < 2) {
     return (
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Sync at least twice to see subscriber growth over time.
+        Sync at least twice to see subscriber and view growth over time.
       </p>
     );
   }
   return (
-    <div className="h-40 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#d4d4d8" className="dark:opacity-30" />
-          <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#71717a" }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 10, fill: "#71717a" }} width={32} />
-          <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e4e4e7", fontSize: 12 }} />
-          <Line
-            type="monotone"
-            dataKey="subscribers"
-            name="Subscribers"
-            stroke="#2563eb"
-            strokeWidth={2}
-            dot={{ r: 2.5 }}
-            activeDot={{ r: 4 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="space-y-4">
+      {rangeLabel && <p className="text-xs text-zinc-500 dark:text-zinc-400">First sync to latest: {rangeLabel}</p>}
+      <div>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Subscribers</p>
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#d4d4d8" className="dark:opacity-30" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#71717a" }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10, fill: "#71717a" }} width={32} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e4e4e7", fontSize: 12 }} />
+              <Line
+                type="monotone"
+                dataKey="subscribers"
+                name="Subscribers"
+                stroke="#2563eb"
+                strokeWidth={2}
+                dot={{ r: 2.5 }}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Views this month</p>
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#d4d4d8" className="dark:opacity-30" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#71717a" }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10, fill: "#71717a" }} width={40} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e4e4e7", fontSize: 12 }} />
+              <Line
+                type="monotone"
+                dataKey="views"
+                name="Views this month"
+                stroke="#16a34a"
+                strokeWidth={2}
+                dot={{ r: 2.5 }}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
 }
@@ -383,9 +429,14 @@ function ChannelCardMobile({
             📺
           </div>
         )}
-        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          {channel.title}
-        </h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{channel.title}</h3>
+          {formatSyncedAt(c.stat?.synced_at) && (
+            <p className="truncate text-[11px] font-medium text-blue-600 dark:text-blue-400">
+              {formatSyncedAt(c.stat?.synced_at)}
+            </p>
+          )}
+        </div>
         <div className="flex shrink-0 items-center gap-1">
           <a
             href={channel.studio_url}
@@ -501,7 +552,14 @@ function ChannelTableRow({
                 📺
               </div>
             )}
-            <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{channel.title}</span>
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{channel.title}</span>
+              {formatSyncedAt(c.stat?.synced_at) && (
+                <span className="block truncate text-[11px] font-medium text-blue-600 dark:text-blue-400">
+                  {formatSyncedAt(c.stat?.synced_at)}
+                </span>
+              )}
+            </div>
           </div>
         </td>
         <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-zinc-900 dark:text-zinc-100">
