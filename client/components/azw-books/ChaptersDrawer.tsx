@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RightDrawer } from "@/components/RightDrawer";
 import { TiptapRichTextEditor } from "@/components/editor/TiptapRichTextEditor";
 import { RowActionsMenu } from "./RowActionsMenu";
+import { downloadBook } from "./downloadBook";
 import { useAuth } from "@/lib/hooks/use-auth";
 import {
   createAzwBookChapter,
@@ -23,71 +24,6 @@ function getPreview(html: string, maxLen = 140): string {
   if (!text) return "";
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen).trim() + "…";
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-/**
- * Downloads the book as a PDF via the browser's native print-to-PDF (choose
- * "Save as PDF" in the print dialog) — there's no HTML-rendering PDF library
- * in this project (pdf-lib only manipulates existing PDF bytes/pages), so this
- * is the standard no-new-dependency way to get a real, correctly formatted
- * PDF out of rich-text HTML content.
- */
-function downloadBook(book: AzwBook, chapters: AzwBookChapter[]) {
-  const chaptersHtml = chapters
-    .map((c) => `<h2>${escapeHtml(c.title)}</h2>\n${c.content || ""}`)
-    .join("\n");
-  const doc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(book.title)}</title>
-<style>
-  body { font-family: Georgia, "Times New Roman", serif; color: #111; line-height: 1.6; padding: 2rem; }
-  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
-  h2 { font-size: 1.3rem; margin-top: 2rem; page-break-before: always; }
-  h2:first-of-type { page-break-before: avoid; }
-  img { max-width: 100%; }
-</style>
-</head>
-<body>
-<h1>${escapeHtml(book.title)}</h1>
-${book.summary ? `<div>${book.summary}</div>` : ""}
-${chaptersHtml}
-</body>
-</html>`;
-
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-
-  const cleanup = () => {
-    if (iframe.parentNode) document.body.removeChild(iframe);
-  };
-
-  iframe.onload = () => {
-    const win = iframe.contentWindow;
-    if (!win) {
-      cleanup();
-      return;
-    }
-    win.focus();
-    win.print();
-    setTimeout(cleanup, 1000);
-  };
-
-  iframe.srcdoc = doc;
-  document.body.appendChild(iframe);
 }
 
 const COPY_ICON = (

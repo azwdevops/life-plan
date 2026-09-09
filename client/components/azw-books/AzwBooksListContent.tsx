@@ -6,11 +6,13 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import { TiptapRichTextEditor } from "@/components/editor/TiptapRichTextEditor";
 import { RowActionsMenu } from "./RowActionsMenu";
 import { ChaptersDrawer } from "./ChaptersDrawer";
+import { downloadBook } from "./downloadBook";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { usePageHeaderActions, usePageHeaderExtra, usePageHeaderMenuExtra } from "@/contexts/PageHeaderActionsContext";
 import {
   createAzwBook,
   deleteAzwBook,
+  getAzwBookChapters,
   getAzwBooks,
   updateAzwBook,
   type AzwBook,
@@ -67,6 +69,15 @@ export function AzwBooksListContent() {
   const [chaptersDrawerBook, setChaptersDrawerBook] = useState<AzwBook | null>(null);
   const [chaptersDrawerAction, setChaptersDrawerAction] = useState<"add" | null>(null);
 
+  const [categoriesDrawerOpen, setCategoriesDrawerOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const [debouncedCategorySearch, setDebouncedCategorySearch] = useState("");
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedCategorySearch(categorySearch), 250);
+    return () => clearTimeout(handle);
+  }, [categorySearch]);
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const handleCopy = (key: string, text: string) => {
     if (!text) return;
@@ -111,6 +122,30 @@ export function AzwBooksListContent() {
       return b.title.toLowerCase().includes(q) || plainSummary.toLowerCase().includes(q);
     });
   }, [books, categoryFilter, bookSearch]);
+
+  const categoryBookCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const category of categories) counts.set(category.name, 0);
+    for (const book of books) {
+      for (const name of book.category_names) {
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [categories, books]);
+
+  const filteredCategoryBookCounts = useMemo(() => {
+    const q = debouncedCategorySearch.trim().toLowerCase();
+    if (!q) return categoryBookCounts;
+    return categoryBookCounts.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categoryBookCounts, debouncedCategorySearch]);
+
+  const closeCategoriesDrawer = () => {
+    setCategoriesDrawerOpen(false);
+    setCategorySearch("");
+  };
 
   const resetForm = () => {
     setTitle("");
@@ -201,6 +236,16 @@ export function AzwBooksListContent() {
     }
   };
 
+  const handleDownloadBook = async (book: AzwBook) => {
+    if (!token) return;
+    try {
+      const chapters = await getAzwBookChapters(token, book.id);
+      downloadBook(book, chapters);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not download book");
+    }
+  };
+
   const openViewChapters = (book: AzwBook) => {
     setChaptersDrawerAction(null);
     setChaptersDrawerBook(book);
@@ -236,6 +281,15 @@ export function AzwBooksListContent() {
               strokeWidth={2}
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
             />
+          </svg>
+        ),
+      },
+      {
+        label: "Categories",
+        onClick: () => setCategoriesDrawerOpen(true),
+        icon: (
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
           </svg>
         ),
       },
@@ -320,6 +374,7 @@ export function AzwBooksListContent() {
                   items={[
                     { label: "Edit", onClick: () => openEditDrawer(book) },
                     { label: "View chapters", onClick: () => openViewChapters(book) },
+                    { label: "Download book", onClick: () => void handleDownloadBook(book) },
                     { label: "Add chapter", onClick: () => openAddChapterFor(book) },
                     { label: "Delete", onClick: () => void handleDeleteBook(book), danger: true },
                   ]}
@@ -517,6 +572,55 @@ export function AzwBooksListContent() {
         initialAction={chaptersDrawerAction}
         onChaptersChanged={loadAll}
       />
+
+      <RightDrawer
+        open={categoriesDrawerOpen}
+        onClose={closeCategoriesDrawer}
+        title={`Categories (${categoryBookCounts.length})`}
+        width="xl"
+        actions={
+          <input
+            type="search"
+            value={categorySearch}
+            onChange={(e) => setCategorySearch(e.target.value)}
+            placeholder="Search categories…"
+            className="w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+          />
+        }
+      >
+        {filteredCategoryBookCounts.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {categoryBookCounts.length === 0 ? "No categories yet." : "No categories match your search."}
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-zinc-400 dark:border-zinc-600">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-zinc-50 dark:bg-zinc-800/60">
+                  <th className="border-b border-zinc-400 px-3 py-1.5 text-left font-semibold text-zinc-700 dark:border-zinc-600 dark:text-zinc-300">
+                    Category
+                  </th>
+                  <th className="border-b border-l border-zinc-400 px-3 py-1.5 text-right font-semibold text-zinc-700 dark:border-zinc-600 dark:text-zinc-300">
+                    Books ({books.length})
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCategoryBookCounts.map((c) => (
+                  <tr key={c.name}>
+                    <td className="border-b border-zinc-400 px-3 py-1.5 text-zinc-800 dark:border-zinc-600 dark:text-zinc-200">
+                      {c.name}
+                    </td>
+                    <td className="border-b border-l border-zinc-400 px-3 py-1.5 text-right text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
+                      {c.count}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </RightDrawer>
     </div>
   );
 }
