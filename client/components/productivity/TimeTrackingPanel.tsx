@@ -25,6 +25,7 @@ import { emitTrackerPreset } from "@/lib/time-tracker-preset-bridge";
 import {
   deleteTimeEntry,
   duplicateTimeEntry,
+  getEarliestTimeEntry,
   listRecentTimeEntries,
   listTimeEntries,
   updateTimeEntry,
@@ -835,6 +836,9 @@ function SubjectSidePanel({
 export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
   const { token } = useAuth();
   const [entries, setEntries] = useState<TimeTrackerEntry[]>([]);
+  const [earliestEntryDate, setEarliestEntryDate] = useState<string | null>(
+    null
+  );
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
@@ -906,6 +910,24 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
         TIME_TRACKER_ENTRIES_UPDATED_EVENT,
         onEntriesUpdated
       );
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      setEarliestEntryDate(null);
+      return;
+    }
+    let cancelled = false;
+    getEarliestTimeEntry(token)
+      .then((iso) => {
+        if (!cancelled) setEarliestEntryDate(iso ? localDateKey(new Date(iso)) : null);
+      })
+      .catch(() => {
+        /* keep prior bound on transient errors */
+      });
+    return () => {
+      cancelled = true;
     };
   }, [token]);
 
@@ -1033,6 +1055,17 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
     }
   };
 
+  const onFetchCustomRange = async (startDayIso: string, endDayIso: string) => {
+    if (!token) return;
+    const [sy, sm, sd] = startDayIso.split("-").map(Number);
+    const [ey, em, ed] = endDayIso.split("-").map(Number);
+    const from = new Date(sy, sm - 1, sd).toISOString();
+    const toExclusive = new Date(ey, em - 1, ed + 1).toISOString();
+    const remote = await listTimeEntries(token, from, toExclusive);
+    const merged = sortEntriesDesc(remote);
+    setEntries((prev) => replaceEntriesInTimeRange(prev, from, toExclusive, merged));
+  };
+
   return (
         <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col">
           {showMobileTimeTracker === true ? (
@@ -1053,6 +1086,8 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
           ) : null}
           <TimeTrackingCharts
             entries={entries}
+            earliestDate={earliestEntryDate}
+            onFetchCustomRange={onFetchCustomRange}
             headerActions={
               <div className="flex flex-wrap items-center gap-2 gap-y-2">
                 <button

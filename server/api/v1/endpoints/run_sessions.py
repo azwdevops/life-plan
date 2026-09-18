@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,7 @@ from models.user import User
 from models.run_session import RunSession
 from schemas.run_session import (
     RunSessionComplete,
+    RunSessionEarliest,
     RunSessionResponse,
     RunSessionStart,
 )
@@ -111,18 +113,56 @@ async def list_run_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=200),
+    from_created_at: datetime | None = Query(
+        default=None,
+        alias="from",
+        description="Inclusive lower bound on created_at (ISO 8601)",
+    ),
+    to_created_at_exclusive: datetime | None = Query(
+        default=None,
+        alias="to_exclusive",
+        description="Exclusive upper bound on created_at (ISO 8601)",
+    ),
 ):
-    rows = (
+    """List sessions: either [from, to_exclusive) or most recent `limit` rows."""
+    q = db.query(RunSession).filter(
+        RunSession.user_id == current_user.id,
+        RunSession.is_completed.is_(True),
+    )
+    if from_created_at is not None or to_created_at_exclusive is not None:
+        if from_created_at is None or to_created_at_exclusive is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide both from and to_exclusive, or neither for recent sessions",
+            )
+        q = q.filter(
+            RunSession.created_at >= from_created_at,
+            RunSession.created_at < to_created_at_exclusive,
+        )
+        rows = q.order_by(RunSession.created_at.desc()).limit(2000).all()
+    else:
+        rows = q.order_by(RunSession.created_at.desc()).limit(limit).all()
+    return rows
+
+
+@router.get("/earliest", response_model=RunSessionEarliest)
+async def earliest_run_session(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The created_at of the user's very first completed run, so callers
+    (e.g. a custom date range picker) can bound against the true earliest
+    record without having to have already loaded that far back."""
+    row = (
         db.query(RunSession)
         .filter(
             RunSession.user_id == current_user.id,
             RunSession.is_completed.is_(True),
         )
-        .order_by(RunSession.created_at.desc())
-        .limit(limit)
-        .all()
+        .order_by(RunSession.created_at.asc())
+        .first()
     )
-    return rows
+    return RunSessionEarliest(created_at=row.created_at if row else None)
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

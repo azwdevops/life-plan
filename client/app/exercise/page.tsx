@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import {
   Bar,
   BarChart,
@@ -25,7 +27,9 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import {
   completeRunSession,
   deleteRunSession,
+  getEarliestRunSession,
   listRunSessions,
+  listRunSessionsRange,
   startRunSession,
   type RunSessionResponse,
 } from "@/lib/api/run-sessions";
@@ -86,6 +90,31 @@ function sessionLocalDate(createdAt: string): string {
   return localISODate(new Date(createdAt));
 }
 
+function isoToLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function replaceRunSessionsInRange(
+  prev: RunSessionResponse[],
+  fromIso: string,
+  toExclusiveIso: string,
+  replacement: RunSessionResponse[]
+): RunSessionResponse[] {
+  const fromMs = new Date(fromIso).getTime();
+  const toMs = new Date(toExclusiveIso).getTime();
+  const kept = prev.filter((r) => {
+    const t = new Date(r.created_at).getTime();
+    return t < fromMs || t >= toMs;
+  });
+  const m = new Map<number, RunSessionResponse>();
+  for (const r of kept) m.set(r.id, r);
+  for (const r of replacement) m.set(r.id, r);
+  return [...m.values()].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
 function addCalendarDays(iso: string, days: number): string {
   const [y, mo, da] = iso.split("-").map(Number);
   const d = new Date(y, mo - 1, da);
@@ -102,14 +131,6 @@ function weekStartMondayLocalFromDayIso(iso: string): string {
   return localISODate(d);
 }
 
-function mondayOfContainingLocalDate(d: Date): string {
-  const c = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = c.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  c.setDate(c.getDate() + diff);
-  return localISODate(c);
-}
-
 function formatAxisDate(iso: string): string {
   const [y, mo, da] = iso.split("-").map(Number);
   const dt = new Date(y, mo - 1, da);
@@ -119,6 +140,128 @@ function formatAxisDate(iso: string): string {
 function formatWeekRangeLabel(startIso: string): string {
   const endIso = addCalendarDays(startIso, 6);
   return `${formatAxisDate(startIso)} – ${formatAxisDate(endIso)}`;
+}
+
+type SummaryPeriodMode = "month" | "quarter" | "half-year" | "year" | "custom";
+
+type SummaryPeriodConfig = {
+  mode: SummaryPeriodMode;
+  year: number;
+  month: number;
+  quarter: number;
+  half: 1 | 2;
+  customStart: string;
+  customEnd: string;
+};
+
+const SUMMARY_PERIOD_STORAGE_KEY = "exercise-summary-period-config";
+
+function defaultSummaryPeriodConfig(): SummaryPeriodConfig {
+  const now = new Date();
+  return {
+    mode: "month",
+    year: now.getFullYear(),
+    month: now.getMonth(),
+    quarter: Math.floor(now.getMonth() / 3) + 1,
+    half: now.getMonth() < 6 ? 1 : 2,
+    customStart: "",
+    customEnd: "",
+  };
+}
+
+function loadSummaryPeriodConfig(): SummaryPeriodConfig {
+  const fallback = defaultSummaryPeriodConfig();
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(SUMMARY_PERIOD_STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<SummaryPeriodConfig>;
+    const validModes: SummaryPeriodMode[] = [
+      "month",
+      "quarter",
+      "half-year",
+      "year",
+      "custom",
+    ];
+    if (parsed && validModes.includes(parsed.mode as SummaryPeriodMode)) {
+      return {
+        mode: parsed.mode as SummaryPeriodMode,
+        year: typeof parsed.year === "number" ? parsed.year : fallback.year,
+        month:
+          typeof parsed.month === "number" && parsed.month >= 0 && parsed.month <= 11
+            ? parsed.month
+            : fallback.month,
+        quarter:
+          typeof parsed.quarter === "number" &&
+          parsed.quarter >= 1 &&
+          parsed.quarter <= 4
+            ? parsed.quarter
+            : fallback.quarter,
+        half: parsed.half === 1 || parsed.half === 2 ? parsed.half : fallback.half,
+        customStart:
+          typeof parsed.customStart === "string" ? parsed.customStart : "",
+        customEnd: typeof parsed.customEnd === "string" ? parsed.customEnd : "",
+      };
+    }
+  } catch {
+    /* ignore corrupt storage */
+  }
+  return fallback;
+}
+
+function saveSummaryPeriodConfig(config: SummaryPeriodConfig) {
+  try {
+    window.localStorage.setItem(
+      SUMMARY_PERIOD_STORAGE_KEY,
+      JSON.stringify(config)
+    );
+  } catch {
+    /* ignore write failures (e.g. private browsing) */
+  }
+}
+
+function summaryPeriodRange(
+  config: SummaryPeriodConfig
+): { from: Date; toExclusive: Date; label: string } {
+  const y = config.year;
+  if (config.mode === "quarter") {
+    const qStartMonth = (config.quarter - 1) * 3;
+    const from = new Date(y, qStartMonth, 1);
+    const toExclusive = new Date(y, qStartMonth + 3, 1);
+    return { from, toExclusive, label: `Q${config.quarter} ${y}` };
+  }
+  if (config.mode === "half-year") {
+    const hStartMonth = config.half === 1 ? 0 : 6;
+    const from = new Date(y, hStartMonth, 1);
+    const toExclusive = new Date(y, hStartMonth + 6, 1);
+    return { from, toExclusive, label: `${config.half === 1 ? "H1" : "H2"} ${y}` };
+  }
+  if (config.mode === "year") {
+    const from = new Date(y, 0, 1);
+    const toExclusive = new Date(y + 1, 0, 1);
+    return { from, toExclusive, label: String(y) };
+  }
+  if (config.mode === "custom") {
+    const now = new Date();
+    const startIso = config.customStart || localISODate(now);
+    const endIso = config.customEnd || localISODate(now);
+    const [sy, sm, sd] = startIso.split("-").map(Number);
+    const [ey, em, ed] = endIso.split("-").map(Number);
+    const from = new Date(sy, sm - 1, sd);
+    const toExclusive = new Date(ey, em - 1, ed + 1);
+    return {
+      from,
+      toExclusive,
+      label: `${formatAxisDate(startIso)} – ${formatAxisDate(endIso)}`,
+    };
+  }
+  const from = new Date(y, config.month, 1);
+  const toExclusive = new Date(y, config.month + 1, 1);
+  return {
+    from,
+    toExclusive,
+    label: from.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+  };
 }
 
 function aggregateDailyFromSessions(
@@ -457,6 +600,9 @@ function ExerciseContent() {
 
   const [runSessions, setRunSessions] = useState<RunSessionResponse[]>([]);
   const [runSessionsError, setRunSessionsError] = useState<string | null>(null);
+  const [earliestRunDate, setEarliestRunDate] = useState<string | null>(null);
+  const [customFetching, setCustomFetching] = useState(false);
+  const [customFetchError, setCustomFetchError] = useState<string | null>(null);
   const [runSaveError, setRunSaveError] = useState<string | null>(null);
   const [metricsGateMessage, setMetricsGateMessage] = useState<string | null>(
     null
@@ -486,6 +632,22 @@ function ExerciseContent() {
   );
   const [deleteSavedError, setDeleteSavedError] = useState<string | null>(null);
   const [openRunMenuId, setOpenRunMenuId] = useState<number | null>(null);
+
+  const [summaryPeriodConfig, setSummaryPeriodConfig] =
+    useState<SummaryPeriodConfig>(defaultSummaryPeriodConfig);
+  const [summaryConfigOpen, setSummaryConfigOpen] = useState(false);
+  const [summaryDraftMode, setSummaryDraftMode] =
+    useState<SummaryPeriodMode>("month");
+  const [summaryDraftYear, setSummaryDraftYear] = useState(0);
+  const [summaryDraftMonth, setSummaryDraftMonth] = useState(0);
+  const [summaryDraftQuarter, setSummaryDraftQuarter] = useState(1);
+  const [summaryDraftHalf, setSummaryDraftHalf] = useState<1 | 2>(1);
+  const [summaryDraftStart, setSummaryDraftStart] = useState("");
+  const [summaryDraftEnd, setSummaryDraftEnd] = useState("");
+  const [summaryFetching, setSummaryFetching] = useState(false);
+  const [summaryFetchError, setSummaryFetchError] = useState<string | null>(
+    null
+  );
 
   const runStartedAtRef = useRef<number | null>(null);
   const runSpeedKmhRef = useRef(0);
@@ -518,33 +680,33 @@ function ExerciseContent() {
     return Math.max(0.1, Math.min(20, m));
   }, [user?.running_met]);
 
+  const summaryRange = useMemo(
+    () => summaryPeriodRange(summaryPeriodConfig),
+    [summaryPeriodConfig]
+  );
+
   const totals = useMemo(() => {
-    if (runSessions.length === 0) return null;
-    const now = new Date();
-    const wkStart = mondayOfContainingLocalDate(now);
-    const wkEnd = addCalendarDays(wkStart, 6);
-    const todayIso = localISODate(now);
-    const thisWeekSessions = runSessions.filter((r) => {
-      const d = sessionLocalDate(r.created_at);
-      return d >= wkStart && d <= wkEnd;
-    }).length;
-    const distanceKm = runSessions.reduce((s, r) => s + r.distance_km, 0);
-    const todayDistanceKm = runSessions
-      .filter((r) => sessionLocalDate(r.created_at) === todayIso)
-      .reduce((s, r) => s + r.distance_km, 0);
-    const activeMinutes = runSessions.reduce(
+    const fromMs = summaryRange.from.getTime();
+    const toMs = summaryRange.toExclusive.getTime();
+    const sessionsInRange = runSessions.filter((r) => {
+      const t = new Date(r.created_at).getTime();
+      return t >= fromMs && t < toMs;
+    });
+    if (sessionsInRange.length === 0) return null;
+    const distanceKm = sessionsInRange.reduce((s, r) => s + r.distance_km, 0);
+    const activeMinutes = sessionsInRange.reduce(
       (s, r) => s + Math.floor(r.duration_seconds / 60),
       0
     );
-    const kcal = runSessions.reduce((s, r) => s + r.calories_kcal, 0);
+    const kcal = sessionsInRange.reduce((s, r) => s + r.calories_kcal, 0);
     return {
-      thisWeekSessions,
+      sessions: sessionsInRange.length,
       distanceKm,
-      todaySteps: stepsFromDistanceKm(todayDistanceKm),
+      steps: stepsFromDistanceKm(distanceKm),
       activeMinutes,
       kcal,
     };
-  }, [runSessions]);
+  }, [runSessions, summaryRange]);
 
   const filteredDaily = useMemo(() => {
     if (dailyMap.size === 0) return [];
@@ -652,25 +814,74 @@ function ExerciseContent() {
   }, [weekOptions]);
 
   useEffect(() => {
-    if (!dataBounds) {
+    const lowerBound = earliestRunDate ?? dataBounds?.first;
+    if (!lowerBound) {
       setCustomStart("");
       setCustomEnd("");
       return;
     }
     const todayIso = localISODate(new Date());
     setCustomStart((s) => {
-      if (!s) return dataBounds.first;
-      if (s < dataBounds.first) return dataBounds.first;
+      if (!s) return lowerBound;
+      if (s < lowerBound) return lowerBound;
       if (s > todayIso) return todayIso;
       return s;
     });
     setCustomEnd((e) => {
       if (!e) return todayIso;
-      if (e < dataBounds.first) return dataBounds.first;
+      if (e < lowerBound) return lowerBound;
       if (e > todayIso) return todayIso;
       return e;
     });
-  }, [dataBounds]);
+  }, [dataBounds, earliestRunDate]);
+
+  const handleFetchCustomRange = async () => {
+    if (!token || !customStart || !customEnd) return;
+    setCustomFetching(true);
+    setCustomFetchError(null);
+    try {
+      const [sy, sm, sd] = customStart.split("-").map(Number);
+      const [ey, em, ed] = customEnd.split("-").map(Number);
+      const from = new Date(sy, sm - 1, sd).toISOString();
+      const toExclusive = new Date(ey, em - 1, ed + 1).toISOString();
+      const remote = await listRunSessionsRange(token, from, toExclusive);
+      setRunSessions((prev) =>
+        replaceRunSessionsInRange(prev, from, toExclusive, remote)
+      );
+    } catch (e) {
+      setCustomFetchError(
+        e instanceof Error ? e.message : "Failed to fetch range"
+      );
+    } finally {
+      setCustomFetching(false);
+    }
+  };
+
+  const openSummaryConfig = () => {
+    setSummaryDraftMode(summaryPeriodConfig.mode);
+    setSummaryDraftYear(summaryPeriodConfig.year);
+    setSummaryDraftMonth(summaryPeriodConfig.month);
+    setSummaryDraftQuarter(summaryPeriodConfig.quarter);
+    setSummaryDraftHalf(summaryPeriodConfig.half);
+    setSummaryDraftStart(summaryPeriodConfig.customStart);
+    setSummaryDraftEnd(summaryPeriodConfig.customEnd);
+    setSummaryConfigOpen(true);
+  };
+
+  const applySummaryConfig = () => {
+    const next: SummaryPeriodConfig = {
+      mode: summaryDraftMode,
+      year: summaryDraftYear,
+      month: summaryDraftMonth,
+      quarter: summaryDraftQuarter,
+      half: summaryDraftHalf,
+      customStart: summaryDraftStart,
+      customEnd: summaryDraftEnd,
+    };
+    setSummaryPeriodConfig(next);
+    saveSummaryPeriodConfig(next);
+    setSummaryConfigOpen(false);
+  };
 
   useEffect(() => {
     if (lineSeries.length === 0) {
@@ -715,6 +926,64 @@ function ExerciseContent() {
       cancelled = true;
     };
   }, [token, isAdmin]);
+
+  useEffect(() => {
+    if (!token || !isAdmin) {
+      setEarliestRunDate(null);
+      return;
+    }
+    let cancelled = false;
+    getEarliestRunSession(token)
+      .then((iso) => {
+        if (!cancelled) setEarliestRunDate(iso ? localISODate(new Date(iso)) : null);
+      })
+      .catch(() => {
+        /* keep prior bound on transient errors */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isAdmin]);
+
+  useEffect(() => {
+    setSummaryPeriodConfig(loadSummaryPeriodConfig());
+  }, []);
+
+  useEffect(() => {
+    if (!token || !isAdmin) return;
+    let cancelled = false;
+    setSummaryFetching(true);
+    setSummaryFetchError(null);
+    listRunSessionsRange(
+      token,
+      summaryRange.from.toISOString(),
+      summaryRange.toExclusive.toISOString()
+    )
+      .then((rows) => {
+        if (cancelled) return;
+        setRunSessions((prev) =>
+          replaceRunSessionsInRange(
+            prev,
+            summaryRange.from.toISOString(),
+            summaryRange.toExclusive.toISOString(),
+            rows
+          )
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setSummaryFetchError(
+            e instanceof Error ? e.message : "Could not load that period."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSummaryFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isAdmin, summaryRange]);
 
   useEffect(() => {
     if (!isAdmin || !user?.id || isRunActive) return;
@@ -815,9 +1084,9 @@ function ExerciseContent() {
   }[] = [
     {
       key: "sessions",
-      prefix: "This week",
-      value: totals ? String(totals.thisWeekSessions) : "-",
-      suffix: "sessions",
+      prefix: "Sessions",
+      value: totals ? String(totals.sessions) : "-",
+      suffix: "",
     },
     {
       key: "dist",
@@ -826,11 +1095,11 @@ function ExerciseContent() {
       suffix: "",
     },
     {
-      key: "steps_today",
-      prefix: "Steps today",
-      value: totals ? totals.todaySteps.toLocaleString() : "-",
+      key: "steps",
+      prefix: "Total steps",
+      value: totals ? totals.steps.toLocaleString() : "-",
       suffix: "",
-      title: `Estimated from today's distance, assuming a ${STEP_LENGTH_M}m step.`,
+      title: `Estimated from total distance, assuming a ${STEP_LENGTH_M}m step.`,
     },
     {
       key: "time",
@@ -1356,25 +1625,262 @@ function ExerciseContent() {
             </div>
           </RightDrawer>
 
-          <div className="mb-6 flex flex-wrap gap-x-8 gap-y-1 border-b border-zinc-200 pb-3 text-sm dark:border-zinc-800">
-            {summaryLines.map(({ key, prefix, value, suffix, title }) => (
-              <span
-                key={key}
-                className={
-                  title
-                    ? "cursor-help text-zinc-600 underline decoration-dotted decoration-zinc-400 underline-offset-2 dark:text-zinc-400 dark:decoration-zinc-500"
-                    : "text-zinc-600 dark:text-zinc-400"
-                }
-                title={title}
-              >
-                {prefix}{" "}
-                <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-                  {value}
-                </span>
-                {suffix ? ` ${suffix}` : ""}
+          <div className="mb-6 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                {summaryRange.label}
+                {summaryFetching ? " · loading…" : ""}
               </span>
-            ))}
+              {summaryLines.map(({ key, prefix, value, suffix, title }) => (
+                <span
+                  key={key}
+                  className={
+                    title
+                      ? "cursor-help text-zinc-600 underline decoration-dotted decoration-zinc-400 underline-offset-2 dark:text-zinc-400 dark:decoration-zinc-500"
+                      : "text-zinc-600 dark:text-zinc-400"
+                  }
+                  title={title}
+                >
+                  {prefix}{" "}
+                  <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+                    {value}
+                  </span>
+                  {suffix ? ` ${suffix}` : ""}
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={openSummaryConfig}
+                className="ml-auto shrink-0 rounded-md border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Configure
+              </button>
+              {summaryFetchError && (
+                <span className="w-full text-xs text-red-600 dark:text-red-400">
+                  {summaryFetchError}
+                </span>
+              )}
+            </div>
           </div>
+
+          <RightDrawer
+            open={summaryConfigOpen}
+            onClose={() => setSummaryConfigOpen(false)}
+            title="Configure summary period"
+            width="sm"
+          >
+            <div className="flex flex-col gap-4 p-4">
+              <div className="flex flex-col gap-2">
+                {(
+                  [
+                    ["month", "Month"],
+                    ["quarter", "Quarter"],
+                    ["half-year", "Half year"],
+                    ["year", "Year"],
+                    ["custom", "Custom dates"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSummaryDraftMode(value)}
+                    className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+                      summaryDraftMode === value
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {summaryDraftMode === "month" && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                    Month
+                  </span>
+                  <DatePicker
+                    selected={new Date(summaryDraftYear, summaryDraftMonth, 1)}
+                    onChange={(date: Date | null) => {
+                      if (!date) return;
+                      setSummaryDraftYear(date.getFullYear());
+                      setSummaryDraftMonth(date.getMonth());
+                    }}
+                    showMonthYearPicker
+                    dateFormat="MMMM yyyy"
+                    minDate={
+                      earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                    }
+                    maxDate={new Date()}
+                    aria-label="Summary month"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                    popperPlacement="bottom-start"
+                  />
+                </label>
+              )}
+
+              {summaryDraftMode === "quarter" && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                    Quarter
+                  </span>
+                  <DatePicker
+                    selected={
+                      new Date(summaryDraftYear, (summaryDraftQuarter - 1) * 3, 1)
+                    }
+                    onChange={(date: Date | null) => {
+                      if (!date) return;
+                      setSummaryDraftYear(date.getFullYear());
+                      setSummaryDraftQuarter(Math.floor(date.getMonth() / 3) + 1);
+                    }}
+                    showQuarterYearPicker
+                    dateFormat="QQQ yyyy"
+                    minDate={
+                      earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                    }
+                    maxDate={new Date()}
+                    aria-label="Summary quarter"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                    popperPlacement="bottom-start"
+                  />
+                </label>
+              )}
+
+              {summaryDraftMode === "half-year" && (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                      Half
+                    </span>
+                    <div className="flex gap-2">
+                      {(
+                        [
+                          [1, "H1 (Jan–Jun)"],
+                          [2, "H2 (Jul–Dec)"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setSummaryDraftHalf(value)}
+                          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                            summaryDraftHalf === value
+                              ? "bg-blue-600 text-white dark:bg-blue-500"
+                              : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="flex flex-1 flex-col gap-1 text-sm">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                      Year
+                    </span>
+                    <DatePicker
+                      selected={new Date(summaryDraftYear, 0, 1)}
+                      onChange={(date: Date | null) => {
+                        if (date) setSummaryDraftYear(date.getFullYear());
+                      }}
+                      showYearPicker
+                      dateFormat="yyyy"
+                      minDate={
+                        earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                      }
+                      maxDate={new Date()}
+                      aria-label="Summary year"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                      popperPlacement="bottom-start"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {summaryDraftMode === "year" && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                    Year
+                  </span>
+                  <DatePicker
+                    selected={new Date(summaryDraftYear, 0, 1)}
+                    onChange={(date: Date | null) => {
+                      if (date) setSummaryDraftYear(date.getFullYear());
+                    }}
+                    showYearPicker
+                    dateFormat="yyyy"
+                    minDate={
+                      earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                    }
+                    maxDate={new Date()}
+                    aria-label="Summary year"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                    popperPlacement="bottom-start"
+                  />
+                </label>
+              )}
+
+              {summaryDraftMode === "custom" && (
+                <div className="flex flex-col gap-3">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                      From
+                    </span>
+                    <DatePicker
+                      selected={
+                        summaryDraftStart ? isoToLocalDate(summaryDraftStart) : null
+                      }
+                      onChange={(date: Date | null) => {
+                        if (date) setSummaryDraftStart(localISODate(date));
+                      }}
+                      minDate={
+                        earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                      }
+                      maxDate={new Date()}
+                      dateFormat="MMM d, yyyy"
+                      aria-label="Summary period start"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                      popperPlacement="bottom-start"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                      To
+                    </span>
+                    <DatePicker
+                      selected={
+                        summaryDraftEnd ? isoToLocalDate(summaryDraftEnd) : null
+                      }
+                      onChange={(date: Date | null) => {
+                        if (date) setSummaryDraftEnd(localISODate(date));
+                      }}
+                      minDate={
+                        earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                      }
+                      maxDate={new Date()}
+                      dateFormat="MMM d, yyyy"
+                      aria-label="Summary period end"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                      popperPlacement="bottom-start"
+                    />
+                  </label>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={applySummaryConfig}
+                disabled={
+                  summaryDraftMode === "custom" &&
+                  (!summaryDraftStart || !summaryDraftEnd)
+                }
+                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 dark:bg-blue-500"
+              >
+                Update
+              </button>
+            </div>
+          </RightDrawer>
 
           {dailyMap.size > 0 && (
             <section className="mb-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -1463,31 +1969,57 @@ function ExerciseContent() {
                       <span className="font-medium text-zinc-700 dark:text-zinc-300">
                         From
                       </span>
-                      <input
-                        type="date"
-                        value={customStart}
-                        min={dataBounds?.first}
-                        max={localISODate(new Date())}
-                        onChange={(e) => setCustomStart(e.target.value)}
+                      <DatePicker
+                        selected={customStart ? isoToLocalDate(customStart) : null}
+                        onChange={(date: Date | null) => {
+                          if (date) setCustomStart(localISODate(date));
+                        }}
+                        minDate={
+                          earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                        }
+                        maxDate={new Date()}
+                        dateFormat="MMM d, yyyy"
+                        aria-label="Custom range start"
                         className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                        popperPlacement="bottom-start"
                       />
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="font-medium text-zinc-700 dark:text-zinc-300">
                         To
                       </span>
-                      <input
-                        type="date"
-                        value={customEnd}
-                        min={dataBounds?.first}
-                        max={localISODate(new Date())}
-                        onChange={(e) => setCustomEnd(e.target.value)}
+                      <DatePicker
+                        selected={customEnd ? isoToLocalDate(customEnd) : null}
+                        onChange={(date: Date | null) => {
+                          if (date) setCustomEnd(localISODate(date));
+                        }}
+                        minDate={
+                          earliestRunDate ? isoToLocalDate(earliestRunDate) : undefined
+                        }
+                        maxDate={new Date()}
+                        dateFormat="MMM d, yyyy"
+                        aria-label="Custom range end"
                         className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                        popperPlacement="bottom-start"
                       />
                     </label>
+                    <button
+                      type="button"
+                      onClick={handleFetchCustomRange}
+                      disabled={customFetching || !customStart || !customEnd}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 dark:bg-blue-500"
+                    >
+                      {customFetching ? "Fetching…" : "Fetch"}
+                    </button>
                   </div>
                 )}
               </div>
+
+              {periodMode === "custom" && customFetchError && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                  {customFetchError}
+                </p>
+              )}
 
               {periodSummaryLabel && (
                 <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">

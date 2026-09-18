@@ -13,6 +13,7 @@ from models.time_tracker_entry import TimeTrackerEntry as TimeTrackerEntryModel
 from schemas.time_tracker_entry import (
     TimeTrackerEntryCreate,
     TimeTrackerEntryDurationSummary,
+    TimeTrackerEntryEarliest,
     TimeTrackerEntryResponse,
     TimeTrackerEntryUpdate,
 )
@@ -63,6 +64,23 @@ async def get_time_entries_duration_summary(
         .scalar()
     )
     return TimeTrackerEntryDurationSummary(total_duration_ms=int(total_duration_ms))
+
+
+@router.get("/earliest", response_model=TimeTrackerEntryEarliest)
+async def get_earliest_time_entry(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The started_at of the user's very first entry, so callers (e.g. a
+    custom date range picker) can bound against the true earliest record
+    without having to have already loaded that far back."""
+    row = (
+        db.query(TimeTrackerEntryModel)
+        .filter(TimeTrackerEntryModel.user_id == current_user.id)
+        .order_by(TimeTrackerEntryModel.started_at.asc())
+        .first()
+    )
+    return TimeTrackerEntryEarliest(started_at=row.started_at if row else None)
 
 
 @router.get("/", response_model=List[TimeTrackerEntryResponse])

@@ -104,6 +104,39 @@ export async function listRunSessions(
   return response.json();
 }
 
+export async function listRunSessionsRange(
+  token: string,
+  fromCreatedAtIso: string,
+  toCreatedAtExclusiveIso: string
+): Promise<RunSessionResponse[]> {
+  const params = new URLSearchParams();
+  params.set("from", fromCreatedAtIso);
+  params.set("to_exclusive", toCreatedAtExclusiveIso);
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/run-sessions?${params.toString()}`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Failed to load run history");
+  }
+  return response.json();
+}
+
+export async function getEarliestRunSession(token: string): Promise<string | null> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/run-sessions/earliest`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error("Failed to load earliest run session");
+  }
+  const data = (await response.json()) as { created_at: string | null };
+  return data.created_at;
+}
+
 export async function deleteRunSession(
   token: string,
   sessionId: number

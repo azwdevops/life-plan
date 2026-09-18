@@ -47,3 +47,7 @@ class TimeTrackerEntryUpdate(BaseModel):
 
 class TimeTrackerEntryDurationSummary(BaseModel):
     total_duration_ms: int
+
+
+class TimeTrackerEntryEarliest(BaseModel):
+    started_at: Optional[datetime] = None

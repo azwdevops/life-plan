@@ -290,9 +290,13 @@ function aggregateProjectsForDay(
 export function TimeTrackingCharts({
   entries,
   headerActions,
+  earliestDate,
+  onFetchCustomRange,
 }: {
   entries: TimeTrackerEntry[];
   headerActions?: ReactNode;
+  earliestDate?: string | null;
+  onFetchCustomRange?: (startIso: string, endIso: string) => Promise<void>;
 }) {
   const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date | null>(null);
@@ -300,6 +304,8 @@ export function TimeTrackingCharts({
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
+  const [customFetching, setCustomFetching] = useState(false);
+  const [customFetchError, setCustomFetchError] = useState<string | null>(null);
   const weekPickerInitRef = useRef(false);
 
   const dailyMap = useMemo(
@@ -380,25 +386,41 @@ export function TimeTrackingCharts({
   }, [weekOptions]);
 
   useEffect(() => {
-    if (!dataBounds) {
+    const lowerBound = earliestDate ?? dataBounds?.first;
+    if (!lowerBound) {
       setCustomStart("");
       setCustomEnd("");
       return;
     }
     const todayIso = localISODate(new Date());
     setCustomStart((s) => {
-      if (!s) return dataBounds.first;
-      if (s < dataBounds.first) return dataBounds.first;
+      if (!s) return lowerBound;
+      if (s < lowerBound) return lowerBound;
       if (s > todayIso) return todayIso;
       return s;
     });
     setCustomEnd((e) => {
       if (!e) return todayIso;
-      if (e < dataBounds.first) return dataBounds.first;
+      if (e < lowerBound) return lowerBound;
       if (e > todayIso) return todayIso;
       return e;
     });
-  }, [dataBounds]);
+  }, [dataBounds, earliestDate]);
+
+  const handleFetchCustomRange = async () => {
+    if (!onFetchCustomRange || !customStart || !customEnd) return;
+    setCustomFetching(true);
+    setCustomFetchError(null);
+    try {
+      await onFetchCustomRange(customStart, customEnd);
+    } catch (e) {
+      setCustomFetchError(
+        e instanceof Error ? e.message : "Failed to fetch range"
+      );
+    } finally {
+      setCustomFetching(false);
+    }
+  };
 
   useEffect(() => {
     if (lineSeries.length === 0) {
@@ -493,39 +515,63 @@ export function TimeTrackingCharts({
           )}
 
           {periodMode === "custom" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-zinc-700 dark:text-zinc-300">
                   From
                 </span>
-                <input
-                  type="date"
-                  value={customStart}
-                  min={dataBounds?.first}
-                  max={localISODate(new Date())}
-                  onChange={(e) => setCustomStart(e.target.value)}
+                <DatePicker
+                  selected={customStart ? isoToLocalDate(customStart) : null}
+                  onChange={(date: Date | null) => {
+                    if (date) setCustomStart(localISODate(date));
+                  }}
+                  minDate={earliestDate ? isoToLocalDate(earliestDate) : undefined}
+                  maxDate={new Date()}
+                  dateFormat="MMM d, yyyy"
+                  aria-label="Custom range start"
                   className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  popperPlacement="bottom-start"
                 />
               </label>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-zinc-700 dark:text-zinc-300">
                   To
                 </span>
-                <input
-                  type="date"
-                  value={customEnd}
-                  min={dataBounds?.first}
-                  max={localISODate(new Date())}
-                  onChange={(e) => setCustomEnd(e.target.value)}
+                <DatePicker
+                  selected={customEnd ? isoToLocalDate(customEnd) : null}
+                  onChange={(date: Date | null) => {
+                    if (date) setCustomEnd(localISODate(date));
+                  }}
+                  minDate={earliestDate ? isoToLocalDate(earliestDate) : undefined}
+                  maxDate={new Date()}
+                  dateFormat="MMM d, yyyy"
+                  aria-label="Custom range end"
                   className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  popperPlacement="bottom-start"
                 />
               </label>
+              {onFetchCustomRange && (
+                <button
+                  type="button"
+                  onClick={handleFetchCustomRange}
+                  disabled={customFetching || !customStart || !customEnd}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 dark:bg-blue-500"
+                >
+                  {customFetching ? "Fetching…" : "Fetch"}
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {headerActions}
       </div>
+
+      {periodMode === "custom" && customFetchError && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+          {customFetchError}
+        </p>
+      )}
 
       {periodSummaryLabel && (
         <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">

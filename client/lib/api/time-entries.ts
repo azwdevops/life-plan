@@ -92,6 +92,21 @@ export async function getTimeEntriesDurationSum(
   return data.total_duration_ms;
 }
 
+export async function getEarliestTimeEntry(token: string): Promise<string | null> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/time-entries/earliest`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error("Failed to load earliest time entry");
+  }
+  const data = (await response.json()) as { started_at: string | null };
+  return data.started_at;
+}
+
 /** Most recent rows (no date filter). */
 export async function listRecentTimeEntries(
   token: string,

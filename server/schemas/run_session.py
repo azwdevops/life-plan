@@ -14,6 +14,10 @@ class RunSessionComplete(BaseModel):
     tick_interval_seconds: int = Field(ge=1, le=300)
 
 
+class RunSessionEarliest(BaseModel):
+    created_at: datetime | None = None
+
+
 class RunSessionResponse(BaseModel):
     id: int
     user_id: int
