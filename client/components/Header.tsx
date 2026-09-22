@@ -8,6 +8,7 @@ import { usePwaInstall } from "@/lib/hooks/use-pwa-install";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
+import { HeaderDailyProductiveList } from "@/components/HeaderDailyProductiveList";
 import { usePageHeaderActionsValue, usePageHeaderExtraValue, usePageHeaderMenuExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
@@ -215,6 +216,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
             {isAuthenticated && showHeaderTimeTracker === true ? (
               <>
                 <HeaderTimeTracker inline />
+                <HeaderDailyProductiveList />
                 <HeaderCountdownTimer inline />
               </>
             ) : null}

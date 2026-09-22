@@ -33,6 +33,7 @@ from models.productivity_blog import (
 from models.ai_schedule_job import AiScheduleJob
 from models.pending_work import PendingWorkCategory, PendingWorkItem
 from models.discipline_track import DisciplineTrack, DisciplineTrackDailyCount
+from models.daily_productive_item import DailyProductiveItem
 from models.shares_feasibility import SharesFeasibilityWorkspace
 from models.game_save import GameSave
 from models.user_api_credentials import UserLlmApiKey
@@ -76,6 +77,7 @@ __all__ = [
     "PendingWorkItem",
     "DisciplineTrack",
     "DisciplineTrackDailyCount",
+    "DailyProductiveItem",
     "SharesFeasibilityWorkspace",
     "GameSave",
     "UserLlmApiKey",

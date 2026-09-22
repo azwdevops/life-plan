@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface DialogProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface DialogProps {
   title?: string;
   children: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  /** @default "info" */
+  variant?: "info" | "danger";
 }
 
 export function Dialog({
@@ -16,8 +19,14 @@ export function Dialog({
   title,
   children,
   size = "md",
+  variant = "info",
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Close on Escape key
   useEffect(() => {
@@ -44,7 +53,7 @@ export function Dialog({
       onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const sizeClasses = {
     sm: "max-w-md",
@@ -53,9 +62,24 @@ export function Dialog({
     xl: "max-w-6xl",
   };
 
-  return (
+  const variantClasses =
+    variant === "danger"
+      ? {
+          border: "border-red-500 dark:border-red-400",
+          shadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(239, 68, 68, 0.3)",
+          headerBorder: "border-red-500 dark:border-red-400",
+          headerBg: "bg-red-50 dark:bg-red-900/20",
+        }
+      : {
+          border: "border-blue-500 dark:border-blue-400",
+          shadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(59, 130, 246, 0.3)",
+          headerBorder: "border-blue-500 dark:border-blue-400",
+          headerBg: "bg-blue-50 dark:bg-blue-900/20",
+        };
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "dialog-title" : undefined}
@@ -69,16 +93,16 @@ export function Dialog({
       {/* Dialog Content */}
       <div
         ref={dialogRef}
-        className={`relative z-10 w-full ${sizeClasses[size]} rounded-xl border-4 border-blue-500 bg-white dark:border-blue-400 dark:bg-zinc-900 pointer-events-auto`}
+        className={`relative z-10 w-full ${sizeClasses[size]} rounded-xl border-4 ${variantClasses.border} bg-white dark:bg-zinc-900 pointer-events-auto`}
         onClick={(e) => e.stopPropagation()}
-        style={{ 
+        style={{
           overflow: "visible",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(59, 130, 246, 0.3)"
+          boxShadow: variantClasses.shadow
         }}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between border-b-2 border-blue-500 bg-blue-50 px-6 py-4 dark:border-blue-400 dark:bg-blue-900/20">
+          <div className={`flex items-center justify-between border-b-2 ${variantClasses.headerBorder} ${variantClasses.headerBg} px-6 py-4`}>
             <h2
               id="dialog-title"
               className="text-xl font-semibold text-zinc-900 dark:text-zinc-100"
@@ -108,7 +132,8 @@ export function Dialog({
         {/* Content */}
         <div className="p-6 max-h-[calc(100vh-8rem)] overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -23,6 +23,7 @@ from api.v1.endpoints import (
     ai_schedule,
     pending_work,
     discipline,
+    daily_productive_items,
     user_api_credentials,
     azw_books,
     youtube,
@@ -74,6 +75,11 @@ api_router.include_router(
     discipline.router,
     prefix="/discipline",
     tags=["discipline"],
+)
+api_router.include_router(
+    daily_productive_items.router,
+    prefix="/daily-productive-items",
+    tags=["daily-productive-items"],
 )
 api_router.include_router(
     user_api_credentials.router,

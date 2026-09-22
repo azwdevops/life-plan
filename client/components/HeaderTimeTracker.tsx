@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   TIME_TRACKER_PRESET_GOAL_EVENT,
   TIME_TRACKER_PRESET_PROJECT_EVENT,
@@ -21,7 +22,9 @@ import {
   saveSession,
 } from "@/lib/time-tracker-storage";
 import { createTimeEntry } from "@/lib/api/time-entries";
+import { getTodayIsoDate, type DailyProductiveItemListApi } from "@/lib/api/daily-productive-items";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { Dialog } from "@/components/Dialog";
 import { CreateGoalModal } from "@/components/time-tracker/CreateGoalModal";
 import { CreateProjectModal } from "@/components/time-tracker/CreateProjectModal";
 import {
@@ -221,6 +224,7 @@ function IconStop({ className }: { className?: string }) {
 
 export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const [hydrated, setHydrated] = useState(false);
   const [session, setSession] = useState<TimeTrackerSession | null>(null);
   const [goals, setGoals] = useState<TimeTrackerGoal[]>([]);
@@ -235,6 +239,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const [goalModalInitial, setGoalModalInitial] = useState("");
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectModalInitial, setProjectModalInitial] = useState("");
+  const [startError, setStartError] = useState<string | null>(null);
 
   const tabTitleBeforeTimerRef = useRef<string | null>(null);
   /** Same-tab session snapshot for play/preset when storage read lags React state. */
@@ -513,6 +518,10 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     setGoals(loadGoals());
   }, []);
 
+  const showStartError = useCallback((message: string) => {
+    setStartError(message);
+  }, []);
+
   const handleStart = useCallback(() => {
     const next = resolveTimerSession(
       kind,
@@ -523,12 +532,33 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       description
     );
     if (!next) return;
+
+    setStartError(null);
+    if (!token) {
+      showStartError("Sign in to start the timer");
+      return;
+    }
+
+    const cachedList = queryClient.getQueryData<DailyProductiveItemListApi>([
+      "daily-productive-items",
+      token,
+      getTodayIsoDate(),
+    ]);
+    if (!cachedList) {
+      showStartError("Could not verify today's productive list — open it once first");
+      return;
+    }
+    if (cachedList.items.length < 5) {
+      showStartError("To use the timer you must set 5 productive things to do today");
+      return;
+    }
+
     saveSession(next);
     setSession(next);
     setSubjectId("");
     setSubjectSearch("");
     setDescription("");
-  }, [description, goals, kind, projects, subjectId, subjectSearch]);
+  }, [description, goals, kind, projects, queryClient, showStartError, subjectId, subjectSearch, token]);
 
   const onSubjectPickExisting = useCallback((id: string, name: string) => {
     setSubjectId(id);
@@ -717,18 +747,20 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           />
         </div>
 
-        <button
-          type="button"
-          disabled={!canStart}
-          onClick={handleStart}
-          aria-label="Start timer"
-          title="Start"
-          className={`inline-flex shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500 ${
-            inline ? "self-center h-7 w-7" : "h-8 w-8"
-          }`}
-        >
-          <IconPlay className={inline ? "h-3.5 w-3.5" : "h-4 w-4"} />
-        </button>
+        <div className="relative shrink-0 self-center">
+          <button
+            type="button"
+            disabled={!canStart}
+            onClick={handleStart}
+            aria-label="Start timer"
+            title="Start"
+            className={`inline-flex items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500 ${
+              inline ? "h-7 w-7" : "h-8 w-8"
+            }`}
+          >
+            <IconPlay className={inline ? "h-3.5 w-3.5" : "h-4 w-4"} />
+          </button>
+        </div>
       </div>
 
       <CreateGoalModal
@@ -756,6 +788,26 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           setSubjectSearch(name);
         }}
       />
+      <Dialog
+        isOpen={startError !== null}
+        onClose={() => setStartError(null)}
+        title="Can't start timer"
+        size="sm"
+        variant="danger"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">{startError}</p>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setStartError(null)}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 dark:bg-red-500"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </>
   );
 }
