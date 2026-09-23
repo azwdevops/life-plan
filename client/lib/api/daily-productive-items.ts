@@ -36,7 +36,13 @@ export function getYesterdayIsoDate(): string {
 }
 
 export function isEditableIsoDate(iso: string): boolean {
-  return iso === getTodayIsoDate() || iso === getYesterdayIsoDate();
+  const [y, m, d] = iso.split("-").map(Number);
+  const target = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  return diffDays >= -7 && diffDays <= 7;
 }
 
 function authJsonHeaders(token: string): HeadersInit {
@@ -93,10 +99,29 @@ export async function createDailyProductiveItem(
   return (await response.json()) as DailyProductiveItemApi;
 }
 
+export async function reorderDailyProductiveItems(
+  token: string,
+  itemDate: string,
+  orderedIds: string[]
+): Promise<DailyProductiveItemListApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/daily-productive-items/reorder`, {
+    method: "POST",
+    headers: authJsonHeaders(token),
+    body: JSON.stringify({ item_date: itemDate, ordered_ids: orderedIds }),
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to reorder items"));
+  }
+  return (await response.json()) as DailyProductiveItemListApi;
+}
+
 export async function patchDailyProductiveItem(
   token: string,
   clientId: string,
-  patch: { text?: string; is_done?: boolean }
+  patch: { text?: string; is_done?: boolean; item_date?: string }
 ): Promise<DailyProductiveItemApi> {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/daily-productive-items/${encodeURIComponent(clientId)}`,
@@ -113,4 +138,20 @@ export async function patchDailyProductiveItem(
     throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to update item"));
   }
   return (await response.json()) as DailyProductiveItemApi;
+}
+
+export async function deleteDailyProductiveItem(token: string, clientId: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/daily-productive-items/${encodeURIComponent(clientId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to delete item"));
+  }
 }

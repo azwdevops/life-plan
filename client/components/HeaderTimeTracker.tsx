@@ -270,6 +270,20 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     sessionRef.current = session;
   }, [session]);
 
+  const checkStartGate = useCallback((): string | null => {
+    if (!token) return "Sign in to start the timer";
+    const cachedList = queryClient.getQueryData<DailyProductiveItemListApi>([
+      "daily-productive-items",
+      token,
+      getTodayIsoDate(),
+    ]);
+    if (!cachedList) return "Could not verify today's productive list — open it once first";
+    if (cachedList.items.length < 5) {
+      return "To use the timer you must set 5 productive things to do today";
+    }
+    return null;
+  }, [queryClient, token]);
+
   const applyPreset = useCallback(
     async (
       kindArg: TimeTrackerKind,
@@ -293,6 +307,12 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       const desc = presetDescription(d);
 
       if (autoStart) {
+        const gateError = checkStartGate();
+        if (gateError) {
+          setStartError(gateError);
+          return;
+        }
+
         const existing = sessionRef.current ?? loadSession();
         if (existing) {
           try {
@@ -326,7 +346,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       );
       setDescription(desc);
     },
-    []
+    [checkStartGate]
   );
 
   useEffect(() => {
@@ -534,22 +554,9 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     if (!next) return;
 
     setStartError(null);
-    if (!token) {
-      showStartError("Sign in to start the timer");
-      return;
-    }
-
-    const cachedList = queryClient.getQueryData<DailyProductiveItemListApi>([
-      "daily-productive-items",
-      token,
-      getTodayIsoDate(),
-    ]);
-    if (!cachedList) {
-      showStartError("Could not verify today's productive list — open it once first");
-      return;
-    }
-    if (cachedList.items.length < 5) {
-      showStartError("To use the timer you must set 5 productive things to do today");
+    const gateError = checkStartGate();
+    if (gateError) {
+      showStartError(gateError);
       return;
     }
 
@@ -558,7 +565,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     setSubjectId("");
     setSubjectSearch("");
     setDescription("");
-  }, [description, goals, kind, projects, queryClient, showStartError, subjectId, subjectSearch, token]);
+  }, [checkStartGate, description, goals, kind, projects, showStartError, subjectId, subjectSearch]);
 
   const onSubjectPickExisting = useCallback((id: string, name: string) => {
     setSubjectId(id);

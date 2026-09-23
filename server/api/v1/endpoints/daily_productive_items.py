@@ -2,6 +2,7 @@ import uuid
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.v1.endpoints.auth import get_current_user
@@ -13,6 +14,7 @@ from schemas.daily_productive_item import (
     DailyProductiveItemListOut,
     DailyProductiveItemOut,
     DailyProductiveItemPatch,
+    DailyProductiveItemReorder,
 )
 
 router = APIRouter()
@@ -34,14 +36,14 @@ def _parse_iso_date(raw: str, field_name: str) -> date:
 
 def _is_editable(target: date) -> bool:
     today = date.today()
-    return today - timedelta(days=1) <= target <= today
+    return today - timedelta(days=7) <= target <= today + timedelta(days=7)
 
 
 def _assert_editable(target: date) -> None:
     if not _is_editable(target):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only today's or yesterday's list can be changed",
+            detail="Only dates within 7 days of today can be changed",
         )
 
 
@@ -82,7 +84,7 @@ async def list_daily_productive_items(
             DailyProductiveItemModel.user_id == current_user.id,
             DailyProductiveItemModel.item_date == target,
         )
-        .order_by(DailyProductiveItemModel.id.asc())
+        .order_by(DailyProductiveItemModel.position.asc(), DailyProductiveItemModel.id.asc())
         .all()
     )
     return DailyProductiveItemListOut(
@@ -104,6 +106,15 @@ async def create_daily_productive_item(
     target = _parse_iso_date(body.item_date, "item_date")
     _assert_editable(target)
 
+    next_position = (
+        db.query(func.count(DailyProductiveItemModel.id))
+        .filter(
+            DailyProductiveItemModel.user_id == current_user.id,
+            DailyProductiveItemModel.item_date == target,
+        )
+        .scalar()
+    )
+
     client_id = str(uuid.uuid4())[:64]
     row = DailyProductiveItemModel(
         user_id=current_user.id,
@@ -111,11 +122,48 @@ async def create_daily_productive_item(
         item_date=target,
         text=text[:500],
         is_done=False,
+        position=next_position,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     return _row_to_out(row)
+
+
+@router.post("/reorder", response_model=DailyProductiveItemListOut)
+async def reorder_daily_productive_items(
+    body: DailyProductiveItemReorder,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    target = _parse_iso_date(body.item_date, "item_date")
+    _assert_editable(target)
+
+    rows = (
+        db.query(DailyProductiveItemModel)
+        .filter(
+            DailyProductiveItemModel.user_id == current_user.id,
+            DailyProductiveItemModel.item_date == target,
+        )
+        .all()
+    )
+    rows_by_client_id = {_client_id(row): row for row in rows}
+    if set(body.ordered_ids) != set(rows_by_client_id.keys()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ordered_ids must match the items for this date",
+        )
+
+    for index, client_id in enumerate(body.ordered_ids):
+        rows_by_client_id[client_id].position = index
+    db.commit()
+
+    rows.sort(key=lambda row: row.position)
+    return DailyProductiveItemListOut(
+        item_date=target.isoformat(),
+        editable=_is_editable(target),
+        items=[_row_to_out(row) for row in rows],
+    )
 
 
 @router.patch("/{client_id}", response_model=DailyProductiveItemOut)
@@ -137,6 +185,23 @@ async def patch_daily_productive_item(
     if body.is_done is not None:
         row.is_done = bool(body.is_done)
 
+    if body.item_date is not None:
+        new_date = _parse_iso_date(body.item_date, "item_date")
+        _assert_editable(new_date)
+        row.item_date = new_date
+
     db.commit()
     db.refresh(row)
     return _row_to_out(row)
+
+
+@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_daily_productive_item(
+    client_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = _get_item_for_user(db, current_user.id, client_id)
+    _assert_editable(row.item_date)
+    db.delete(row)
+    db.commit()
