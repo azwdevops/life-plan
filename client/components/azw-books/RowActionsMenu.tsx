@@ -8,6 +8,18 @@ export interface RowActionsMenuItem {
   danger?: boolean;
 }
 
+function getScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    const style = window.getComputedStyle(node);
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 /**
  * Per-row "more actions" kebab menu — hand-built fixed-position dropdown
  * matching the project convention (see CLAUDE.md "More actions (kebab)
@@ -27,6 +39,8 @@ export function RowActionsMenu({
   const [menuFixed, setMenuFixed] = useState<{ top: number; right: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const scrolledIntoViewRef = useRef(false);
 
   const updateMenuPosition = useCallback(() => {
     const el = buttonRef.current;
@@ -43,6 +57,7 @@ export function RowActionsMenu({
   useLayoutEffect(() => {
     if (!open) {
       setMenuFixed(null);
+      scrolledIntoViewRef.current = false;
       return;
     }
     updateMenuPosition();
@@ -54,6 +69,21 @@ export function RowActionsMenu({
       window.removeEventListener("resize", onScrollOrResize);
     };
   }, [open, updateMenuPosition]);
+
+  // Once the menu has actually rendered, scroll it fully into view if it
+  // overflows past the bottom of the viewport (e.g. the trigger is on the
+  // last row of a scrollable list) — the menu is `fixed`, so it can't be
+  // clipped, but it can still hang off-screen.
+  useLayoutEffect(() => {
+    if (!open || !menuFixed || !menuRef.current || scrolledIntoViewRef.current) return;
+    scrolledIntoViewRef.current = true;
+    const rect = menuRef.current.getBoundingClientRect();
+    const overflow = rect.bottom - window.innerHeight + 8;
+    if (overflow > 0) {
+      const scrollParent = getScrollParent(buttonRef.current);
+      scrollParent?.scrollBy({ top: overflow, behavior: "smooth" });
+    }
+  }, [open, menuFixed]);
 
   useEffect(() => {
     if (!open) return;
@@ -90,6 +120,7 @@ export function RowActionsMenu({
       </button>
       {open && menuFixed ? (
         <ul
+          ref={menuRef}
           className="fixed z-[70] min-w-36 rounded-lg border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-600 dark:bg-zinc-900"
           style={{ top: menuFixed.top, right: menuFixed.right }}
           role="menu"

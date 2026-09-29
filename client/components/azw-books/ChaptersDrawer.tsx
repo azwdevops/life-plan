@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RightDrawer } from "@/components/RightDrawer";
 import { TiptapRichTextEditor } from "@/components/editor/TiptapRichTextEditor";
 import { RowActionsMenu } from "./RowActionsMenu";
@@ -59,6 +59,8 @@ export function ChaptersDrawer({ book, open, onClose, initialAction, onChaptersC
   const [chapterContent, setChapterContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [lastAddedChapterId, setLastAddedChapterId] = useState<number | null>(null);
+  const chapterRefs = useRef<Map<number, HTMLLIElement>>(new Map());
 
   const loadChapters = useCallback(() => {
     if (!token || !book) return;
@@ -83,6 +85,13 @@ export function ChaptersDrawer({ book, open, onClose, initialAction, onChaptersC
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialAction]);
+
+  useEffect(() => {
+    if (lastAddedChapterId === null) return;
+    const el = chapterRefs.current.get(lastAddedChapterId);
+    el?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setLastAddedChapterId(null);
+  }, [lastAddedChapterId]);
 
   const visibleChapters = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -123,12 +132,14 @@ export function ChaptersDrawer({ book, open, onClose, initialAction, onChaptersC
     setFormError(null);
     try {
       if (editingChapter) {
-        await updateAzwBookChapter(token, editingChapter.id, { content: chapterContent });
+        const updated = await updateAzwBookChapter(token, editingChapter.id, { content: chapterContent });
+        setChapters((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       } else {
-        await createAzwBookChapter(token, book.id, { content: chapterContent });
+        const created = await createAzwBookChapter(token, book.id, { content: chapterContent });
+        setChapters((prev) => [...prev, created]);
+        setLastAddedChapterId(created.id);
       }
       closeForm();
-      loadChapters();
       onChaptersChanged?.();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Could not save chapter");
@@ -214,13 +225,13 @@ export function ChaptersDrawer({ book, open, onClose, initialAction, onChaptersC
             {visibleChapters.map((chapter) => (
               <li
                 key={chapter.id}
+                ref={(el) => {
+                  if (el) chapterRefs.current.set(chapter.id, el);
+                  else chapterRefs.current.delete(chapter.id);
+                }}
                 className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900"
               >
-                <button
-                  type="button"
-                  onClick={() => openEditForm(chapter)}
-                  className="min-w-0 flex-1 text-left"
-                >
+                <div className="min-w-0 flex-1 text-left">
                   <p
                     className={`truncate font-medium ${
                       chapter.is_copied
@@ -241,7 +252,7 @@ export function ChaptersDrawer({ book, open, onClose, initialAction, onChaptersC
                       {getPreview(chapter.content)}
                     </p>
                   )}
-                </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => void handleToggleCopied(chapter)}
@@ -267,6 +278,7 @@ export function ChaptersDrawer({ book, open, onClose, initialAction, onChaptersC
             ))}
           </ul>
         )}
+        {visibleChapters.length > 0 && <div aria-hidden className="h-24" />}
       </RightDrawer>
 
       <RightDrawer
