@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   TIME_TRACKER_PRESET_GOAL_EVENT,
   TIME_TRACKER_PRESET_PROJECT_EVENT,
@@ -22,9 +21,7 @@ import {
   saveSession,
 } from "@/lib/time-tracker-storage";
 import { createTimeEntry } from "@/lib/api/time-entries";
-import { getTodayIsoDate, type DailyProductiveItemListApi } from "@/lib/api/daily-productive-items";
 import { useAuth } from "@/lib/hooks/use-auth";
-import { Dialog } from "@/components/Dialog";
 import { CreateGoalModal } from "@/components/time-tracker/CreateGoalModal";
 import { CreateProjectModal } from "@/components/time-tracker/CreateProjectModal";
 import {
@@ -224,7 +221,6 @@ function IconStop({ className }: { className?: string }) {
 
 export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const { token } = useAuth();
-  const queryClient = useQueryClient();
   const [hydrated, setHydrated] = useState(false);
   const [session, setSession] = useState<TimeTrackerSession | null>(null);
   const [goals, setGoals] = useState<TimeTrackerGoal[]>([]);
@@ -239,7 +235,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const [goalModalInitial, setGoalModalInitial] = useState("");
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectModalInitial, setProjectModalInitial] = useState("");
-  const [startError, setStartError] = useState<string | null>(null);
 
   const tabTitleBeforeTimerRef = useRef<string | null>(null);
   /** Same-tab session snapshot for play/preset when storage read lags React state. */
@@ -270,20 +265,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     sessionRef.current = session;
   }, [session]);
 
-  const checkStartGate = useCallback((): string | null => {
-    if (!token) return "Sign in to start the timer";
-    const cachedList = queryClient.getQueryData<DailyProductiveItemListApi>([
-      "daily-productive-items",
-      token,
-      getTodayIsoDate(),
-    ]);
-    if (!cachedList) return "Could not verify today's productive list — open it once first";
-    if (cachedList.items.length < 5) {
-      return "To use the timer you must set 5 productive things to do today";
-    }
-    return null;
-  }, [queryClient, token]);
-
   const applyPreset = useCallback(
     async (
       kindArg: TimeTrackerKind,
@@ -307,12 +288,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       const desc = presetDescription(d);
 
       if (autoStart) {
-        const gateError = checkStartGate();
-        if (gateError) {
-          setStartError(gateError);
-          return;
-        }
-
         const existing = sessionRef.current ?? loadSession();
         if (existing) {
           try {
@@ -346,7 +321,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       );
       setDescription(desc);
     },
-    [checkStartGate]
+    []
   );
 
   useEffect(() => {
@@ -538,10 +513,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     setGoals(loadGoals());
   }, []);
 
-  const showStartError = useCallback((message: string) => {
-    setStartError(message);
-  }, []);
-
   const handleStart = useCallback(() => {
     const next = resolveTimerSession(
       kind,
@@ -553,19 +524,12 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     );
     if (!next) return;
 
-    setStartError(null);
-    const gateError = checkStartGate();
-    if (gateError) {
-      showStartError(gateError);
-      return;
-    }
-
     saveSession(next);
     setSession(next);
     setSubjectId("");
     setSubjectSearch("");
     setDescription("");
-  }, [checkStartGate, description, goals, kind, projects, showStartError, subjectId, subjectSearch]);
+  }, [description, goals, kind, projects, subjectId, subjectSearch]);
 
   const onSubjectPickExisting = useCallback((id: string, name: string) => {
     setSubjectId(id);
@@ -795,26 +759,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           setSubjectSearch(name);
         }}
       />
-      <Dialog
-        isOpen={startError !== null}
-        onClose={() => setStartError(null)}
-        title="Can't start timer"
-        size="sm"
-        variant="danger"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-zinc-700 dark:text-zinc-300">{startError}</p>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setStartError(null)}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 dark:bg-red-500"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      </Dialog>
     </>
   );
 }
