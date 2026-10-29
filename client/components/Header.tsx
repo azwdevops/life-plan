@@ -9,6 +9,7 @@ import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
 import { HeaderDailyProductiveList } from "@/components/HeaderDailyProductiveList";
+import { ChannelsDrawer } from "@/components/music-business/ChannelsDrawer";
 import { usePageHeaderActionsValue, usePageHeaderExtraValue, usePageHeaderMenuExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
@@ -164,15 +165,21 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const pageHeaderExtra = usePageHeaderExtraValue();
   const pageHeaderMenuExtra = usePageHeaderMenuExtraValue();
   const { canInstall, promptInstall } = usePwaInstall();
-  // "Install App" lives in the same global "more actions" menu rather than a
-  // fixed sidebar footer button - it's a one-off utility action, not page
-  // content, so it belongs alongside page-registered actions here instead of
-  // permanently occupying sidebar space.
-  const moreActions = canInstall
-    ? [...pageHeaderActions, { label: "Install App", onClick: promptInstall, icon: <span aria-hidden>⬇️</span> }]
-    : pageHeaderActions;
+  const [channelsDrawerOpen, setChannelsDrawerOpen] = useState(false);
+  // "Install App" and "View channels" live in the same global "more actions"
+  // menu rather than a fixed sidebar footer button - they're always-available
+  // utility actions, not page content, so they're appended to whatever the
+  // current page has registered instead of permanently occupying sidebar space.
+  const moreActions = [
+    ...pageHeaderActions,
+    ...(canInstall
+      ? [{ label: "Install App", onClick: promptInstall, icon: <span aria-hidden>⬇️</span> }]
+      : []),
+    { label: "View channels", onClick: () => setChannelsDrawerOpen(true), icon: <span aria-hidden>📺</span> },
+  ];
 
   return (
+    <>
     <header
       id="app-site-header"
       className="sticky top-0 z-50 w-full border-b-2 border-zinc-400 bg-white/80 shadow-[0_1px_0_0_rgba(0,0,0,0.08)] backdrop-blur-sm dark:border-zinc-500 dark:bg-zinc-900/80 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.1)]"
@@ -352,6 +359,8 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
         </div>
       )}
     </header>
+    <ChannelsDrawer open={channelsDrawerOpen} onClose={() => setChannelsDrawerOpen(false)} />
+    </>
   );
 }
 

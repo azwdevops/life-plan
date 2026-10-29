@@ -46,6 +46,31 @@ export interface YoutubeAccountUpdate {
   group_label?: string | null;
 }
 
+export type YoutubeDayOfWeek =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export interface YoutubePostingTime {
+  id: number;
+  channel_id: number;
+  day_of_week: YoutubeDayOfWeek;
+  start_time: string | null;
+  end_time: string | null;
+  videos_uploaded_count: number | null;
+  updated_at: string | null;
+}
+
+export interface YoutubePostingTimePatch {
+  start_time?: string;
+  end_time?: string;
+  videos_uploaded_count?: number;
+}
+
 function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
@@ -125,5 +150,34 @@ export async function updateYoutubeChannel(
     body: JSON.stringify(data),
   });
   await throwOnError(response, "Failed to update channel");
+  return response.json();
+}
+
+export async function getYoutubePostingTimes(
+  token: string,
+  day: YoutubeDayOfWeek
+): Promise<YoutubePostingTime[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/youtube/posting-times?day=${day}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await throwOnError(response, "Failed to fetch posting times");
+  return response.json();
+}
+
+export async function upsertYoutubePostingTime(
+  token: string,
+  channelId: number,
+  day: YoutubeDayOfWeek,
+  patch: YoutubePostingTimePatch
+): Promise<YoutubePostingTime> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/youtube/channels/${channelId}/posting-times/${day}`,
+    {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify(patch),
+    }
+  );
+  await throwOnError(response, "Failed to save posting time");
   return response.json();
 }

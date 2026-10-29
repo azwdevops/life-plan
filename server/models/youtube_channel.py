@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -88,6 +89,11 @@ class YoutubeChannel(Base):
         cascade="all, delete-orphan",
         order_by="YoutubeChannelStat.synced_at",
     )
+    posting_times = relationship(
+        "YoutubeChannelPostingTime",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
 
 
 class YoutubeChannelStat(Base):
@@ -107,3 +113,28 @@ class YoutubeChannelStat(Base):
     synced_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     channel = relationship("YoutubeChannel", back_populates="stats")
+
+
+class YoutubeChannelPostingTime(Base):
+    """User-set best-time-to-post window (time-of-day only, no date) +
+    videos-uploaded count, one row per channel per weekday. Any of the three
+    fields can be set independently. start/end power the "upload now?"
+    recommendation - comparing the current time of day against this window."""
+
+    __tablename__ = "youtube_channel_posting_times"
+    __table_args__ = (
+        UniqueConstraint("channel_id", "day_of_week", name="uq_youtube_posting_times_channel_day"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel_id = Column(
+        Integer, ForeignKey("youtube_channels.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    day_of_week = Column(String(9), nullable=False)
+    start_time = Column(Time, nullable=True)
+    end_time = Column(Time, nullable=True)
+    videos_uploaded_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    channel = relationship("YoutubeChannel", back_populates="posting_times")

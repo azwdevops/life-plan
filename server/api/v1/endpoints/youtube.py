@@ -13,7 +13,12 @@ from core.config import settings
 from core.database import get_db
 from core.security import create_access_token, decode_access_token
 from models.user import User
-from models.youtube_channel import YoutubeAccount, YoutubeChannel, YoutubeChannelStat
+from models.youtube_channel import (
+    YoutubeAccount,
+    YoutubeChannel,
+    YoutubeChannelPostingTime,
+    YoutubeChannelStat,
+)
 from schemas.youtube_channel import (
     YoutubeAccountOut,
     YoutubeAccountUpdate,
@@ -21,12 +26,23 @@ from schemas.youtube_channel import (
     YoutubeChannelStatOut,
     YoutubeChannelUpdate,
     YoutubeOAuthAuthorizeOut,
+    YoutubePostingTimeOut,
+    YoutubePostingTimeUpsert,
 )
 import youtube_api
 
 router = APIRouter()
 
 _OAUTH_STATE_PURPOSE = "youtube_oauth"
+DAYS_OF_WEEK = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
 
 
 def _channel_to_out(channel: YoutubeChannel) -> YoutubeChannelOut:
@@ -330,3 +346,61 @@ async def update_channel(
     db.commit()
     db.refresh(channel)
     return _channel_to_out(channel)
+
+
+@router.get("/posting-times", response_model=list[YoutubePostingTimeOut])
+async def list_posting_times(
+    day: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every channel's best-time-to-post entry for one weekday, across all of
+    the user's accounts - only that single day's rows, not the full week."""
+    day = day.lower()
+    if day not in DAYS_OF_WEEK:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid day")
+    return (
+        db.query(YoutubeChannelPostingTime)
+        .join(YoutubeChannel, YoutubeChannelPostingTime.channel_id == YoutubeChannel.id)
+        .join(YoutubeAccount, YoutubeChannel.account_id == YoutubeAccount.id)
+        .filter(YoutubeAccount.user_id == current_user.id, YoutubeChannelPostingTime.day_of_week == day)
+        .all()
+    )
+
+
+@router.put("/channels/{channel_id}/posting-times/{day}", response_model=YoutubePostingTimeOut)
+async def upsert_posting_time(
+    channel_id: int,
+    day: str,
+    body: YoutubePostingTimeUpsert,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    day = day.lower()
+    if day not in DAYS_OF_WEEK:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid day")
+
+    patch = body.model_dump(exclude_unset=True)
+    if "videos_uploaded_count" in patch and (patch["videos_uploaded_count"] or 0) < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Videos uploaded can't be negative")
+    if not patch:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nothing to update")
+
+    channel = _get_owned_channel(db, current_user, channel_id)
+    row = (
+        db.query(YoutubeChannelPostingTime)
+        .filter(
+            YoutubeChannelPostingTime.channel_id == channel.id,
+            YoutubeChannelPostingTime.day_of_week == day,
+        )
+        .first()
+    )
+    if row:
+        for field, value in patch.items():
+            setattr(row, field, value)
+    else:
+        row = YoutubeChannelPostingTime(channel_id=channel.id, day_of_week=day, **patch)
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

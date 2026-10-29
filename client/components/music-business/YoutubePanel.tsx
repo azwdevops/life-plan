@@ -69,7 +69,7 @@ function sumEarnings(channels: YoutubeChannel[]): { usd: number; kes: number } {
   );
 }
 
-interface AccountDisplayGroup {
+export interface AccountDisplayGroup {
   key: string;
   label: string | null;
   accounts: YoutubeAccount[];
@@ -78,7 +78,9 @@ interface AccountDisplayGroup {
 // Google reports a personal Gmail login and each Brand Account channel it
 // manages as separate identities, with no reliable shared id - so grouping
 // here is purely display-driven, keyed off the user-set `group_label`.
-function groupAccounts(accounts: YoutubeAccount[]): AccountDisplayGroup[] {
+// Exported so ChannelsDrawer (the global "View channels" header action) can
+// group channels the same way without duplicating this logic.
+export function groupAccounts(accounts: YoutubeAccount[]): AccountDisplayGroup[] {
   const groups: AccountDisplayGroup[] = [];
   const byLabel = new Map<string, AccountDisplayGroup>();
   for (const account of accounts) {
@@ -744,21 +746,36 @@ function GroupAccountsDrawer({
         </div>
         <div>
           <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Accounts in this group</p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Only ungrouped accounts (plus this one) are shown, so you don&apos;t accidentally pull one out of
+            another group.
+          </p>
           <div className="mt-2 divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-            {allAccounts.map((account) => (
-              <label
-                key={account.id}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(account.id)}
-                  onChange={() => toggle(account.id)}
-                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-600"
-                />
-                <span className="truncate">{account.google_email}</span>
-              </label>
-            ))}
+            {allAccounts
+              .filter((account) => !account.group_label || initialAccountIds.includes(account.id))
+              .map((account) => (
+                <label
+                  key={account.id}
+                  className="flex items-start gap-2 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-200"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(account.id)}
+                    onChange={() => toggle(account.id)}
+                    className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-600"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-zinc-900 dark:text-zinc-100">
+                      {account.channels.length > 0
+                        ? account.channels.map((channel) => channel.title).join(", ")
+                        : "No channels"}
+                    </span>
+                    <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                      {account.google_email}
+                    </span>
+                  </span>
+                </label>
+              ))}
           </div>
         </div>
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

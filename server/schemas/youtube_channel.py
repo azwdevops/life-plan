@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from typing import Optional
 
 from pydantic import BaseModel
@@ -64,3 +64,25 @@ class YoutubeAccountUpdate(BaseModel):
     (displayed together in the UI); set to null/empty to ungroup it."""
 
     group_label: Optional[str] = None
+
+
+class YoutubePostingTimeOut(BaseModel):
+    id: int
+    channel_id: int
+    day_of_week: str
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    videos_uploaded_count: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class YoutubePostingTimeUpsert(BaseModel):
+    """All fields optional/independent - the start time, end time and
+    videos-uploaded controls in the UI can each be added/edited on their own."""
+
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    videos_uploaded_count: Optional[int] = None
