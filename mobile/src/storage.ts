@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AppSettings, AudioSchedule, Task } from './types';
+import type { AppSettings, AudioSchedule, Playlist, Task } from './types';
 import { DEFAULT_SETTINGS } from './types';
 
 const TASKS_KEY = 'lifeplan:tasks';
 const AUDIO_SCHEDULES_KEY = 'lifeplan:audio_schedules';
 const SETTINGS_KEY = 'lifeplan:settings';
+const PLAYLISTS_KEY = 'lifeplan:playlists';
 
 export async function loadTasks(): Promise<Task[]> {
   const raw = await AsyncStorage.getItem(TASKS_KEY);
@@ -33,4 +34,13 @@ export async function loadSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export async function loadPlaylists(): Promise<Playlist[]> {
+  const raw = await AsyncStorage.getItem(PLAYLISTS_KEY);
+  return raw ? (JSON.parse(raw) as Playlist[]) : [];
+}
+
+export async function savePlaylists(playlists: Playlist[]): Promise<void> {
+  await AsyncStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
 }

@@ -16,6 +16,8 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(AudioSchedulePackage())
           add(TaskReminderPackage())
+          add(SoundRecorderPackage())
+          add(FolderPlaylistPackage())
         },
     )
   }

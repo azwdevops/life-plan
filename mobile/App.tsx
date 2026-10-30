@@ -4,10 +4,12 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { colors } from './src/theme';
 import { TasksScreen } from './src/screens/TasksScreen';
 import { AudioScheduleScreen } from './src/screens/AudioScheduleScreen';
+import { RecordingsScreen } from './src/screens/RecordingsScreen';
+import { PlaylistsScreen } from './src/screens/PlaylistsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { LeftSidebar } from './src/components/LeftSidebar';
 
-type Route = 'tasks' | 'alarms' | 'settings';
+type Route = 'tasks' | 'alarms' | 'record' | 'playlists' | 'settings';
 type Tab = 'tasks' | 'alarms';
 
 const TABS: { key: Tab; label: string; icon: string; color: keyof typeof colors.light }[] = [
@@ -17,6 +19,8 @@ const TABS: { key: Tab; label: string; icon: string; color: keyof typeof colors.
 
 const SIDEBAR_ITEMS: { key: Route; label: string; icon: string; color: keyof typeof colors.light }[] = [
   ...TABS,
+  { key: 'record', label: 'Record', icon: '🎙', color: 'accent' },
+  { key: 'playlists', label: 'Playlists', icon: '🎵', color: 'secondary' },
   { key: 'settings', label: 'Settings', icon: '⚙', color: 'textMuted' },
 ];
 
@@ -39,7 +43,17 @@ function AppContent() {
       </View>
 
       <View style={styles.content}>
-        {route === 'tasks' ? <TasksScreen /> : route === 'alarms' ? <AudioScheduleScreen /> : <SettingsScreen />}
+        {route === 'tasks' ? (
+          <TasksScreen />
+        ) : route === 'alarms' ? (
+          <AudioScheduleScreen />
+        ) : route === 'record' ? (
+          <RecordingsScreen />
+        ) : route === 'playlists' ? (
+          <PlaylistsScreen />
+        ) : (
+          <SettingsScreen />
+        )}
       </View>
 
       <View style={styles.tabBar}>

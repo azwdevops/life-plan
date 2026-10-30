@@ -19,5 +19,7 @@ class BootReceiver : BroadcastReceiver() {
       putExtra("action", "RESCHEDULE_ALL")
     }
     ContextCompat.startForegroundService(context, taskIntent)
+
+    SoundRecorderScheduler.rescheduleIfEnabled(context)
   }
 }

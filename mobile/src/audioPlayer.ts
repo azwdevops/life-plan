@@ -1,21 +1,10 @@
-import TrackPlayer, { Capability, Event, RepeatMode } from 'react-native-track-player';
+import TrackPlayer, { Event, RepeatMode } from 'react-native-track-player';
 import type { AudioTrack } from './types';
-
-let setupDone = false;
-
-async function ensureSetup(): Promise<void> {
-  if (setupDone) return;
-  await TrackPlayer.setupPlayer();
-  await TrackPlayer.updateOptions({
-    capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-    compactCapabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-  });
-  setupDone = true;
-}
+import { ensureTrackPlayerSetup, isTrackPlayerSetUp } from './trackPlayerSetup';
 
 export async function playTracksLooped(tracks: AudioTrack[], title: string): Promise<void> {
   if (tracks.length === 0) return;
-  await ensureSetup();
+  await ensureTrackPlayerSetup();
   await TrackPlayer.reset();
   await TrackPlayer.add(
     tracks.map(t => ({ id: t.uri, url: t.uri, title: t.fileName, artist: title }))
@@ -25,8 +14,16 @@ export async function playTracksLooped(tracks: AudioTrack[], title: string): Pro
 }
 
 export async function stopPlayback(): Promise<void> {
-  if (!setupDone) return;
+  if (!isTrackPlayerSetUp()) return;
   await TrackPlayer.reset();
+}
+
+export async function playClip(uri: string, title: string): Promise<void> {
+  await ensureTrackPlayerSetup();
+  await TrackPlayer.reset();
+  await TrackPlayer.add({ id: uri, url: uri, title });
+  await TrackPlayer.setRepeatMode(RepeatMode.Off);
+  await TrackPlayer.play();
 }
 
 export function subscribeToPlaybackErrors(onError: (message: string) => void): () => void {

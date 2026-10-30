@@ -41,6 +41,7 @@ class TaskReminderModule(reactContext: ReactApplicationContext) :
         player.setOnCompletionListener { stopReminderSound() }
         player.start()
         mediaPlayer = player
+        SoundRecorderService.setAppAudioSourceActive("task_reminder", true)
 
         val runnable = Runnable { stopReminderSound() }
         stopRunnable = runnable
@@ -62,6 +63,7 @@ class TaskReminderModule(reactContext: ReactApplicationContext) :
         }
       }
       mediaPlayer = null
+      SoundRecorderService.setAppAudioSourceActive("task_reminder", false)
     }
   }
 

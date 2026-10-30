@@ -35,3 +35,13 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   taskSnoozeSeconds: 300,
 };
+
+/** A picked folder, treated as a playlist - its tracks are re-read from the
+ * folder each time it's opened rather than cached, so it always reflects
+ * what's actually in the folder. */
+export interface Playlist {
+  id: string;
+  name: string;
+  folderUri: string;
+  createdAt: string;
+}
