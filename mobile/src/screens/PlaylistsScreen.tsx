@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -16,7 +16,10 @@ import { loadPlaylists, savePlaylists } from '../storage';
 import { RowActionsMenu } from '../components/RowActionsMenu';
 import { SeekBar } from '../components/SeekBar';
 import { listAudioFiles } from '../nativeFolderPlaylist';
+import { clearScreenBackHandler, setScreenBackHandler } from '../screenBackHandler';
+import { useHeaderAction, useHeaderTitle } from '../contexts/HeaderActionContext';
 import {
+  getRestoredPlaybackState,
   loadAndPlay,
   pausePlaylist,
   resumePlaylist,
@@ -33,20 +36,24 @@ import {
 } from '../playlistPlayer';
 import type { AudioTrack, Playlist } from '../types';
 
-const MODES: { key: PlaylistPlayMode; label: string }[] = [
-  { key: 'current', label: 'Current' },
-  { key: 'all', label: 'Play all' },
-  { key: 'loopOne', label: 'Loop one' },
-];
+const MODE_ORDER: PlaylistPlayMode[] = ['current', 'all', 'loopOne'];
+const MODE_ICON: Record<PlaylistPlayMode, string> = {
+  current: '1️⃣',
+  all: '🔁',
+  loopOne: '🔂',
+};
+const MODE_LABEL: Record<PlaylistPlayMode, string> = {
+  current: 'Playing current track only',
+  all: 'Playing all tracks',
+  loopOne: 'Looping current track',
+};
 
 function PlaylistDetail({
   playlist,
   c,
-  onBack,
 }: {
   playlist: Playlist;
   c: typeof colors.light;
-  onBack: () => void;
 }) {
   const [tracks, setTracks] = useState<AudioTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +63,17 @@ function PlaylistDetail({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [modeToastVisible, setModeToastVisible] = useState(false);
   const progress = useProgress(500);
+  const modeToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (modeToastTimeoutRef.current) clearTimeout(modeToastTimeoutRef.current);
+    };
+  }, []);
+
+  useHeaderTitle(playlist.name);
 
   const refreshTracks = useCallback(async () => {
     setLoading(true);
@@ -74,6 +91,28 @@ function PlaylistDetail({
   useEffect(() => {
     void refreshTracks();
   }, [refreshTracks]);
+
+  useHeaderAction('refresh', '⟳', 'Refresh folder', refreshTracks);
+
+  // Playback keeps running when you navigate away from this screen, so on
+  // (re)mount, recover what's actually playing from TrackPlayer itself
+  // instead of starting blank - but only if it's one of THIS playlist's
+  // tracks (you may have started a different playlist since leaving).
+  useEffect(() => {
+    if (tracks.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const restored = await getRestoredPlaybackState(tracks);
+      if (cancelled || !restored) return;
+      setCurrentIndex(restored.index);
+      setMode(restored.mode);
+      setLoaded(true);
+      setIsPlaying(restored.isPlaying);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tracks]);
 
   useEffect(() => {
     return subscribeToPlaylistState(state => setIsPlaying(state === State.Playing));
@@ -164,77 +203,43 @@ function PlaylistDetail({
     }
   };
 
-  const changeMode = async (next: PlaylistPlayMode) => {
-    const previousMode = mode;
-    setMode(next);
-    if (loaded) {
-      try {
-        await switchPlayMode(tracks, currentIndex, previousMode, next);
-      } catch (e) {
-        setPlayError(e instanceof Error ? e.message : 'Could not switch mode');
+  const changeMode = useCallback(
+    async (next: PlaylistPlayMode) => {
+      const previousMode = mode;
+      setMode(next);
+      if (loaded) {
+        try {
+          await switchPlayMode(tracks, currentIndex, previousMode, next);
+        } catch (e) {
+          setPlayError(e instanceof Error ? e.message : 'Could not switch mode');
+        }
       }
-    }
-  };
+    },
+    [mode, loaded, tracks, currentIndex]
+  );
+
+  const cycleMode = useCallback(() => {
+    const nextMode = MODE_ORDER[(MODE_ORDER.indexOf(mode) + 1) % MODE_ORDER.length];
+    void changeMode(nextMode);
+    setModeToastVisible(true);
+    if (modeToastTimeoutRef.current) clearTimeout(modeToastTimeoutRef.current);
+    modeToastTimeoutRef.current = setTimeout(() => setModeToastVisible(false), 5000);
+  }, [mode, changeMode]);
+
+  useHeaderAction('mode', MODE_ICON[mode], MODE_LABEL[mode], cycleMode);
 
   const styles = makeDetailStyles(c);
+  const currentTrack = tracks[currentIndex];
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={10} accessibilityLabel="Back">
-          <Text style={styles.backIcon}>‹</Text>
-        </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {playlist.name}
-        </Text>
-        <Pressable onPress={() => void refreshTracks()} hitSlop={10} accessibilityLabel="Refresh folder">
-          <Text style={styles.refreshIcon}>⟳</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.modeRow}>
-        {MODES.map(m => (
-          <Pressable
-            key={m.key}
-            onPress={() => void changeMode(m.key)}
-            style={[styles.modeButton, mode === m.key && styles.modeButtonActive]}
-          >
-            <Text style={[styles.modeButtonText, mode === m.key && styles.modeButtonTextActive]}>
-              {m.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {loaded && (
-        <SeekBar
-          position={progress.position}
-          duration={progress.duration}
-          onSeek={seconds => void seekToPosition(seconds)}
-          c={c}
-        />
+      {modeToastVisible && (
+        <View style={styles.modeToast}>
+          <Text style={styles.modeToastText}>
+            {MODE_ICON[mode]} {MODE_LABEL[mode]}
+          </Text>
+        </View>
       )}
-
-      <View style={styles.transportRow}>
-        <Pressable onPress={() => void skipBack5()} hitSlop={8} accessibilityLabel="Back 5 seconds">
-          <Text style={styles.transportIconSmall}>⟲5</Text>
-        </Pressable>
-        <Pressable onPress={() => void goPrevious()} hitSlop={8} accessibilityLabel="Previous">
-          <Text style={styles.transportIcon}>⏮</Text>
-        </Pressable>
-        <Pressable onPress={() => void togglePlayPause()} hitSlop={8} accessibilityLabel={isPlaying ? 'Pause' : 'Play'}>
-          <Text style={styles.transportIconLarge}>{isPlaying ? '⏸' : '▶'}</Text>
-        </Pressable>
-        <Pressable onPress={() => void stop()} hitSlop={8} accessibilityLabel="Stop">
-          <Text style={styles.transportIcon}>⏹</Text>
-        </Pressable>
-        <Pressable onPress={() => void goNext()} hitSlop={8} accessibilityLabel="Next">
-          <Text style={styles.transportIcon}>⏭</Text>
-        </Pressable>
-        <Pressable onPress={() => void skipForward5()} hitSlop={8} accessibilityLabel="Forward 5 seconds">
-          <Text style={styles.transportIconSmall}>5⟳</Text>
-        </Pressable>
-      </View>
 
       {playError ? (
         <View style={styles.errorBanner}>
@@ -242,7 +247,7 @@ function PlaylistDetail({
         </View>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView contentContainerStyle={[styles.list, loaded && styles.listWithPlayer]}>
         {loading ? (
           <Text style={styles.empty}>Loading tracks…</Text>
         ) : loadError ? (
@@ -267,6 +272,44 @@ function PlaylistDetail({
           })
         )}
       </ScrollView>
+
+      {loaded && currentTrack ? (
+        <View style={styles.nowPlayingBar}>
+          <Text style={styles.nowPlayingTitle} numberOfLines={1}>
+            {currentTrack.fileName}
+          </Text>
+          <SeekBar
+            position={progress.position}
+            duration={progress.duration}
+            onSeek={seconds => void seekToPosition(seconds)}
+            c={c}
+          />
+          <View style={styles.transportRow}>
+            <Pressable onPress={() => void skipBack5()} hitSlop={8} accessibilityLabel="Back 5 seconds">
+              <Text style={styles.transportIconSmall}>⟲5</Text>
+            </Pressable>
+            <Pressable onPress={() => void goPrevious()} hitSlop={8} accessibilityLabel="Previous">
+              <Text style={styles.transportIcon}>⏮</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void togglePlayPause()}
+              hitSlop={8}
+              accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+            >
+              <Text style={styles.transportIconLarge}>{isPlaying ? '⏸' : '▶'}</Text>
+            </Pressable>
+            <Pressable onPress={() => void stop()} hitSlop={8} accessibilityLabel="Stop">
+              <Text style={styles.transportIcon}>⏹</Text>
+            </Pressable>
+            <Pressable onPress={() => void goNext()} hitSlop={8} accessibilityLabel="Next">
+              <Text style={styles.transportIcon}>⏭</Text>
+            </Pressable>
+            <Pressable onPress={() => void skipForward5()} hitSlop={8} accessibilityLabel="Forward 5 seconds">
+              <Text style={styles.transportIconSmall}>5⟳</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -286,6 +329,16 @@ export function PlaylistsScreen() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const handler = () => {
+      setSelectedId(null);
+      return true;
+    };
+    setScreenBackHandler(handler);
+    return () => clearScreenBackHandler(handler);
+  }, [selectedId]);
 
   const addFolder = async () => {
     setPickError(null);
@@ -326,7 +379,7 @@ export function PlaylistsScreen() {
   if (selectedId) {
     const playlist = playlists.find(p => p.id === selectedId);
     if (playlist) {
-      return <PlaylistDetail playlist={playlist} c={c} onBack={() => setSelectedId(null)} />;
+      return <PlaylistDetail playlist={playlist} c={c} />;
     }
   }
 
@@ -412,39 +465,24 @@ function makeStyles(c: typeof colors.light) {
 function makeDetailStyles(c: typeof colors.light) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingHorizontal: 16,
-      paddingTop: 14,
-      paddingBottom: 8,
-    },
-    backIcon: { color: c.text, fontSize: 28, lineHeight: 28 },
-    headerTitle: { color: c.text, fontSize: 16, fontWeight: '700', flex: 1 },
-    refreshIcon: { color: c.text, fontSize: 22 },
-    modeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
-    modeButton: {
-      flex: 1,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: c.border,
-      borderRadius: 8,
-      paddingVertical: 8,
+    modeToast: {
+      position: 'absolute',
+      top: 10,
+      left: 16,
+      right: 16,
+      zIndex: 10,
       alignItems: 'center',
     },
-    modeButtonActive: { backgroundColor: c.accent, borderColor: c.accent },
-    modeButtonText: { color: c.text, fontSize: 13 },
-    modeButtonTextActive: { color: '#ffffff', fontWeight: '600' },
-    transportRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 18,
-      paddingVertical: 16,
+    modeToastText: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '600',
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      borderRadius: 16,
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      overflow: 'hidden',
     },
-    transportIcon: { color: c.text, fontSize: 24 },
-    transportIconSmall: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
-    transportIconLarge: { color: c.accent, fontSize: 36 },
     errorBanner: {
       marginHorizontal: 16,
       marginBottom: 8,
@@ -456,6 +494,7 @@ function makeDetailStyles(c: typeof colors.light) {
     },
     errorText: { color: c.danger, fontSize: 13 },
     list: { paddingHorizontal: 16, paddingBottom: 32, gap: 8 },
+    listWithPlayer: { paddingBottom: 180 },
     empty: { color: c.textMuted, textAlign: 'center', marginTop: 32 },
     trackRow: {
       borderRadius: 8,
@@ -468,5 +507,34 @@ function makeDetailStyles(c: typeof colors.light) {
     trackRowActive: { borderColor: c.accent, backgroundColor: `${c.accent}1f` },
     trackText: { color: c.text, fontSize: 14 },
     trackTextActive: { color: c.accent, fontWeight: '600' },
+    nowPlayingBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingTop: 10,
+      paddingBottom: 6,
+      backgroundColor: c.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.border,
+    },
+    nowPlayingTitle: {
+      color: c.text,
+      fontSize: 13,
+      fontWeight: '600',
+      textAlign: 'center',
+      paddingHorizontal: 16,
+      marginBottom: 2,
+    },
+    transportRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 18,
+      paddingVertical: 10,
+    },
+    transportIcon: { color: c.text, fontSize: 24 },
+    transportIconSmall: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
+    transportIconLarge: { color: c.accent, fontSize: 36 },
   });
 }

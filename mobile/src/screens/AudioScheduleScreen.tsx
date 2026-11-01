@@ -26,6 +26,7 @@ import {
   openExactAlarmSettings,
   syncScheduleAlarms,
 } from '../nativeAudioAlarm';
+import { clearScreenBackHandler, setScreenBackHandler } from '../screenBackHandler';
 import type { AudioSchedule, AudioTrack } from '../types';
 
 export function AudioScheduleScreen() {
@@ -143,6 +144,16 @@ export function AudioScheduleScreen() {
     setFormOpen(false);
     setEditingId(null);
   };
+
+  useEffect(() => {
+    if (!formOpen) return;
+    const handler = () => {
+      closeForm();
+      return true;
+    };
+    setScreenBackHandler(handler);
+    return () => clearScreenBackHandler(handler);
+  }, [formOpen]);
 
   const saveSchedule = () => {
     const trimmed = label.trim();

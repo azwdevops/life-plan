@@ -1,5 +1,7 @@
 export type TaskType = 'manual' | 'automated';
 
+export type DayOfWeek = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
+
 export interface Task {
   id: string;
   text: string;
@@ -11,6 +13,23 @@ export interface Task {
   startTime?: string;
   /** automated only: minutes between repeat reminders until done/ignored */
   repeatMinutes?: number;
+  /** set when this task was auto-created from a recurring TaskTemplate */
+  templateId?: string;
+  /** YYYY-MM-DD the task was created for - paired with templateId to avoid
+   * re-creating the same day's occurrence twice */
+  instanceDate?: string;
+}
+
+/** A recurring task definition: on each selected weekday, a fresh Task
+ * instance is auto-created (if one doesn't already exist for that day). */
+export interface TaskTemplate {
+  id: string;
+  text: string;
+  type: TaskType;
+  startTime?: string;
+  repeatMinutes?: number;
+  days: DayOfWeek[];
+  createdAt: string;
 }
 
 export interface AudioTrack {

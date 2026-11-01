@@ -14,22 +14,38 @@ import {
 } from 'react-native';
 import { colors } from '../theme';
 import { newId } from '../id';
-import { loadTasks, saveTasks } from '../storage';
+import { loadTasks, loadTaskTemplates, saveTasks, saveTaskTemplates } from '../storage';
+import { materializeDueTemplates } from '../taskTemplates';
 import { TimeField } from '../components/TimeField';
 import { RowActionsMenu } from '../components/RowActionsMenu';
 import { formatTimeHHMMSS } from '../time';
 import { canScheduleExactAlarms, openExactAlarmSettings } from '../nativeAudioAlarm';
 import { cancelTaskAlarm, syncTaskReminder } from '../nativeTaskReminder';
-import type { Task, TaskType } from '../types';
+import { clearScreenBackHandler, setScreenBackHandler } from '../screenBackHandler';
+import type { DayOfWeek, Task, TaskTemplate, TaskType } from '../types';
+
+const DAY_OPTIONS: { key: DayOfWeek; label: string }[] = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+];
 
 export function TasksScreen() {
   const isDarkMode = useColorScheme() === 'dark';
   const c = isDarkMode ? colors.dark : colors.light;
 
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [filter, setFilter] = useState<'pending' | 'done'>('pending');
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [filter, setFilter] = useState<'pending' | 'done' | 'recurring'>('pending');
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [frequency, setFrequency] = useState<'once' | 'recurring'>('once');
+  const [recurDays, setRecurDays] = useState<DayOfWeek[]>([]);
   const [text, setText] = useState('');
   const [type, setType] = useState<TaskType>('manual');
   const [startTime, setStartTime] = useState('08:00:00');
@@ -47,20 +63,18 @@ export function TasksScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadTasks().then(loaded => {
-      setTasks(loaded);
-      tasksRef.current = loaded;
-      void syncAllReminders();
-    });
-  }, [syncAllReminders]);
-
   const reloadTasks = useCallback(async () => {
-    const loaded = await loadTasks();
-    setTasks(loaded);
-    tasksRef.current = loaded;
+    await materializeDueTemplates();
+    const [loadedTasks, loadedTemplates] = await Promise.all([loadTasks(), loadTaskTemplates()]);
+    setTasks(loadedTasks);
+    tasksRef.current = loadedTasks;
+    setTemplates(loadedTemplates);
     await syncAllReminders();
   }, [syncAllReminders]);
+
+  useEffect(() => {
+    void reloadTasks();
+  }, [reloadTasks]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
@@ -75,8 +89,16 @@ export function TasksScreen() {
     void saveTasks(next);
   }, []);
 
+  const persistTemplates = useCallback((next: TaskTemplate[]) => {
+    setTemplates(next);
+    void saveTaskTemplates(next);
+  }, []);
+
   const openAddForm = () => {
     setEditingId(null);
+    setEditingTemplateId(null);
+    setFrequency('once');
+    setRecurDays([]);
     setText('');
     setType('manual');
     setStartTime('08:00:00');
@@ -87,6 +109,9 @@ export function TasksScreen() {
 
   const openEditForm = (task: Task) => {
     setEditingId(task.id);
+    setEditingTemplateId(null);
+    setFrequency('once');
+    setRecurDays([]);
     setText(task.text);
     setType(task.type);
     setStartTime(task.startTime ?? '08:00:00');
@@ -95,14 +120,65 @@ export function TasksScreen() {
     setFormOpen(true);
   };
 
+  const openEditTemplateForm = (template: TaskTemplate) => {
+    setEditingId(null);
+    setEditingTemplateId(template.id);
+    setFrequency('recurring');
+    setRecurDays(template.days);
+    setText(template.text);
+    setType(template.type);
+    setStartTime(template.startTime ?? '08:00:00');
+    setStartInSeconds('');
+    setRepeatMinutes(template.repeatMinutes != null ? String(template.repeatMinutes) : '30');
+    setFormOpen(true);
+  };
+
   const closeForm = () => {
     setFormOpen(false);
     setEditingId(null);
+    setEditingTemplateId(null);
   };
 
-  const saveTask = () => {
+  useEffect(() => {
+    if (!formOpen) return;
+    const handler = () => {
+      closeForm();
+      return true;
+    };
+    setScreenBackHandler(handler);
+    return () => clearScreenBackHandler(handler);
+  }, [formOpen]);
+
+  const toggleRecurDay = (day: DayOfWeek) => {
+    setRecurDays(prev => (prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]));
+  };
+
+  const saveForm = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
+
+    if (editingTemplateId) {
+      if (recurDays.length === 0) return;
+      const updated = templates.map(t =>
+        t.id === editingTemplateId
+          ? {
+              ...t,
+              text: trimmed,
+              type,
+              days: recurDays,
+              ...(type === 'automated'
+                ? { startTime, repeatMinutes: Number(repeatMinutes) || 1 }
+                : { startTime: undefined, repeatMinutes: undefined }),
+            }
+          : t
+      );
+      persistTemplates(updated);
+      void materializeDueTemplates().then(created => {
+        if (created) void reloadTasks();
+      });
+      closeForm();
+      return;
+    }
 
     if (editingId) {
       const updated = tasks.map(t =>
@@ -120,6 +196,24 @@ export function TasksScreen() {
       persist(updated);
       const saved = updated.find(t => t.id === editingId);
       if (saved) void syncTaskReminder(saved);
+      closeForm();
+      return;
+    }
+
+    if (frequency === 'recurring') {
+      if (recurDays.length === 0) return;
+      const template: TaskTemplate = {
+        id: newId(),
+        text: trimmed,
+        type,
+        days: recurDays,
+        createdAt: new Date().toISOString(),
+        ...(type === 'automated' ? { startTime, repeatMinutes: Number(repeatMinutes) || 1 } : {}),
+      };
+      persistTemplates([template, ...templates]);
+      void materializeDueTemplates().then(created => {
+        if (created) void reloadTasks();
+      });
     } else {
       const task: Task = {
         id: newId(),
@@ -174,6 +268,21 @@ export function TasksScreen() {
     ]);
   };
 
+  const deleteTemplate = (template: TaskTemplate) => {
+    Alert.alert(
+      'Delete recurring task?',
+      `"${template.text}" will stop being created on new days. Tasks already created from it are kept.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => persistTemplates(templates.filter(t => t.id !== template.id)),
+        },
+      ]
+    );
+  };
+
   const pendingCount = tasks.filter(t => !t.done).length;
   const doneCount = tasks.filter(t => t.done).length;
   const visibleTasks = tasks.filter(t => (filter === 'done' ? t.done : !t.done));
@@ -209,9 +318,45 @@ export function TasksScreen() {
             ✓ Done ({doneCount})
           </Text>
         </Pressable>
+        <Pressable
+          onPress={() => setFilter('recurring')}
+          style={[styles.filterButton, filter === 'recurring' && styles.filterButtonActive]}
+        >
+          <Text style={[styles.filterButtonText, filter === 'recurring' && styles.filterButtonTextActive]}>
+            🔁 Recurring ({templates.length})
+          </Text>
+        </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.list}>
-        {visibleTasks.length === 0 ? (
+        {filter === 'recurring' ? (
+          templates.length === 0 ? (
+            <Text style={styles.empty}>No recurring tasks yet.</Text>
+          ) : (
+            templates.map(template => (
+              <View key={template.id} style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowText}>{template.text}</Text>
+                  <Text style={styles.rowMeta}>
+                    {template.type === 'manual'
+                      ? 'Manual'
+                      : `Reminder: ${template.startTime}, every ${template.repeatMinutes}m`}
+                    {' · '}
+                    {DAY_OPTIONS.filter(d => template.days.includes(d.key))
+                      .map(d => d.label)
+                      .join(', ')}
+                  </Text>
+                </View>
+                <RowActionsMenu
+                  c={c}
+                  items={[
+                    { label: 'Edit', onPress: () => openEditTemplateForm(template) },
+                    { label: 'Delete', onPress: () => deleteTemplate(template), danger: true },
+                  ]}
+                />
+              </View>
+            ))
+          )
+        ) : visibleTasks.length === 0 ? (
           <Text style={styles.empty}>
             {filter === 'done' ? 'No done tasks yet.' : 'No pending tasks.'}
           </Text>
@@ -231,6 +376,7 @@ export function TasksScreen() {
                   {task.type === 'manual'
                     ? 'Manual'
                     : `Reminder: ${task.startTime}, every ${task.repeatMinutes}m`}
+                  {task.templateId ? ' · 🔁 recurring' : ''}
                   {task.ignored ? ' · ignored' : ''}
                 </Text>
               </View>
@@ -254,7 +400,9 @@ export function TasksScreen() {
 
       {formOpen ? (
         <View style={styles.form}>
-          <Text style={styles.formTitle}>{editingId ? 'Edit task' : 'New task'}</Text>
+          <Text style={styles.formTitle}>
+            {editingId ? 'Edit task' : editingTemplateId ? 'Edit recurring task' : 'New task'}
+          </Text>
           <TextInput
             value={text}
             onChangeText={setText}
@@ -282,6 +430,61 @@ export function TasksScreen() {
               </Text>
             </Pressable>
           </View>
+          {!editingId && !editingTemplateId ? (
+            <View style={styles.typeRow}>
+              <Pressable
+                onPress={() => setFrequency('once')}
+                style={[styles.typeButton, frequency === 'once' && styles.typeButtonActive]}
+              >
+                <Text style={[styles.typeButtonText, frequency === 'once' && styles.typeButtonTextActive]}>
+                  1️⃣ Once
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setFrequency('recurring')}
+                style={[styles.typeButton, frequency === 'recurring' && styles.typeButtonActive]}
+              >
+                <Text
+                  style={[styles.typeButtonText, frequency === 'recurring' && styles.typeButtonTextActive]}
+                >
+                  🔁 Recurring
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {frequency === 'recurring' ? (
+            <View style={styles.dayGroup}>
+              <View style={styles.dayGroupHeader}>
+                <Text style={styles.inputLabel}>Repeats on</Text>
+                <Pressable
+                  onPress={() =>
+                    setRecurDays(prev =>
+                      prev.length === DAY_OPTIONS.length ? [] : DAY_OPTIONS.map(d => d.key)
+                    )
+                  }
+                >
+                  <Text style={styles.everyDayLink}>
+                    {recurDays.length === DAY_OPTIONS.length ? 'Unselect all' : 'Every day'}
+                  </Text>
+                </Pressable>
+              </View>
+              <View style={styles.dayRow}>
+                {DAY_OPTIONS.map(d => (
+                  <Pressable
+                    key={d.key}
+                    onPress={() => toggleRecurDay(d.key)}
+                    style={[styles.dayChip, recurDays.includes(d.key) && styles.dayChipActive]}
+                  >
+                    <Text
+                      style={[styles.dayChipText, recurDays.includes(d.key) && styles.dayChipTextActive]}
+                    >
+                      {d.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {type === 'automated' ? (
             <>
               <View style={styles.timeGroup}>
@@ -299,7 +502,7 @@ export function TasksScreen() {
                 <Text style={styles.inputLabel}>Start time</Text>
                 <TimeField value={startTime} onChange={setStartTime} c={c} />
               </View>
-              <View style={styles.inputHalf}>
+              <View style={styles.timeGroup}>
                 <Text style={styles.inputLabel}>Repeat every (min)</Text>
                 <TextInput
                   value={repeatMinutes}
@@ -314,8 +517,10 @@ export function TasksScreen() {
             <Pressable onPress={closeForm} style={styles.cancelButton}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={saveTask} style={styles.addButton}>
-              <Text style={styles.addButtonText}>{editingId ? 'Save changes' : 'Add'}</Text>
+            <Pressable onPress={saveForm} style={styles.addButton}>
+              <Text style={styles.addButtonText}>
+                {editingId || editingTemplateId ? 'Save changes' : 'Add'}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -413,7 +618,6 @@ function makeStyles(c: typeof colors.light) {
       backgroundColor: c.background,
     },
     formTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
-    inputHalf: { flex: 1, gap: 4 },
     timeGroup: { gap: 4 },
     inputLabel: { color: c.textMuted, fontSize: 12 },
     typeRow: { flexDirection: 'row', gap: 8 },
@@ -428,6 +632,20 @@ function makeStyles(c: typeof colors.light) {
     typeButtonActive: { backgroundColor: c.accent, borderColor: c.accent },
     typeButtonText: { color: c.text, fontSize: 13 },
     typeButtonTextActive: { color: '#ffffff', fontWeight: '600' },
+    dayGroup: { gap: 6 },
+    dayGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    everyDayLink: { color: c.accent, fontSize: 12, fontWeight: '600' },
+    dayRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    dayChip: {
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      borderRadius: 16,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+    },
+    dayChipActive: { backgroundColor: c.accent, borderColor: c.accent },
+    dayChipText: { color: c.text, fontSize: 12 },
+    dayChipTextActive: { color: '#ffffff', fontWeight: '600' },
     formActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 4 },
     cancelButton: { paddingVertical: 8, paddingHorizontal: 12 },
     cancelButtonText: { color: c.textMuted },

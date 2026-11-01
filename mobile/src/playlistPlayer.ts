@@ -69,6 +69,40 @@ export async function switchPlayMode(
   if (wasPlaying) await TrackPlayer.play();
 }
 
+export interface RestoredPlaybackState {
+  index: number;
+  mode: PlaylistPlayMode;
+  isPlaying: boolean;
+}
+
+// Called when a playlist screen (re)mounts, to recover "what's actually
+// playing" from TrackPlayer itself rather than resetting to blank - playback
+// keeps running when you navigate away, so this is the real source of truth,
+// not any state the screen held before it last unmounted. Returns null if
+// nothing is loaded, or what's loaded isn't one of this playlist's tracks
+// (e.g. you started a different playlist since leaving this one).
+export async function getRestoredPlaybackState(tracks: AudioTrack[]): Promise<RestoredPlaybackState | null> {
+  if (!isTrackPlayerSetUp() || tracks.length === 0) return null;
+  try {
+    const activeTrack = await TrackPlayer.getActiveTrack();
+    if (!activeTrack) return null;
+    const index = tracks.findIndex(t => t.uri === activeTrack.id);
+    if (index === -1) return null;
+
+    const [queue, repeatMode, playbackState] = await Promise.all([
+      TrackPlayer.getQueue(),
+      TrackPlayer.getRepeatMode(),
+      TrackPlayer.getPlaybackState(),
+    ]);
+    const mode: PlaylistPlayMode =
+      queue.length > 1 ? 'all' : repeatMode === RepeatMode.Track ? 'loopOne' : 'current';
+
+    return { index, mode, isPlaying: playbackState.state === State.Playing };
+  } catch {
+    return null;
+  }
+}
+
 export async function pausePlaylist(): Promise<void> {
   if (!isTrackPlayerSetUp()) return;
   await TrackPlayer.pause();

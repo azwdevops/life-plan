@@ -9,14 +9,30 @@ import { Dialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/hooks/use-auth";
 import {
   createDailyProductiveItem,
+  createDailyProductiveTemplate,
   deleteDailyProductiveItem,
+  deleteDailyProductiveTemplate,
   fetchDailyProductiveItems,
+  fetchDailyProductiveTemplates,
   getTodayIsoDate,
   isEditableIsoDate,
   patchDailyProductiveItem,
+  patchDailyProductiveTemplate,
   reorderDailyProductiveItems,
   type DailyProductiveItemApi,
+  type DailyProductiveTemplateApi,
+  type DayOfWeek,
 } from "@/lib/api/daily-productive-items";
+
+const DAY_OPTIONS: { key: DayOfWeek; label: string }[] = [
+  { key: "mon", label: "Mon" },
+  { key: "tue", label: "Tue" },
+  { key: "wed", label: "Wed" },
+  { key: "thu", label: "Thu" },
+  { key: "fri", label: "Fri" },
+  { key: "sat", label: "Sat" },
+  { key: "sun", label: "Sun" },
+];
 
 function isoToLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -83,6 +99,15 @@ function IconGrip({ className }: { className?: string }) {
   );
 }
 
+function IconRepeat({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3" />
+    </svg>
+  );
+}
+
 function IconTrash({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
@@ -117,6 +142,17 @@ export function HeaderDailyProductiveList() {
   const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
   const dragIdRef = useRef<string | null>(null);
 
+  const [view, setView] = useState<"day" | "recurring">("day");
+  const [recurAddOpen, setRecurAddOpen] = useState(false);
+  const [recurDraftText, setRecurDraftText] = useState("");
+  const [recurDraftDays, setRecurDraftDays] = useState<DayOfWeek[]>([]);
+  const [recurError, setRecurError] = useState<string | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<DailyProductiveTemplateApi | null>(null);
+  const [editTemplateDraftText, setEditTemplateDraftText] = useState("");
+  const [editTemplateDraftDays, setEditTemplateDraftDays] = useState<DayOfWeek[]>([]);
+  const [editTemplateError, setEditTemplateError] = useState<string | null>(null);
+  const [deleteTemplateConfirm, setDeleteTemplateConfirm] = useState<DailyProductiveTemplateApi | null>(null);
+
   const todayIso = getTodayIsoDate();
 
   const todayQuery = useQuery({
@@ -132,10 +168,20 @@ export function HeaderDailyProductiveList() {
     enabled: Boolean(token) && isAuthenticated && open,
   });
 
+  const templatesQuery = useQuery({
+    queryKey: ["daily-productive-templates", token],
+    queryFn: () => fetchDailyProductiveTemplates(token as string),
+    enabled: Boolean(token) && isAuthenticated && open,
+  });
+  const templates = templatesQuery.data ?? [];
+
   useEffect(() => {
     if (open) setSelectedDate(getTodayIsoDate());
     setEditingItem(null);
     setDeleteConfirm(null);
+    setView("day");
+    setEditingTemplate(null);
+    setDeleteTemplateConfirm(null);
   }, [open]);
 
   useEffect(() => {
@@ -163,6 +209,77 @@ export function HeaderDailyProductiveList() {
   const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["daily-productive-items", token] });
   }, [queryClient, token]);
+
+  const invalidateTemplates = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["daily-productive-templates", token] });
+  }, [queryClient, token]);
+
+  const toggleRecurDraftDay = (day: DayOfWeek) => {
+    setRecurDraftDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+  };
+
+  const toggleEditTemplateDay = (day: DayOfWeek) => {
+    setEditTemplateDraftDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+  };
+
+  const submitAddRecurring = () => {
+    const text = recurDraftText.trim();
+    if (!text || recurDraftDays.length === 0 || !token) return;
+    void (async () => {
+      try {
+        await createDailyProductiveTemplate(token, text, recurDraftDays);
+        setRecurDraftText("");
+        setRecurDraftDays([]);
+        setRecurAddOpen(false);
+        setRecurError(null);
+        invalidateTemplates();
+        invalidate();
+      } catch (err) {
+        setRecurError(err instanceof Error ? err.message : "Could not add recurring item");
+      }
+    })();
+  };
+
+  const startEditTemplate = (template: DailyProductiveTemplateApi) => {
+    setEditingTemplate(template);
+    setEditTemplateDraftText(template.text);
+    setEditTemplateDraftDays(template.days);
+    setEditTemplateError(null);
+  };
+
+  const submitEditTemplate = () => {
+    if (!editingTemplate || !token) return;
+    const text = editTemplateDraftText.trim();
+    if (!text || editTemplateDraftDays.length === 0) return;
+    void (async () => {
+      try {
+        await patchDailyProductiveTemplate(token, editingTemplate.id, {
+          text,
+          days: editTemplateDraftDays,
+        });
+        setEditingTemplate(null);
+        setEditTemplateError(null);
+        invalidateTemplates();
+      } catch (err) {
+        setEditTemplateError(err instanceof Error ? err.message : "Could not update recurring item");
+      }
+    })();
+  };
+
+  const confirmDeleteTemplate = () => {
+    if (!deleteTemplateConfirm || !token) return;
+    const template = deleteTemplateConfirm;
+    setDeleteTemplateConfirm(null);
+    void (async () => {
+      try {
+        await deleteDailyProductiveTemplate(token, template.id);
+        if (editingTemplate?.id === template.id) setEditingTemplate(null);
+        invalidateTemplates();
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Could not delete recurring item");
+      }
+    })();
+  };
 
   const refresh = useCallback(() => {
     void todayQuery.refetch();
@@ -326,27 +443,44 @@ export function HeaderDailyProductiveList() {
         width="3xl"
         actions={
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <DatePicker
-              selected={isoToLocalDate(selectedDate)}
-              onChange={(date: Date | null) => {
-                if (date) setSelectedDate(localDateToIso(date));
-              }}
-              maxDate={shiftDate(isoToLocalDate(todayIso), 7)}
-              dateFormat="yyyy-MM-dd"
-              popperPlacement="bottom-start"
-              className="min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-            />
+            {view === "day" ? (
+              <>
+                <DatePicker
+                  selected={isoToLocalDate(selectedDate)}
+                  onChange={(date: Date | null) => {
+                    if (date) setSelectedDate(localDateToIso(date));
+                  }}
+                  maxDate={shiftDate(isoToLocalDate(todayIso), 7)}
+                  dateFormat="yyyy-MM-dd"
+                  popperPlacement="bottom-start"
+                  className="min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                />
+                <button
+                  type="button"
+                  onClick={refresh}
+                  disabled={listQuery.isFetching}
+                  aria-label="Refresh list"
+                  title="Refresh"
+                  className="shrink-0 rounded-md border border-zinc-300 bg-white p-1.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  <IconRefresh className={`h-3.5 w-3.5 ${listQuery.isFetching ? "animate-spin" : ""}`} />
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
-              onClick={refresh}
-              disabled={listQuery.isFetching}
-              aria-label="Refresh list"
-              title="Refresh"
-              className="shrink-0 rounded-md border border-zinc-300 bg-white p-1.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              onClick={() => setView(view === "day" ? "recurring" : "day")}
+              aria-label={view === "day" ? "View recurring items" : "View day's list"}
+              title={view === "day" ? "Recurring items" : "Back to day's list"}
+              className={`shrink-0 rounded-md border p-1.5 ${
+                view === "recurring"
+                  ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                  : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
             >
-              <IconRefresh className={`h-3.5 w-3.5 ${listQuery.isFetching ? "animate-spin" : ""}`} />
+              <IconRepeat className="h-3.5 w-3.5" />
             </button>
-            {editable ? (
+            {view === "day" && editable ? (
               <button
                 type="button"
                 onClick={() => {
@@ -359,9 +493,24 @@ export function HeaderDailyProductiveList() {
                 Add
               </button>
             ) : null}
+            {view === "recurring" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setRecurDraftText("");
+                  setRecurDraftDays([]);
+                  setRecurError(null);
+                  setRecurAddOpen(true);
+                }}
+                className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 dark:bg-blue-500"
+              >
+                Add recurring
+              </button>
+            ) : null}
           </div>
         }
       >
+        {view === "day" ? (
         <div className="space-y-3">
           {!editable ? (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">
@@ -510,6 +659,9 @@ export function HeaderDailyProductiveList() {
                       }`}
                     >
                       {item.text}
+                      {item.template_id ? (
+                        <IconRepeat className="ml-1.5 inline-block h-3 w-3 text-blue-500 dark:text-blue-400" />
+                      ) : null}
                     </span>
                     {editable ? (
                       <button
@@ -545,6 +697,158 @@ export function HeaderDailyProductiveList() {
             </ul>
           )}
         </div>
+        ) : (
+        <div className="space-y-3">
+          {recurError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+              {recurError}
+            </p>
+          ) : null}
+          {mutationError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+              {mutationError}
+            </p>
+          ) : null}
+
+          {recurAddOpen ? (
+            <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+              <input
+                autoFocus
+                type="text"
+                value={recurDraftText}
+                onChange={(e) => setRecurDraftText(e.target.value)}
+                placeholder="e.g. Take vitamins"
+                maxLength={500}
+                className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {DAY_OPTIONS.map((d) => (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => toggleRecurDraftDay(d.key)}
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                      recurDraftDays.includes(d.key)
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-zinc-300 bg-white text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRecurAddOpen(false)}
+                  className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitAddRecurring}
+                  disabled={!recurDraftText.trim() || recurDraftDays.length === 0}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {templatesQuery.isLoading ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>
+          ) : templates.length === 0 ? (
+            <p className="rounded-md border border-dashed border-zinc-300 bg-zinc-50/80 px-3 py-6 text-center text-sm text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-400">
+              No recurring items yet — use &ldquo;Add recurring&rdquo; to create one.
+            </p>
+          ) : (
+            <ul className="divide-y divide-zinc-100 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-700">
+              {templates.map((template) =>
+                editingTemplate?.id === template.id ? (
+                  <li key={template.id} className="space-y-2 bg-zinc-50 px-3 py-2 dark:bg-zinc-800/50">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editTemplateDraftText}
+                      onChange={(e) => setEditTemplateDraftText(e.target.value)}
+                      maxLength={500}
+                      className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAY_OPTIONS.map((d) => (
+                        <button
+                          key={d.key}
+                          type="button"
+                          onClick={() => toggleEditTemplateDay(d.key)}
+                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                            editTemplateDraftDays.includes(d.key)
+                              ? "border-blue-600 bg-blue-600 text-white"
+                              : "border-zinc-300 bg-white text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                          }`}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                    {editTemplateError ? (
+                      <p className="text-xs text-red-600 dark:text-red-400">{editTemplateError}</p>
+                    ) : null}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTemplate(null)}
+                        className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitEditTemplate}
+                        disabled={!editTemplateDraftText.trim() || editTemplateDraftDays.length === 0}
+                        className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={template.id} className="flex items-start gap-2.5 px-3 py-2">
+                    <IconRepeat className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm text-zinc-800 dark:text-zinc-200">{template.text}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {DAY_OPTIONS.filter((d) => template.days.includes(d.key))
+                          .map((d) => d.label)
+                          .join(", ")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => startEditTemplate(template)}
+                      aria-label="Edit recurring item"
+                      title="Edit"
+                      className="shrink-0 rounded-md p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+                    >
+                      <IconPencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTemplateConfirm(template)}
+                      aria-label="Delete recurring item"
+                      title="Delete"
+                      className="shrink-0 rounded-md p-1 text-zinc-400 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/40 dark:hover:text-red-300"
+                    >
+                      <IconTrash className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                )
+              )}
+            </ul>
+          )}
+        </div>
+        )}
       </RightDrawer>
 
       <Dialog
@@ -601,6 +905,38 @@ export function HeaderDailyProductiveList() {
             <button
               type="button"
               onClick={confirmDelete}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 dark:bg-red-500"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        isOpen={deleteTemplateConfirm !== null}
+        onClose={() => setDeleteTemplateConfirm(null)}
+        title="Delete recurring item"
+        size="sm"
+        variant="danger"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">
+            Stop creating{" "}
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{deleteTemplateConfirm?.text}</span>{" "}
+            on new days? Items already created from it are kept.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setDeleteTemplateConfirm(null)}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDeleteTemplate}
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 dark:bg-red-500"
             >
               Delete

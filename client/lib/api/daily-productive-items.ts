@@ -5,17 +5,26 @@ if (!API_BASE_URL) {
   throw new Error("NEXT_PUBLIC_API_URL environment variable is required");
 }
 
+export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
 export interface DailyProductiveItemApi {
   id: string;
   item_date: string;
   text: string;
   is_done: boolean;
+  template_id: number | null;
 }
 
 export interface DailyProductiveItemListApi {
   item_date: string;
   editable: boolean;
   items: DailyProductiveItemApi[];
+}
+
+export interface DailyProductiveTemplateApi {
+  id: number;
+  text: string;
+  days: DayOfWeek[];
 }
 
 export function getTodayIsoDate(): string {
@@ -153,5 +162,70 @@ export async function deleteDailyProductiveItem(token: string, clientId: string)
   }
   if (!response.ok) {
     throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to delete item"));
+  }
+}
+
+export async function fetchDailyProductiveTemplates(token: string): Promise<DailyProductiveTemplateApi[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/daily-productive-items/templates`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to load recurring items"));
+  }
+  return (await response.json()) as DailyProductiveTemplateApi[];
+}
+
+export async function createDailyProductiveTemplate(
+  token: string,
+  text: string,
+  days: DayOfWeek[]
+): Promise<DailyProductiveTemplateApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/daily-productive-items/templates`, {
+    method: "POST",
+    headers: authJsonHeaders(token),
+    body: JSON.stringify({ text, days }),
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to add recurring item"));
+  }
+  return (await response.json()) as DailyProductiveTemplateApi;
+}
+
+export async function patchDailyProductiveTemplate(
+  token: string,
+  templateId: number,
+  patch: { text?: string; days?: DayOfWeek[] }
+): Promise<DailyProductiveTemplateApi> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/daily-productive-items/templates/${templateId}`, {
+    method: "PATCH",
+    headers: authJsonHeaders(token),
+    body: JSON.stringify(patch),
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to update recurring item"));
+  }
+  return (await response.json()) as DailyProductiveTemplateApi;
+}
+
+export async function deleteDailyProductiveTemplate(token: string, templateId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/daily-productive-items/templates/${templateId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error(await dailyProductiveItemsErrorMessage(response, "Failed to delete recurring item"));
   }
 }

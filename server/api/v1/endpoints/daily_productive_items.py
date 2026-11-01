@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.v1.endpoints.auth import get_current_user
 from core.database import get_db
 from models.daily_productive_item import DailyProductiveItem as DailyProductiveItemModel
+from models.daily_productive_item import DailyProductiveTemplate as DailyProductiveTemplateModel
 from models.user import User
 from schemas.daily_productive_item import (
     DailyProductiveItemCreate,
@@ -15,9 +16,14 @@ from schemas.daily_productive_item import (
     DailyProductiveItemOut,
     DailyProductiveItemPatch,
     DailyProductiveItemReorder,
+    DailyProductiveTemplateCreate,
+    DailyProductiveTemplateOut,
+    DailyProductiveTemplatePatch,
 )
 
 router = APIRouter()
+
+WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
 def _client_id(row: DailyProductiveItemModel) -> str:
@@ -53,7 +59,73 @@ def _row_to_out(row: DailyProductiveItemModel) -> DailyProductiveItemOut:
         item_date=row.item_date.isoformat(),
         text=row.text,
         is_done=bool(row.is_done),
+        template_id=row.template_id,
     )
+
+
+def _template_to_out(row: DailyProductiveTemplateModel) -> DailyProductiveTemplateOut:
+    return DailyProductiveTemplateOut(id=row.id, text=row.text, days=row.days.split(","))
+
+
+def _get_template_for_user(db: Session, user_id: int, template_id: int) -> DailyProductiveTemplateModel:
+    row = (
+        db.query(DailyProductiveTemplateModel)
+        .filter(DailyProductiveTemplateModel.id == template_id, DailyProductiveTemplateModel.user_id == user_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurring item not found")
+    return row
+
+
+def _materialize_due_templates(db: Session, user_id: int, target: date) -> None:
+    """For each template due on `target`'s weekday with no item already
+    created for that date, creates one - atomically, in a single commit."""
+    if not _is_editable(target):
+        return
+
+    today_key = WEEKDAY_KEYS[target.weekday()]
+    templates = (
+        db.query(DailyProductiveTemplateModel)
+        .filter(DailyProductiveTemplateModel.user_id == user_id)
+        .all()
+    )
+    due = [t for t in templates if today_key in t.days.split(",")]
+    if not due:
+        return
+
+    existing_template_ids = {
+        row.template_id
+        for row in db.query(DailyProductiveItemModel.template_id)
+        .filter(
+            DailyProductiveItemModel.user_id == user_id,
+            DailyProductiveItemModel.item_date == target,
+            DailyProductiveItemModel.template_id.isnot(None),
+        )
+        .all()
+    }
+    to_create = [t for t in due if t.id not in existing_template_ids]
+    if not to_create:
+        return
+
+    next_position = (
+        db.query(func.count(DailyProductiveItemModel.id))
+        .filter(DailyProductiveItemModel.user_id == user_id, DailyProductiveItemModel.item_date == target)
+        .scalar()
+    )
+    for offset, template in enumerate(to_create):
+        db.add(
+            DailyProductiveItemModel(
+                user_id=user_id,
+                client_id=str(uuid.uuid4())[:64],
+                item_date=target,
+                text=template.text,
+                is_done=False,
+                position=next_position + offset,
+                template_id=template.id,
+            )
+        )
+    db.commit()
 
 
 def _get_item_for_user(db: Session, user_id: int, client_id: str) -> DailyProductiveItemModel:
@@ -78,6 +150,7 @@ async def list_daily_productive_items(
     db: Session = Depends(get_db),
 ):
     target = _parse_iso_date(item_date, "item_date") if item_date else date.today()
+    _materialize_due_templates(db, current_user.id, target)
     rows = (
         db.query(DailyProductiveItemModel)
         .filter(
@@ -203,5 +276,70 @@ async def delete_daily_productive_item(
 ):
     row = _get_item_for_user(db, current_user.id, client_id)
     _assert_editable(row.item_date)
+    db.delete(row)
+    db.commit()
+
+
+@router.get("/templates", response_model=list[DailyProductiveTemplateOut])
+async def list_daily_productive_templates(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(DailyProductiveTemplateModel)
+        .filter(DailyProductiveTemplateModel.user_id == current_user.id)
+        .order_by(DailyProductiveTemplateModel.created_at.desc())
+        .all()
+    )
+    return [_template_to_out(r) for r in rows]
+
+
+@router.post("/templates", response_model=DailyProductiveTemplateOut)
+async def create_daily_productive_template(
+    body: DailyProductiveTemplateCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Text is required")
+    row = DailyProductiveTemplateModel(
+        user_id=current_user.id,
+        text=text[:500],
+        days=",".join(body.days),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _template_to_out(row)
+
+
+@router.patch("/templates/{template_id}", response_model=DailyProductiveTemplateOut)
+async def patch_daily_productive_template(
+    template_id: int,
+    body: DailyProductiveTemplatePatch,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = _get_template_for_user(db, current_user.id, template_id)
+    if body.text is not None:
+        new_text = body.text.strip()
+        if not new_text:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Text is required")
+        row.text = new_text[:500]
+    if body.days is not None:
+        row.days = ",".join(body.days)
+    db.commit()
+    db.refresh(row)
+    return _template_to_out(row)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_daily_productive_template(
+    template_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = _get_template_for_user(db, current_user.id, template_id)
     db.delete(row)
     db.commit()

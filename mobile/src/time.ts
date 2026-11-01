@@ -1,3 +1,17 @@
+import type { DayOfWeek } from './types';
+
+// Date.getDay(): Sunday=0..Saturday=6.
+const DAY_KEYS: DayOfWeek[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+export function todayDayOfWeek(from: Date = new Date()): DayOfWeek {
+  return DAY_KEYS[from.getDay()];
+}
+
+export function todayDateStr(from: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`;
+}
+
 function toSeconds(hms: string): number {
   const [h, m, s] = hms.split(':').map(n => parseInt(n, 10) || 0);
   return h * 3600 + m * 60 + s;
