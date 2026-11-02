@@ -14,6 +14,18 @@ import {
 } from "@/lib/api/youtube";
 import { groupAccounts } from "./YoutubePanel";
 
+function IconRefresh({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 4v5h5M20 20v-5h-5M4.5 9a7.5 7.5 0 0113-4.5L20 7M19.5 15a7.5 7.5 0 01-13 4.5L4 17"
+      />
+    </svg>
+  );
+}
+
 const DAYS: { key: YoutubeDayOfWeek; label: string }[] = [
   { key: "monday", label: "Mon" },
   { key: "tuesday", label: "Tue" },
@@ -32,6 +44,15 @@ function todayKey(): YoutubeDayOfWeek {
 // Backend sends time-of-day as "HH:MM:SS" - truncate to "HH:MM" for <input type="time">.
 function toInputTime(value: string | null): string {
   return value ? value.slice(0, 5) : "";
+}
+
+function formatTime12h(value: string | null): string {
+  const hhmm = toInputTime(value);
+  if (!hhmm) return "";
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 function toMinutes(hhmm: string): number {
@@ -80,6 +101,10 @@ function TimeRangeField({
   const save = async () => {
     if (!draftStart || !draftEnd) {
       setError("Set both start and end.");
+      return;
+    }
+    if (draftEnd <= draftStart) {
+      setError("End time must be after start time.");
       return;
     }
     setSaving(true);
@@ -137,7 +162,7 @@ function TimeRangeField({
       onClick={startEdit}
       className="truncate text-xs text-zinc-600 hover:underline dark:text-zinc-300"
     >
-      {toInputTime(startTime)} – {toInputTime(endTime)}
+      {formatTime12h(startTime)} – {formatTime12h(endTime)}
     </button>
   ) : (
     <button
@@ -238,14 +263,16 @@ function ChannelPostingRow({
     await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token, day] });
   };
 
-  const recommended = isNowInRange(day, entry?.start_time ?? null, entry?.end_time ?? null);
+  const uploadedToday = (entry?.videos_uploaded_count ?? 0) > 0;
+  const isUploadTimeNow = isNowInRange(day, entry?.start_time ?? null, entry?.end_time ?? null);
+  const rowHighlightClass = uploadedToday
+    ? "bg-green-300 dark:bg-green-600/50"
+    : isUploadTimeNow
+      ? "bg-yellow-300 dark:bg-yellow-500/50"
+      : "";
 
   return (
-    <div
-      className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${
-        recommended ? "bg-green-50 dark:bg-green-950/30" : ""
-      }`}
-    >
+    <div className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${rowHighlightClass}`}>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {channel.thumbnail_url ? (
           <img src={channel.thumbnail_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
@@ -253,11 +280,15 @@ function ChannelPostingRow({
           <div className="h-8 w-8 shrink-0 rounded-full bg-zinc-200 dark:bg-zinc-700" />
         )}
         <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{channel.title}</p>
-        {recommended && (
-          <span className="shrink-0 rounded-full bg-green-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-800 dark:bg-green-900/60 dark:text-green-300">
+        {uploadedToday ? (
+          <span className="shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-green-400 dark:text-green-950">
+            Uploaded
+          </span>
+        ) : isUploadTimeNow ? (
+          <span className="shrink-0 rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-yellow-400 dark:text-yellow-950">
             Upload now
           </span>
-        )}
+        ) : null}
       </div>
       <div className="shrink-0">
         <TimeRangeField
@@ -276,6 +307,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
   const [day, setDay] = useState<YoutubeDayOfWeek>(() => todayKey());
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [onlyZeroUploads, setOnlyZeroUploads] = useState(false);
+  const [onlyUploadNow, setOnlyUploadNow] = useState(false);
 
   const accountsQuery = useQuery({
     queryKey: ["youtube-accounts", token],
@@ -318,13 +350,18 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         const channels = group.accounts.flatMap((account) => account.channels);
         return {
           ...group,
-          channels: onlyZeroUploads
-            ? channels.filter((c) => (entriesByChannel.get(c.id)?.videos_uploaded_count ?? 0) === 0)
-            : channels,
+          channels: channels.filter((c) => {
+            const entry = entriesByChannel.get(c.id);
+            if (onlyZeroUploads && (entry?.videos_uploaded_count ?? 0) !== 0) return false;
+            if (onlyUploadNow && !isNowInRange(day, entry?.start_time ?? null, entry?.end_time ?? null)) {
+              return false;
+            }
+            return true;
+          }),
         };
       })
       .filter((group) => group.channels.length > 0);
-  }, [groups, groupFilter, onlyZeroUploads, entriesByChannel]);
+  }, [groups, groupFilter, onlyZeroUploads, onlyUploadNow, day, entriesByChannel]);
 
   const headerActions = (
     <div className="flex w-full flex-wrap items-center gap-2">
@@ -365,6 +402,32 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         />
         0 uploads
       </label>
+      <label className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+        <input
+          type="checkbox"
+          checked={onlyUploadNow}
+          onChange={(e) => setOnlyUploadNow(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-600"
+        />
+        Upload now
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          void accountsQuery.refetch();
+          void postingTimesQuery.refetch();
+        }}
+        disabled={accountsQuery.isFetching || postingTimesQuery.isFetching}
+        aria-label="Refresh"
+        title="Refresh - recheck which channels are due now"
+        className="shrink-0 rounded-md border border-zinc-300 bg-white p-1.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      >
+        <IconRefresh
+          className={`h-3.5 w-3.5 ${
+            accountsQuery.isFetching || postingTimesQuery.isFetching ? "animate-spin" : ""
+          }`}
+        />
+      </button>
     </div>
   );
 
