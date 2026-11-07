@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Optional
 
 from pydantic import BaseModel
@@ -67,12 +67,15 @@ class YoutubeAccountUpdate(BaseModel):
 
 
 class YoutubePostingTimeOut(BaseModel):
+    """The recurring posting-time window for one weekday - unrelated to any
+    specific week, so it has no date. See YoutubeUploadLogOut for the
+    per-date videos-uploaded count."""
+
     id: int
     channel_id: int
     day_of_week: str
     start_time: Optional[time] = None
     end_time: Optional[time] = None
-    videos_uploaded_count: Optional[int] = None
     updated_at: Optional[datetime] = None
 
     class Config:
@@ -80,9 +83,26 @@ class YoutubePostingTimeOut(BaseModel):
 
 
 class YoutubePostingTimeUpsert(BaseModel):
-    """All fields optional/independent - the start time, end time and
-    videos-uploaded controls in the UI can each be added/edited on their own."""
+    """Both fields optional/independent - the start and end time controls in
+    the UI can each be added/edited on their own."""
 
     start_time: Optional[time] = None
     end_time: Optional[time] = None
-    videos_uploaded_count: Optional[int] = None
+
+
+class YoutubeUploadLogOut(BaseModel):
+    """Videos-uploaded count for one channel on one specific calendar date -
+    never reused across weeks, unlike the day-of-week posting schedule."""
+
+    id: int
+    channel_id: int
+    upload_date: date
+    videos_uploaded_count: int
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class YoutubeUploadLogUpsert(BaseModel):
+    videos_uploaded_count: int

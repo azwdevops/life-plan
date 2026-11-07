@@ -7,7 +7,9 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import {
   getYoutubeAccounts,
   getYoutubePostingTimes,
+  getYoutubeUploadLogs,
   upsertYoutubePostingTime,
+  upsertYoutubeUploadLog,
   type YoutubeChannel,
   type YoutubeDayOfWeek,
   type YoutubePostingTime,
@@ -36,9 +38,37 @@ const DAYS: { key: YoutubeDayOfWeek; label: string }[] = [
   { key: "sunday", label: "Sun" },
 ];
 
-// Date.getDay(): Sunday=0..Saturday=6. DAYS is Monday-first, so shift by 6.
-function todayKey(): YoutubeDayOfWeek {
-  return DAYS[(new Date().getDay() + 6) % 7].key;
+// Date.getDay(): Sunday=0..Saturday=6. DAYS/weeks here are Monday-first, so shift by 6.
+function todayIndex(): number {
+  return (new Date().getDay() + 6) % 7;
+}
+
+function startOfWeek(d: Date): Date {
+  const result = new Date(d);
+  result.setHours(0, 0, 0, 0);
+  result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+  return result;
+}
+
+function addDays(d: Date, days: number): Date {
+  const result = new Date(d);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function dateToStr(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function todayDateStr(): string {
+  return dateToStr(new Date());
+}
+
+function formatWeekRange(weekStart: Date): string {
+  const weekEnd = addDays(weekStart, 6);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${fmt(weekStart)} – ${fmt(weekEnd)}`;
 }
 
 // Backend sends time-of-day as "HH:MM:SS" - truncate to "HH:MM" for <input type="time">.
@@ -60,11 +90,12 @@ function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
-// Only meaningful when viewing today - "is now inside this channel's posting
-// window for the selected day" drives the upload-now recommendation highlight.
-// Handles a window that wraps past midnight (e.g. 23:00-01:00).
-function isNowInRange(day: YoutubeDayOfWeek, start: string | null, end: string | null): boolean {
-  if (!start || !end || day !== todayKey()) return false;
+// Only meaningful when the selected day actually resolves to today's real
+// calendar date - "is now inside this channel's posting window" drives the
+// upload-now recommendation highlight. Handles a window that wraps past
+// midnight (e.g. 23:00-01:00).
+function isNowInRange(isToday: boolean, start: string | null, end: string | null): boolean {
+  if (!start || !end || !isToday) return false;
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const startMin = toMinutes(toInputTime(start));
@@ -242,30 +273,36 @@ function VideosUploadedField({
 
 function ChannelPostingRow({
   channel,
-  day,
-  entry,
+  dayKey,
+  date,
+  isToday,
+  scheduleEntry,
+  uploadCount,
   token,
 }: {
   channel: YoutubeChannel;
-  day: YoutubeDayOfWeek;
-  entry: YoutubePostingTime | undefined;
+  dayKey: YoutubeDayOfWeek;
+  date: string;
+  isToday: boolean;
+  scheduleEntry: YoutubePostingTime | undefined;
+  uploadCount: number;
   token: string;
 }) {
   const queryClient = useQueryClient();
 
   const saveTimeRange = async (startTime: string, endTime: string) => {
-    await upsertYoutubePostingTime(token, channel.id, day, { start_time: startTime, end_time: endTime });
-    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token, day] });
+    await upsertYoutubePostingTime(token, channel.id, dayKey, { start_time: startTime, end_time: endTime });
+    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token, dayKey] });
   };
 
   const saveVideosUploaded = async (count: number) => {
-    await upsertYoutubePostingTime(token, channel.id, day, { videos_uploaded_count: count });
-    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token, day] });
+    await upsertYoutubeUploadLog(token, channel.id, date, count);
+    await queryClient.invalidateQueries({ queryKey: ["youtube-upload-logs", token, date] });
   };
 
-  const uploadedToday = (entry?.videos_uploaded_count ?? 0) > 0;
-  const isUploadTimeNow = isNowInRange(day, entry?.start_time ?? null, entry?.end_time ?? null);
-  const rowHighlightClass = uploadedToday
+  const uploadedOnDate = uploadCount > 0;
+  const isUploadTimeNow = isNowInRange(isToday, scheduleEntry?.start_time ?? null, scheduleEntry?.end_time ?? null);
+  const rowHighlightClass = uploadedOnDate
     ? "bg-green-300 dark:bg-green-600/50"
     : isUploadTimeNow
       ? "bg-yellow-300 dark:bg-yellow-500/50"
@@ -280,7 +317,7 @@ function ChannelPostingRow({
           <div className="h-8 w-8 shrink-0 rounded-full bg-zinc-200 dark:bg-zinc-700" />
         )}
         <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{channel.title}</p>
-        {uploadedToday ? (
+        {uploadedOnDate ? (
           <span className="shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-green-400 dark:text-green-950">
             Uploaded
           </span>
@@ -292,22 +329,33 @@ function ChannelPostingRow({
       </div>
       <div className="shrink-0">
         <TimeRangeField
-          startTime={entry?.start_time ?? null}
-          endTime={entry?.end_time ?? null}
+          startTime={scheduleEntry?.start_time ?? null}
+          endTime={scheduleEntry?.end_time ?? null}
           onSave={saveTimeRange}
         />
       </div>
-      <VideosUploadedField value={entry?.videos_uploaded_count ?? null} onSave={saveVideosUploaded} />
+      <VideosUploadedField value={uploadCount} onSave={saveVideosUploaded} />
     </div>
   );
 }
 
 export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { token } = useAuth();
-  const [day, setDay] = useState<YoutubeDayOfWeek>(() => todayKey());
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(() => todayIndex());
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [onlyZeroUploads, setOnlyZeroUploads] = useState(false);
   const [onlyUploadNow, setOnlyUploadNow] = useState(false);
+
+  const weekStart = useMemo(() => addDays(startOfWeek(new Date()), weekOffset * 7), [weekOffset]);
+  const selectedDate = useMemo(() => dateToStr(addDays(weekStart, selectedDayIndex)), [weekStart, selectedDayIndex]);
+  const isToday = selectedDate === todayDateStr();
+  const dayKey = DAYS[selectedDayIndex].key;
+
+  const jumpToToday = () => {
+    setWeekOffset(0);
+    setSelectedDayIndex(todayIndex());
+  };
 
   const accountsQuery = useQuery({
     queryKey: ["youtube-accounts", token],
@@ -319,10 +367,19 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
   });
 
   const postingTimesQuery = useQuery({
-    queryKey: ["youtube-posting-times", token, day],
+    queryKey: ["youtube-posting-times", token, dayKey],
     queryFn: () => {
       if (!token) throw new Error("Not authenticated");
-      return getYoutubePostingTimes(token, day);
+      return getYoutubePostingTimes(token, dayKey);
+    },
+    enabled: !!token && open,
+  });
+
+  const uploadLogsQuery = useQuery({
+    queryKey: ["youtube-upload-logs", token, selectedDate],
+    queryFn: () => {
+      if (!token) throw new Error("Not authenticated");
+      return getYoutubeUploadLogs(token, selectedDate);
     },
     enabled: !!token && open,
   });
@@ -332,6 +389,12 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
     for (const entry of postingTimesQuery.data ?? []) map.set(entry.channel_id, entry);
     return map;
   }, [postingTimesQuery.data]);
+
+  const uploadCountByChannel = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const log of uploadLogsQuery.data ?? []) map.set(log.channel_id, log.videos_uploaded_count);
+    return map;
+  }, [uploadLogsQuery.data]);
 
   const groups = useMemo(() => groupAccounts(accountsQuery.data ?? []), [accountsQuery.data]);
 
@@ -351,9 +414,13 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         return {
           ...group,
           channels: channels.filter((c) => {
-            const entry = entriesByChannel.get(c.id);
-            if (onlyZeroUploads && (entry?.videos_uploaded_count ?? 0) !== 0) return false;
-            if (onlyUploadNow && !isNowInRange(day, entry?.start_time ?? null, entry?.end_time ?? null)) {
+            const uploadCount = uploadCountByChannel.get(c.id) ?? 0;
+            const scheduleEntry = entriesByChannel.get(c.id);
+            if (onlyZeroUploads && uploadCount !== 0) return false;
+            if (
+              onlyUploadNow &&
+              !isNowInRange(isToday, scheduleEntry?.start_time ?? null, scheduleEntry?.end_time ?? null)
+            ) {
               return false;
             }
             return true;
@@ -361,18 +428,48 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         };
       })
       .filter((group) => group.channels.length > 0);
-  }, [groups, groupFilter, onlyZeroUploads, onlyUploadNow, day, entriesByChannel]);
+  }, [groups, groupFilter, onlyZeroUploads, onlyUploadNow, isToday, entriesByChannel, uploadCountByChannel]);
 
   const headerActions = (
     <div className="flex w-full flex-wrap items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setWeekOffset((w) => w - 1)}
+          aria-label="Previous week"
+          className="rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          ‹
+        </button>
+        <span className="min-w-[7.5rem] text-center text-xs font-medium text-zinc-600 dark:text-zinc-300">
+          {formatWeekRange(weekStart)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setWeekOffset((w) => w + 1)}
+          aria-label="Next week"
+          className="rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          ›
+        </button>
+        {!isToday && (
+          <button
+            type="button"
+            onClick={jumpToToday}
+            className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+          >
+            Today
+          </button>
+        )}
+      </div>
       <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {DAYS.map((d) => (
+        {DAYS.map((d, index) => (
           <button
             key={d.key}
             type="button"
-            onClick={() => setDay(d.key)}
+            onClick={() => setSelectedDayIndex(index)}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-              day === d.key
+              index === selectedDayIndex
                 ? "bg-blue-600 text-white"
                 : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             }`}
@@ -416,15 +513,18 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         onClick={() => {
           void accountsQuery.refetch();
           void postingTimesQuery.refetch();
+          void uploadLogsQuery.refetch();
         }}
-        disabled={accountsQuery.isFetching || postingTimesQuery.isFetching}
+        disabled={accountsQuery.isFetching || postingTimesQuery.isFetching || uploadLogsQuery.isFetching}
         aria-label="Refresh"
         title="Refresh - recheck which channels are due now"
         className="shrink-0 rounded-md border border-zinc-300 bg-white p-1.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
         <IconRefresh
           className={`h-3.5 w-3.5 ${
-            accountsQuery.isFetching || postingTimesQuery.isFetching ? "animate-spin" : ""
+            accountsQuery.isFetching || postingTimesQuery.isFetching || uploadLogsQuery.isFetching
+              ? "animate-spin"
+              : ""
           }`}
         />
       </button>
@@ -432,7 +532,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
   );
 
   return (
-    <RightDrawer open={open} onClose={onClose} title="Channels" width="3xl" actions={headerActions}>
+    <RightDrawer open={open} onClose={onClose} title="Channels" width="5xl" actions={headerActions}>
       <div className="space-y-4">
         {!token ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Log in to view channels.</p>
@@ -456,8 +556,11 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
                     <ChannelPostingRow
                       key={channel.id}
                       channel={channel}
-                      day={day}
-                      entry={entriesByChannel.get(channel.id)}
+                      dayKey={dayKey}
+                      date={selectedDate}
+                      isToday={isToday}
+                      scheduleEntry={entriesByChannel.get(channel.id)}
+                      uploadCount={uploadCountByChannel.get(channel.id) ?? 0}
                       token={token}
                     />
                   ))}

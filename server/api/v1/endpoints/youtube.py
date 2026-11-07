@@ -1,7 +1,7 @@
 """YouTube channel management: connect Google accounts via OAuth, list the
 channels each one owns, and manually sync per-channel stat snapshots."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +18,7 @@ from models.youtube_channel import (
     YoutubeChannel,
     YoutubeChannelPostingTime,
     YoutubeChannelStat,
+    YoutubeChannelUploadLog,
 )
 from schemas.youtube_channel import (
     YoutubeAccountOut,
@@ -28,6 +29,8 @@ from schemas.youtube_channel import (
     YoutubeOAuthAuthorizeOut,
     YoutubePostingTimeOut,
     YoutubePostingTimeUpsert,
+    YoutubeUploadLogOut,
+    YoutubeUploadLogUpsert,
 )
 import youtube_api
 
@@ -381,8 +384,6 @@ async def upsert_posting_time(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid day")
 
     patch = body.model_dump(exclude_unset=True)
-    if "videos_uploaded_count" in patch and (patch["videos_uploaded_count"] or 0) < 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Videos uploaded can't be negative")
     if not patch:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nothing to update")
 
@@ -400,6 +401,61 @@ async def upsert_posting_time(
             setattr(row, field, value)
     else:
         row = YoutubeChannelPostingTime(channel_id=channel.id, day_of_week=day, **patch)
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/upload-logs", response_model=list[YoutubeUploadLogOut])
+async def list_upload_logs(
+    upload_date: date,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every channel's videos-uploaded count for one specific calendar date,
+    across all of the user's accounts - only channels with a logged count for
+    that exact date come back; everything else is implicitly 0 on the client."""
+    return (
+        db.query(YoutubeChannelUploadLog)
+        .join(YoutubeChannel, YoutubeChannelUploadLog.channel_id == YoutubeChannel.id)
+        .join(YoutubeAccount, YoutubeChannel.account_id == YoutubeAccount.id)
+        .filter(
+            YoutubeAccount.user_id == current_user.id,
+            YoutubeChannelUploadLog.upload_date == upload_date,
+        )
+        .all()
+    )
+
+
+@router.put("/channels/{channel_id}/upload-logs/{upload_date}", response_model=YoutubeUploadLogOut)
+async def upsert_upload_log(
+    channel_id: int,
+    upload_date: date,
+    body: YoutubeUploadLogUpsert,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if body.videos_uploaded_count < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Videos uploaded can't be negative")
+
+    channel = _get_owned_channel(db, current_user, channel_id)
+    row = (
+        db.query(YoutubeChannelUploadLog)
+        .filter(
+            YoutubeChannelUploadLog.channel_id == channel.id,
+            YoutubeChannelUploadLog.upload_date == upload_date,
+        )
+        .first()
+    )
+    if row:
+        row.videos_uploaded_count = body.videos_uploaded_count
+    else:
+        row = YoutubeChannelUploadLog(
+            channel_id=channel.id,
+            upload_date=upload_date,
+            videos_uploaded_count=body.videos_uploaded_count,
+        )
         db.add(row)
     db.commit()
     db.refresh(row)

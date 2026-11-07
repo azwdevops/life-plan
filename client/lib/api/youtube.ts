@@ -61,14 +61,20 @@ export interface YoutubePostingTime {
   day_of_week: YoutubeDayOfWeek;
   start_time: string | null;
   end_time: string | null;
-  videos_uploaded_count: number | null;
   updated_at: string | null;
 }
 
 export interface YoutubePostingTimePatch {
   start_time?: string;
   end_time?: string;
-  videos_uploaded_count?: number;
+}
+
+export interface YoutubeUploadLog {
+  id: number;
+  channel_id: number;
+  upload_date: string;
+  videos_uploaded_count: number;
+  updated_at: string | null;
 }
 
 function authHeaders(token: string): HeadersInit {
@@ -179,5 +185,31 @@ export async function upsertYoutubePostingTime(
     }
   );
   await throwOnError(response, "Failed to save posting time");
+  return response.json();
+}
+
+export async function getYoutubeUploadLogs(token: string, date: string): Promise<YoutubeUploadLog[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/youtube/upload-logs?upload_date=${date}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await throwOnError(response, "Failed to fetch upload logs");
+  return response.json();
+}
+
+export async function upsertYoutubeUploadLog(
+  token: string,
+  channelId: number,
+  date: string,
+  videosUploadedCount: number
+): Promise<YoutubeUploadLog> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/youtube/channels/${channelId}/upload-logs/${date}`,
+    {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify({ videos_uploaded_count: videosUploadedCount }),
+    }
+  );
+  await throwOnError(response, "Failed to save upload count");
   return response.json();
 }

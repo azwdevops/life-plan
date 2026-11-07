@@ -4,15 +4,26 @@ import { ensureTrackPlayerSetup, isTrackPlayerSetUp } from './trackPlayerSetup';
 
 export type PlaylistPlayMode = 'current' | 'all' | 'loopOne';
 
-function wrapIndex(i: number, len: number): number {
+export function wrapIndex(i: number, len: number): number {
   if (len === 0) return 0;
   return ((i % len) + len) % len;
 }
 
+// Set right before a manual (button-triggered) native skip in 'all' mode, so
+// the PlaybackActiveTrackChanged it fires isn't mistaken by
+// subscribeToTrackCompleted for a track reaching its natural end. Consumed
+// (reset to false) by the first such event after being set.
+let suppressNextTrackChangeCompletion = false;
+
 // 'all' loads the whole playlist so Next/Previous move through it natively;
 // 'current'/'loopOne' load just the one track, so there's nothing to
 // auto-advance into and Next/Previous instead reload a different single track.
-export async function loadAndPlay(tracks: AudioTrack[], index: number, mode: PlaylistPlayMode): Promise<void> {
+export async function loadAndPlay(
+  tracks: AudioTrack[],
+  index: number,
+  mode: PlaylistPlayMode,
+  startPositionSeconds: number = 0
+): Promise<void> {
   if (tracks.length === 0) return;
   await ensureTrackPlayerSetup();
   await TrackPlayer.reset();
@@ -26,6 +37,7 @@ export async function loadAndPlay(tracks: AudioTrack[], index: number, mode: Pla
     await TrackPlayer.add({ id: track.uri, url: track.uri, title: track.fileName });
     await TrackPlayer.setRepeatMode(mode === 'loopOne' ? RepeatMode.Track : RepeatMode.Off);
   }
+  if (startPositionSeconds > 0) await TrackPlayer.seekTo(startPositionSeconds);
   await TrackPlayer.play();
 }
 
@@ -127,23 +139,41 @@ export async function stopPlaylist(): Promise<void> {
   await TrackPlayer.reset();
 }
 
-export async function skipToNext(tracks: AudioTrack[], index: number, mode: PlaylistPlayMode): Promise<number> {
+export async function skipToNext(
+  tracks: AudioTrack[],
+  index: number,
+  mode: PlaylistPlayMode,
+  resumeSeconds: number = 0
+): Promise<number> {
   if (mode === 'all') {
-    await TrackPlayer.skipToNext().catch(() => {});
+    suppressNextTrackChangeCompletion = true;
+    await TrackPlayer.skipToNext().catch(() => {
+      suppressNextTrackChangeCompletion = false;
+    });
+    if (resumeSeconds > 0) await TrackPlayer.seekTo(resumeSeconds).catch(() => {});
     return wrapIndex(index + 1, tracks.length);
   }
   const nextIndex = wrapIndex(index + 1, tracks.length);
-  await loadAndPlay(tracks, nextIndex, mode);
+  await loadAndPlay(tracks, nextIndex, mode, resumeSeconds);
   return nextIndex;
 }
 
-export async function skipToPrevious(tracks: AudioTrack[], index: number, mode: PlaylistPlayMode): Promise<number> {
+export async function skipToPrevious(
+  tracks: AudioTrack[],
+  index: number,
+  mode: PlaylistPlayMode,
+  resumeSeconds: number = 0
+): Promise<number> {
   if (mode === 'all') {
-    await TrackPlayer.skipToPrevious().catch(() => {});
+    suppressNextTrackChangeCompletion = true;
+    await TrackPlayer.skipToPrevious().catch(() => {
+      suppressNextTrackChangeCompletion = false;
+    });
+    if (resumeSeconds > 0) await TrackPlayer.seekTo(resumeSeconds).catch(() => {});
     return wrapIndex(index - 1, tracks.length);
   }
   const prevIndex = wrapIndex(index - 1, tracks.length);
-  await loadAndPlay(tracks, prevIndex, mode);
+  await loadAndPlay(tracks, prevIndex, mode, resumeSeconds);
   return prevIndex;
 }
 
@@ -173,4 +203,41 @@ export function subscribeToActiveTrackChanged(onChange: (index: number) => void)
     if (e.index != null) onChange(e.index);
   });
   return () => sub.remove();
+}
+
+// Fires exactly once per track that reaches its own natural end (not a
+// manual pause/stop/skip) - i.e. a "complete play" for play-count purposes.
+// Two native signals feed this:
+//  - PlaybackActiveTrackChanged: in 'all' mode, the queue auto-advancing from
+//    one track to the next mid-playlist. `lastIndex` is the sortedTracks
+//    index of the track that just finished (the queue is loaded in
+//    sortedTracks order). Guarded against the identical event a manual
+//    Next/Previous button press produces via suppressNextTrackChangeCompletion.
+//  - PlaybackQueueEnded: fires when the active track's queue has nothing left
+//    to auto-advance to - true for 'current' (stops) and 'loopOne' (loops
+//    the same track) every time that single track ends, and for 'all' mode's
+//    very last track. In all of those cases the track that ended is still
+//    whatever `currentIndex` was, so the caller's current value is used
+//    directly rather than trusting the native queue index (which is always 0
+//    for the single-track modes).
+export function subscribeToTrackCompleted(
+  mode: PlaylistPlayMode,
+  currentIndex: number,
+  onCompleted: (completedIndex: number) => void
+): () => void {
+  const sub1 = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, e => {
+    if (mode !== 'all' || e.index == null || e.lastIndex == null) return;
+    if (suppressNextTrackChangeCompletion) {
+      suppressNextTrackChangeCompletion = false;
+      return;
+    }
+    onCompleted(e.lastIndex);
+  });
+  const sub2 = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+    onCompleted(currentIndex);
+  });
+  return () => {
+    sub1.remove();
+    sub2.remove();
+  };
 }

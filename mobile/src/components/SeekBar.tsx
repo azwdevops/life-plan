@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, View, Text, type LayoutChangeEvent } from 'react-native';
+import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { colors } from '../theme';
 
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
-function formatSeconds(totalSeconds: number): string {
+export function formatSeconds(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
   const m = Math.floor(s / 60);
   const sec = s % 60;
@@ -70,7 +70,6 @@ export function SeekBar({ position, duration, onSeek, c }: Props) {
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   const fraction = dragFraction ?? (duration > 0 ? clamp01(position / duration) : 0);
-  const displaySeconds = dragFraction != null ? dragFraction * duration : position;
   const styles = makeStyles(c);
 
   return (
@@ -84,10 +83,6 @@ export function SeekBar({ position, duration, onSeek, c }: Props) {
             { left: `${fraction * 100}%`, marginLeft: -THUMB_SIZE / 2 },
           ]}
         />
-      </View>
-      <View style={styles.timeRow}>
-        <Text style={styles.timeText}>{formatSeconds(displaySeconds)}</Text>
-        <Text style={styles.timeText}>{formatSeconds(duration)}</Text>
       </View>
     </View>
   );
@@ -125,7 +120,5 @@ function makeStyles(c: typeof colors.light) {
       borderRadius: THUMB_SIZE / 2,
       backgroundColor: c.accent,
     },
-    timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
-    timeText: { color: c.textMuted, fontSize: 11 },
   });
 }

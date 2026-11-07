@@ -34,6 +34,7 @@ class FolderPlaylistModule(reactContext: ReactApplicationContext) :
           val map = Arguments.createMap().apply {
             putString("uri", file.uri.toString())
             putString("name", file.name ?: "Untitled")
+            putDouble("lastModified", file.lastModified().toDouble())
           }
           files.pushMap(map)
         }

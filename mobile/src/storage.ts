@@ -7,6 +7,12 @@ const TASK_TEMPLATES_KEY = 'lifeplan:task_templates';
 const AUDIO_SCHEDULES_KEY = 'lifeplan:audio_schedules';
 const SETTINGS_KEY = 'lifeplan:settings';
 const PLAYLISTS_KEY = 'lifeplan:playlists';
+const TRACK_PLAY_STATE_KEY = 'lifeplan:track_play_state';
+
+export interface TrackPlayState {
+  lastPositionSeconds: number;
+  playCount: number;
+}
 
 export async function loadTasks(): Promise<Task[]> {
   const raw = await AsyncStorage.getItem(TASKS_KEY);
@@ -53,4 +59,16 @@ export async function loadPlaylists(): Promise<Playlist[]> {
 
 export async function savePlaylists(playlists: Playlist[]): Promise<void> {
   await AsyncStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
+}
+
+// Keyed by track URI (stable per file) rather than per-playlist, so the same
+// file's resume position/play count hold regardless of which playlist it's
+// viewed from.
+export async function loadTrackPlayState(): Promise<Record<string, TrackPlayState>> {
+  const raw = await AsyncStorage.getItem(TRACK_PLAY_STATE_KEY);
+  return raw ? (JSON.parse(raw) as Record<string, TrackPlayState>) : {};
+}
+
+export async function saveTrackPlayState(state: Record<string, TrackPlayState>): Promise<void> {
+  await AsyncStorage.setItem(TRACK_PLAY_STATE_KEY, JSON.stringify(state));
 }

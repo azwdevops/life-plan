@@ -12,6 +12,7 @@ Alembic: run your own revision to create these tables.
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -94,6 +95,11 @@ class YoutubeChannel(Base):
         back_populates="channel",
         cascade="all, delete-orphan",
     )
+    upload_logs = relationship(
+        "YoutubeChannelUploadLog",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
 
 
 class YoutubeChannelStat(Base):
@@ -116,10 +122,11 @@ class YoutubeChannelStat(Base):
 
 
 class YoutubeChannelPostingTime(Base):
-    """User-set best-time-to-post window (time-of-day only, no date) +
-    videos-uploaded count, one row per channel per weekday. Any of the three
-    fields can be set independently. start/end power the "upload now?"
-    recommendation - comparing the current time of day against this window."""
+    """User-set best-time-to-post window (time-of-day only, no date), one row
+    per channel per weekday - a recurring schedule, unrelated to any specific
+    week. start/end power the "upload now?" recommendation - comparing the
+    current time of day against this window. See YoutubeChannelUploadLog for
+    the per-date videos-uploaded count, which is NOT part of this schedule."""
 
     __tablename__ = "youtube_channel_posting_times"
     __table_args__ = (
@@ -133,8 +140,29 @@ class YoutubeChannelPostingTime(Base):
     day_of_week = Column(String(9), nullable=False)
     start_time = Column(Time, nullable=True)
     end_time = Column(Time, nullable=True)
-    videos_uploaded_count = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     channel = relationship("YoutubeChannel", back_populates="posting_times")
+
+
+class YoutubeChannelUploadLog(Base):
+    """Videos-uploaded count for one channel on one specific calendar date -
+    the count a user logs for "this week's Monday" is a different row than
+    "last week's Monday", unlike the day-of-week posting schedule above."""
+
+    __tablename__ = "youtube_channel_upload_logs"
+    __table_args__ = (
+        UniqueConstraint("channel_id", "upload_date", name="uq_youtube_upload_logs_channel_date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel_id = Column(
+        Integer, ForeignKey("youtube_channels.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    upload_date = Column(Date, nullable=False, index=True)
+    videos_uploaded_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    channel = relationship("YoutubeChannel", back_populates="upload_logs")

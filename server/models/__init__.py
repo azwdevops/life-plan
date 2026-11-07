@@ -44,6 +44,7 @@ from models.youtube_channel import (
     YoutubeChannel,
     YoutubeChannelPostingTime,
     YoutubeChannelStat,
+    YoutubeChannelUploadLog,
 )
 
 __all__ = [

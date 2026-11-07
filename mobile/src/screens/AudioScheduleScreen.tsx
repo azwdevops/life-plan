@@ -3,6 +3,7 @@ import {
   Alert,
   AppState,
   KeyboardAvoidingView,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +30,70 @@ import {
 import { clearScreenBackHandler, setScreenBackHandler } from '../screenBackHandler';
 import type { AudioSchedule, AudioTrack } from '../types';
 
+const FILE_ROW_HEIGHT = 44;
+
+// Drag handle uses its own PanResponder (not a library - this codebase hand-
+// rolls gesture UI, e.g. SeekBar's PanResponder-based seeking, rather than
+// pulling in react-native-gesture-handler/reanimated for one feature).
+// Sibling rows slide out of the way during the drag via a plain translateY
+// computed from the dragged row's live offset, snapped to whole row heights.
+function DraggableFileRow({
+  track,
+  index,
+  isDragging,
+  dragOffsetY,
+  shiftY,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onRemove,
+  c,
+}: {
+  track: AudioTrack;
+  index: number;
+  isDragging: boolean;
+  dragOffsetY: number;
+  shiftY: number;
+  onDragStart: (index: number) => void;
+  onDragMove: (dy: number) => void;
+  onDragEnd: (index: number, dy: number) => void;
+  onRemove: (index: number) => void;
+  c: typeof colors.light;
+}) {
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => onDragStart(index),
+      onPanResponderMove: (_, gesture) => onDragMove(gesture.dy),
+      onPanResponderRelease: (_, gesture) => onDragEnd(index, gesture.dy),
+      onPanResponderTerminate: (_, gesture) => onDragEnd(index, gesture.dy),
+    })
+  ).current;
+
+  const styles = makeFileRowStyles(c);
+  const translateY = isDragging ? dragOffsetY : shiftY;
+
+  return (
+    <View
+      style={[
+        styles.fileRow,
+        (isDragging || shiftY !== 0) && { transform: [{ translateY }] },
+        isDragging && styles.fileRowDragging,
+      ]}
+    >
+      <View {...panResponder.panHandlers} style={styles.dragHandle} hitSlop={10}>
+        <Text style={styles.dragHandleText}>⠿</Text>
+      </View>
+      <Text style={styles.fileName} numberOfLines={1}>
+        {track.fileName}
+      </Text>
+      <Pressable onPress={() => onRemove(index)} hitSlop={10} accessibilityLabel="Remove file">
+        <Text style={styles.removeIcon}>✕</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export function AudioScheduleScreen() {
   const isDarkMode = useColorScheme() === 'dark';
   const c = isDarkMode ? colors.dark : colors.light;
@@ -46,6 +111,8 @@ export function AudioScheduleScreen() {
   const [pickError, setPickError] = useState<string | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const [exactAlarmsAllowed, setExactAlarmsAllowed] = useState(true);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
   const schedulesRef = useRef<AudioSchedule[]>([]);
 
   const syncAllAlarms = useCallback(async () => {
@@ -103,11 +170,49 @@ export function AudioScheduleScreen() {
         uri: r.uri,
         fileName: r.name ?? 'Untitled',
       }));
-      setTracks(picked);
+      setTracks(prev => {
+        const existingUris = new Set(prev.map(t => t.uri));
+        return [...prev, ...picked.filter(t => !existingUris.has(t.uri))];
+      });
       if (!label.trim() && picked[0]) setLabel(picked[0].fileName);
     } catch (e) {
       setPickError(e instanceof Error ? e.message : 'Could not pick files');
     }
+  };
+
+  const removeTrack = (index: number) => {
+    setTracks(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFileDragStart = (index: number) => {
+    setDragIndex(index);
+    setDragOffsetY(0);
+  };
+
+  const handleFileDragMove = (dy: number) => {
+    setDragOffsetY(dy);
+  };
+
+  const handleFileDragEnd = (index: number, dy: number) => {
+    const target = Math.min(Math.max(0, index + Math.round(dy / FILE_ROW_HEIGHT)), tracks.length - 1);
+    if (target !== index) {
+      setTracks(prev => {
+        const next = [...prev];
+        const [moved] = next.splice(index, 1);
+        next.splice(target, 0, moved);
+        return next;
+      });
+    }
+    setDragIndex(null);
+    setDragOffsetY(0);
+  };
+
+  const fileShiftFor = (index: number): number => {
+    if (dragIndex == null || index === dragIndex) return 0;
+    const dragTo = Math.min(Math.max(0, dragIndex + Math.round(dragOffsetY / FILE_ROW_HEIGHT)), tracks.length - 1);
+    if (dragIndex < dragTo && index > dragIndex && index <= dragTo) return -FILE_ROW_HEIGHT;
+    if (dragIndex > dragTo && index >= dragTo && index < dragIndex) return FILE_ROW_HEIGHT;
+    return 0;
   };
 
   const openAddForm = () => {
@@ -118,6 +223,7 @@ export function AudioScheduleScreen() {
     setStartInSeconds('');
     setEndTime('06:00:00');
     setPickError(null);
+    setDragIndex(null);
     setFormOpen(true);
   };
 
@@ -129,6 +235,7 @@ export function AudioScheduleScreen() {
     setStartInSeconds('');
     setEndTime(schedule.endTime);
     setPickError(null);
+    setDragIndex(null);
     setFormOpen(true);
   };
 
@@ -297,15 +404,29 @@ export function AudioScheduleScreen() {
           <Text style={styles.formTitle}>{editingId ? 'Edit schedule' : 'New schedule'}</Text>
           <Pressable onPress={() => void pickFiles()} style={styles.pickButton}>
             <Text style={styles.pickButtonText}>
-              {tracks.length === 0
-                ? 'Choose audio files…'
-                : `${tracks.length} file${tracks.length === 1 ? '' : 's'} selected`}
+              {tracks.length === 0 ? 'Choose audio files…' : 'Add more files…'}
             </Text>
           </Pressable>
           {tracks.length > 0 ? (
-            <Text style={styles.pickedFiles} numberOfLines={2}>
-              {tracks.map(t => t.fileName).join(', ')}
-            </Text>
+            <View style={styles.fileListWrap}>
+              <ScrollView style={styles.fileList} nestedScrollEnabled>
+                {tracks.map((track, index) => (
+                  <DraggableFileRow
+                    key={track.uri}
+                    track={track}
+                    index={index}
+                    isDragging={dragIndex === index}
+                    dragOffsetY={dragOffsetY}
+                    shiftY={fileShiftFor(index)}
+                    onDragStart={handleFileDragStart}
+                    onDragMove={handleFileDragMove}
+                    onDragEnd={handleFileDragEnd}
+                    onRemove={removeTrack}
+                    c={c}
+                  />
+                ))}
+              </ScrollView>
+            </View>
           ) : null}
           {pickError ? <Text style={styles.pickErrorText}>{pickError}</Text> : null}
           <TextInput
@@ -423,7 +544,13 @@ function makeStyles(c: typeof colors.light) {
       alignItems: 'center',
     },
     pickButtonText: { color: c.accent, fontWeight: '600', fontSize: 13 },
-    pickedFiles: { color: c.textMuted, fontSize: 12 },
+    fileListWrap: {
+      borderRadius: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      overflow: 'hidden',
+    },
+    fileList: { maxHeight: FILE_ROW_HEIGHT * 4.5 },
     pickErrorText: { color: c.danger, fontSize: 12 },
     playErrorBanner: {
       margin: 16,
@@ -449,5 +576,30 @@ function makeStyles(c: typeof colors.light) {
     },
     addButtonDisabled: { opacity: 0.4 },
     addButtonText: { color: '#ffffff', fontWeight: '600' },
+  });
+}
+
+function makeFileRowStyles(c: typeof colors.light) {
+  return StyleSheet.create({
+    fileRow: {
+      height: FILE_ROW_HEIGHT,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 10,
+      backgroundColor: c.surface,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    fileRowDragging: {
+      zIndex: 10,
+      elevation: 4,
+      opacity: 0.95,
+      backgroundColor: c.background,
+    },
+    dragHandle: { paddingVertical: 6, paddingHorizontal: 2 },
+    dragHandleText: { color: c.textMuted, fontSize: 16 },
+    fileName: { flex: 1, color: c.text, fontSize: 13 },
+    removeIcon: { color: c.danger, fontSize: 15, paddingHorizontal: 4 },
   });
 }
