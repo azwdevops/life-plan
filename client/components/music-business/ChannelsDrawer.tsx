@@ -122,30 +122,63 @@ function isNowInRange(isToday: boolean, start: string | null, end: string | null
   return startMin < endMin ? nowMin >= startMin && nowMin < endMin : nowMin >= startMin || nowMin < endMin;
 }
 
-// Add/edit control for the channel's posting window - two real time pickers
-// (not free text) so the start/end can be compared against the current clock
-// time for the "upload now?" recommendation highlight.
+// Just shows the window and opens the shared EditPostingTimeDrawer on click -
+// the actual time pickers used to be squeezed inline into this fixed-width
+// column, which is why editing now happens in a right sidebar instead.
 function TimeRangeField({
   startTime,
   endTime,
-  onSave,
+  onEdit,
 }: {
   startTime: string | null;
   endTime: string | null;
+  onEdit: () => void;
+}) {
+  return startTime && endTime ? (
+    <button
+      type="button"
+      onClick={onEdit}
+      className="truncate text-xs text-zinc-600 hover:underline dark:text-zinc-300"
+    >
+      {formatTime12h(startTime)} – {formatTime12h(endTime)}
+    </button>
+  ) : (
+    <button type="button" onClick={onEdit} className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400">
+      + Add time
+    </button>
+  );
+}
+
+interface EditingTimeTarget {
+  id: number;
+  name: string;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+// One shared drawer for the whole channel list - editing is keyed off
+// whichever channel's "+ Add time"/time-range button was last clicked,
+// rather than mounting a drawer per row.
+function EditPostingTimeDrawer({
+  target,
+  onClose,
+  onSave,
+}: {
+  target: EditingTimeTarget | null;
+  onClose: () => void;
   onSave: (startTime: string, endTime: string) => Promise<void>;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draftStart, setDraftStart] = useState(toInputTime(startTime));
-  const [draftEnd, setDraftEnd] = useState(toInputTime(endTime));
+  const [draftStart, setDraftStart] = useState("");
+  const [draftEnd, setDraftEnd] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const startEdit = () => {
-    setDraftStart(toInputTime(startTime));
-    setDraftEnd(toInputTime(endTime));
+  useEffect(() => {
+    if (!target) return;
+    setDraftStart(toInputTime(target.startTime));
+    setDraftEnd(toInputTime(target.endTime));
     setError(null);
-    setEditing(true);
-  };
+  }, [target]);
 
   const save = async () => {
     if (!draftStart || !draftEnd) {
@@ -160,7 +193,7 @@ function TimeRangeField({
     setError(null);
     try {
       await onSave(draftStart, draftEnd);
-      setEditing(false);
+      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save.");
     } finally {
@@ -168,59 +201,56 @@ function TimeRangeField({
     }
   };
 
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <input
-          type="time"
-          value={draftStart}
-          onChange={(e) => setDraftStart(e.target.value)}
-          autoFocus
-          className="min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        />
-        <span className="text-xs text-zinc-400">–</span>
-        <input
-          type="time"
-          value={draftEnd}
-          onChange={(e) => setDraftEnd(e.target.value)}
-          className="min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        />
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving}
-          className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-        >
-          {saving ? "…" : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditing(false)}
-          className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400"
-        >
-          Cancel
-        </button>
-        {error && <p className="shrink-0 text-xs text-red-600 dark:text-red-400">{error}</p>}
+  return (
+    <RightDrawer
+      open={!!target}
+      onClose={onClose}
+      title={target ? `Posting time — ${target.name}` : "Posting time"}
+      width="sm"
+      stackLevel={1}
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">Start time</label>
+            <input
+              type="time"
+              value={draftStart}
+              onChange={(e) => setDraftStart(e.target.value)}
+              autoFocus
+              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-300">End time</label>
+            <input
+              type="time"
+              value={draftEnd}
+              onChange={(e) => setDraftEnd(e.target.value)}
+              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </div>
+        </div>
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={saving}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
       </div>
-    );
-  }
-
-  return startTime && endTime ? (
-    <button
-      type="button"
-      onClick={startEdit}
-      className="truncate text-xs text-zinc-600 hover:underline dark:text-zinc-300"
-    >
-      {formatTime12h(startTime)} – {formatTime12h(endTime)}
-    </button>
-  ) : (
-    <button
-      type="button"
-      onClick={startEdit}
-      className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-    >
-      + Add time
-    </button>
+    </RightDrawer>
   );
 }
 
@@ -348,7 +378,6 @@ function UploadDaysToggle({
 
 function ChannelPostingRow({
   channel,
-  dayKey,
   date,
   isToday,
   scheduleEntry,
@@ -356,9 +385,9 @@ function ChannelPostingRow({
   uploadCount,
   dayInactive,
   token,
+  onEditTime,
 }: {
   channel: YoutubeChannel;
-  dayKey: YoutubeDayOfWeek;
   date: string;
   isToday: boolean;
   scheduleEntry: YoutubePostingTime | undefined;
@@ -366,14 +395,10 @@ function ChannelPostingRow({
   uploadCount: number;
   dayInactive: boolean;
   token: string;
+  onEditTime: () => void;
 }) {
   const queryClient = useQueryClient();
   const [pausing, setPausing] = useState(false);
-
-  const saveTimeRange = async (startTime: string, endTime: string) => {
-    await upsertYoutubePostingTime(token, channel.id, dayKey, { start_time: startTime, end_time: endTime });
-    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
-  };
 
   const saveVideosUploaded = async (count: number) => {
     await upsertYoutubeUploadLog(token, channel.id, date, count);
@@ -437,7 +462,7 @@ function ChannelPostingRow({
         <TimeRangeField
           startTime={scheduleEntry?.start_time ?? null}
           endTime={scheduleEntry?.end_time ?? null}
-          onSave={saveTimeRange}
+          onEdit={onEditTime}
         />
       </div>
       <VideosUploadedField value={uploadCount} onSave={saveVideosUploaded} />
@@ -508,12 +533,14 @@ function PausedChannelRow({ channel, token }: { channel: YoutubeChannel; token: 
 
 export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => todayIndex());
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [onlyZeroUploads, setOnlyZeroUploads] = useState(false);
   const [onlyUploadNow, setOnlyUploadNow] = useState(false);
   const [showAllChannels, setShowAllChannels] = useState(false);
+  const [editingTimeChannel, setEditingTimeChannel] = useState<YoutubeChannel | null>(null);
 
   const weekStart = useMemo(() => addDays(startOfWeek(new Date()), weekOffset * 7), [weekOffset]);
   const selectedDate = useMemo(() => dateToStr(addDays(weekStart, selectedDayIndex)), [weekStart, selectedDayIndex]);
@@ -579,6 +606,21 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
     for (const log of uploadLogsQuery.data ?? []) map.set(log.channel_id, log.videos_uploaded_count);
     return map;
   }, [uploadLogsQuery.data]);
+
+  const editingTimeTarget: EditingTimeTarget | null = editingTimeChannel
+    ? {
+        id: editingTimeChannel.id,
+        name: editingTimeChannel.title,
+        startTime: entriesByChannel.get(editingTimeChannel.id)?.start_time ?? null,
+        endTime: entriesByChannel.get(editingTimeChannel.id)?.end_time ?? null,
+      }
+    : null;
+
+  const saveEditingTime = async (startTime: string, endTime: string) => {
+    if (!token || !editingTimeChannel) return;
+    await upsertYoutubePostingTime(token, editingTimeChannel.id, dayKey, { start_time: startTime, end_time: endTime });
+    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
+  };
 
   const groups = useMemo(() => groupAccounts(accountsQuery.data ?? []), [accountsQuery.data]);
 
@@ -751,6 +793,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
   );
 
   return (
+    <>
     <RightDrawer open={open} onClose={onClose} title="Channels" width="5xl" actions={headerActions}>
       <div className="space-y-4">
         {!token ? (
@@ -775,7 +818,6 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
                     <ChannelPostingRow
                       key={channel.id}
                       channel={channel}
-                      dayKey={dayKey}
                       date={selectedDate}
                       isToday={isToday}
                       scheduleEntry={entriesByChannel.get(channel.id)}
@@ -783,6 +825,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
                       uploadCount={uploadCountByChannel.get(channel.id) ?? 0}
                       dayInactive={entriesByChannel.get(channel.id)?.is_upload_day === false}
                       token={token}
+                      onEditTime={() => setEditingTimeChannel(channel)}
                     />
                   ))}
                 </div>
@@ -804,5 +847,11 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         )}
       </div>
     </RightDrawer>
+    <EditPostingTimeDrawer
+      target={editingTimeTarget}
+      onClose={() => setEditingTimeChannel(null)}
+      onSave={saveEditingTime}
+    />
+    </>
   );
 }
