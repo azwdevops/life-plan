@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, Pressable, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { BackHandler, Pressable, StatusBar, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from './src/theme';
 import { TasksScreen } from './src/screens/TasksScreen';
@@ -28,7 +28,7 @@ function AppContent() {
   const [route, setRoute] = useState<Route>('tasks');
   const [history, setHistory] = useState<Route[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { headerTitle, headerActions } = useHeaderActionContext();
+  const { headerTitle, headerActions, headerSearchBox } = useHeaderActionContext();
   const styles = makeStyles(c, insets.top, insets.bottom);
 
   const navigateTo = useCallback(
@@ -68,9 +68,20 @@ function AppContent() {
           <Pressable onPress={() => setSidebarOpen(true)} hitSlop={10} style={styles.menuButton} accessibilityLabel="Open menu">
             <Text style={styles.menuIcon}>☰</Text>
           </Pressable>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {headerTitle ?? 'Life Plan'}
-          </Text>
+          {headerSearchBox ? (
+            <TextInput
+              autoFocus
+              value={headerSearchBox.value}
+              onChangeText={headerSearchBox.onChangeText}
+              placeholder={headerSearchBox.placeholder ?? 'Search'}
+              placeholderTextColor={c.textMuted}
+              style={styles.headerSearchInput}
+            />
+          ) : (
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {headerTitle ?? 'Life Plan'}
+            </Text>
+          )}
         </View>
         {headerActions.map(action => (
           <Pressable
@@ -138,6 +149,7 @@ function makeStyles(c: typeof colors.light, topInset: number, bottomInset: numbe
     menuButton: { padding: 4 },
     menuIcon: { fontSize: 20, color: c.text },
     headerTitle: { color: c.text, fontSize: 16, fontWeight: '700' },
+    headerSearchInput: { flex: 1, color: c.text, fontSize: 15, padding: 0 },
     headerActionButton: { padding: 4 },
     headerActionIcon: { fontSize: 20, color: c.text },
     content: { flex: 1, paddingBottom: bottomInset },

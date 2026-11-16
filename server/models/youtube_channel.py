@@ -140,6 +140,12 @@ class YoutubeChannelPostingTime(Base):
     day_of_week = Column(String(9), nullable=False)
     start_time = Column(Time, nullable=True)
     end_time = Column(Time, nullable=True)
+    # Whether this channel is expected to upload on this weekday at all. No
+    # row at all also means "yes" (every channel uploads every day by
+    # default) - this column only matters once a day's been explicitly
+    # turned off, which is also the only time a row with no time window gets
+    # created just to hold this flag.
+    is_upload_day = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -61,12 +61,14 @@ export interface YoutubePostingTime {
   day_of_week: YoutubeDayOfWeek;
   start_time: string | null;
   end_time: string | null;
+  is_upload_day: boolean;
   updated_at: string | null;
 }
 
 export interface YoutubePostingTimePatch {
   start_time?: string;
   end_time?: string;
+  is_upload_day?: boolean;
 }
 
 export interface YoutubeUploadLog {
@@ -159,11 +161,11 @@ export async function updateYoutubeChannel(
   return response.json();
 }
 
-export async function getYoutubePostingTimes(
-  token: string,
-  day: YoutubeDayOfWeek
-): Promise<YoutubePostingTime[]> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/youtube/posting-times?day=${day}`, {
+// Returns every day's rows for every channel in one call - small (at most 7
+// rows per channel) and needed in full for the upload-day toggle grid
+// regardless of which single day is currently selected in the UI.
+export async function getYoutubePostingTimes(token: string): Promise<YoutubePostingTime[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/youtube/posting-times`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   await throwOnError(response, "Failed to fetch posting times");

@@ -76,6 +76,7 @@ class YoutubePostingTimeOut(BaseModel):
     day_of_week: str
     start_time: Optional[time] = None
     end_time: Optional[time] = None
+    is_upload_day: bool = True
     updated_at: Optional[datetime] = None
 
     class Config:
@@ -83,11 +84,12 @@ class YoutubePostingTimeOut(BaseModel):
 
 
 class YoutubePostingTimeUpsert(BaseModel):
-    """Both fields optional/independent - the start and end time controls in
-    the UI can each be added/edited on their own."""
+    """All fields optional/independent - the start/end time controls and the
+    upload-day toggle in the UI can each be changed on their own."""
 
     start_time: Optional[time] = None
     end_time: Optional[time] = None
+    is_upload_day: Optional[bool] = None
 
 
 class YoutubeUploadLogOut(BaseModel):

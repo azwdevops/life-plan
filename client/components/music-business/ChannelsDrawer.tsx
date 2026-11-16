@@ -271,12 +271,75 @@ function VideosUploadedField({
   );
 }
 
+// Sets every weekday's is_upload_day at once - the deliberate "pause this
+// channel" / "resume this channel" action, distinct from toggling one day
+// at a time in UploadDaysToggle.
+async function setChannelAllUploadDays(token: string, channelId: number, value: boolean): Promise<void> {
+  await Promise.all(DAYS.map((d) => upsertYoutubePostingTime(token, channelId, d.key, { is_upload_day: value })));
+}
+
+// One toggle per weekday, always showing all 7 regardless of which day is
+// currently selected in the drawer - a channel hidden on the selected day
+// (its upload day turned off) would otherwise have no row left to toggle it
+// back on from, since the day-filtered list is exactly what hides it.
+function UploadDaysToggle({
+  channelId,
+  entriesByDay,
+  token,
+}: {
+  channelId: number;
+  entriesByDay: Partial<Record<YoutubeDayOfWeek, YoutubePostingTime>>;
+  token: string;
+}) {
+  const queryClient = useQueryClient();
+  const [savingDay, setSavingDay] = useState<YoutubeDayOfWeek | null>(null);
+
+  const toggleDay = async (day: YoutubeDayOfWeek, current: boolean) => {
+    setSavingDay(day);
+    try {
+      await upsertYoutubePostingTime(token, channelId, day, { is_upload_day: !current });
+      await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
+    } finally {
+      setSavingDay(null);
+    }
+  };
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">Days</span>
+      <div className="flex items-center gap-1">
+        {DAYS.map((d) => {
+          const isUploadDay = entriesByDay[d.key]?.is_upload_day ?? true;
+          const saving = savingDay === d.key;
+          return (
+            <button
+              key={d.key}
+              type="button"
+              title={`${d.label}${isUploadDay ? "" : " (skipped)"}`}
+              onClick={() => void toggleDay(d.key, isUploadDay)}
+              disabled={saving}
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                isUploadDay
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-200 text-zinc-400 dark:bg-zinc-700 dark:text-zinc-500"
+              } ${saving ? "opacity-50" : ""}`}
+            >
+              {d.label[0]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ChannelPostingRow({
   channel,
   dayKey,
   date,
   isToday,
   scheduleEntry,
+  entriesByDay,
   uploadCount,
   token,
 }: {
@@ -285,19 +348,31 @@ function ChannelPostingRow({
   date: string;
   isToday: boolean;
   scheduleEntry: YoutubePostingTime | undefined;
+  entriesByDay: Partial<Record<YoutubeDayOfWeek, YoutubePostingTime>>;
   uploadCount: number;
   token: string;
 }) {
   const queryClient = useQueryClient();
+  const [pausing, setPausing] = useState(false);
 
   const saveTimeRange = async (startTime: string, endTime: string) => {
     await upsertYoutubePostingTime(token, channel.id, dayKey, { start_time: startTime, end_time: endTime });
-    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token, dayKey] });
+    await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
   };
 
   const saveVideosUploaded = async (count: number) => {
     await upsertYoutubeUploadLog(token, channel.id, date, count);
     await queryClient.invalidateQueries({ queryKey: ["youtube-upload-logs", token, date] });
+  };
+
+  const pauseChannel = async () => {
+    setPausing(true);
+    try {
+      await setChannelAllUploadDays(token, channel.id, false);
+      await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
+    } finally {
+      setPausing(false);
+    }
   };
 
   const uploadedOnDate = uploadCount > 0;
@@ -327,6 +402,7 @@ function ChannelPostingRow({
           </span>
         ) : null}
       </div>
+      <UploadDaysToggle channelId={channel.id} entriesByDay={entriesByDay} token={token} />
       <div className="shrink-0">
         <TimeRangeField
           startTime={scheduleEntry?.start_time ?? null}
@@ -335,6 +411,62 @@ function ChannelPostingRow({
         />
       </div>
       <VideosUploadedField value={uploadCount} onSave={saveVideosUploaded} />
+      <button
+        type="button"
+        onClick={() => void pauseChannel()}
+        disabled={pausing}
+        title="Pause this channel - turns every day off, can be resumed later"
+        className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+      >
+        {pausing ? "…" : "Pause"}
+      </button>
+    </div>
+  );
+}
+
+// Shown separately from the day-filtered list below, for a channel with
+// every weekday turned off - the day filter would otherwise hide it from
+// every single day, leaving no row anywhere to resume it from.
+function PausedChannelRow({ channel, token }: { channel: YoutubeChannel; token: string }) {
+  const queryClient = useQueryClient();
+  const [resuming, setResuming] = useState(false);
+
+  const resumeChannel = async () => {
+    setResuming(true);
+    try {
+      await setChannelAllUploadDays(token, channel.id, true);
+      await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      {channel.thumbnail_url ? (
+        <img
+          src={channel.thumbnail_url}
+          alt=""
+          className="h-8 w-8 shrink-0 rounded-full object-cover opacity-60"
+        />
+      ) : (
+        <div className="h-8 w-8 shrink-0 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+      )}
+      <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-500 dark:text-zinc-400">
+        {channel.title}
+      </p>
+      <span className="shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+        Paused
+      </span>
+      <button
+        type="button"
+        onClick={() => void resumeChannel()}
+        disabled={resuming}
+        title="Resume this channel - turns every day back on"
+        className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+      >
+        {resuming ? "…" : "Resume"}
+      </button>
     </div>
   );
 }
@@ -367,10 +499,10 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
   });
 
   const postingTimesQuery = useQuery({
-    queryKey: ["youtube-posting-times", token, dayKey],
+    queryKey: ["youtube-posting-times", token],
     queryFn: () => {
       if (!token) throw new Error("Not authenticated");
-      return getYoutubePostingTimes(token, dayKey);
+      return getYoutubePostingTimes(token);
     },
     enabled: !!token && open,
   });
@@ -384,11 +516,27 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
     enabled: !!token && open,
   });
 
-  const entriesByChannel = useMemo(() => {
-    const map = new Map<number, YoutubePostingTime>();
-    for (const entry of postingTimesQuery.data ?? []) map.set(entry.channel_id, entry);
+  // All 7 days' rows per channel - needed by the upload-day toggle grid on
+  // every row regardless of which single day is currently selected.
+  const entriesByChannelAllDays = useMemo(() => {
+    const map = new Map<number, Partial<Record<YoutubeDayOfWeek, YoutubePostingTime>>>();
+    for (const entry of postingTimesQuery.data ?? []) {
+      const byDay = map.get(entry.channel_id) ?? {};
+      byDay[entry.day_of_week] = entry;
+      map.set(entry.channel_id, byDay);
+    }
     return map;
   }, [postingTimesQuery.data]);
+
+  // Just the selected day's row per channel - used for the time-window
+  // display/recommendation and for filtering the list to that day's channels.
+  const entriesByChannel = useMemo(() => {
+    const map = new Map<number, YoutubePostingTime>();
+    for (const entry of postingTimesQuery.data ?? []) {
+      if (entry.day_of_week === dayKey) map.set(entry.channel_id, entry);
+    }
+    return map;
+  }, [postingTimesQuery.data, dayKey]);
 
   const uploadCountByChannel = useMemo(() => {
     const map = new Map<number, number>();
@@ -416,6 +564,9 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
           channels: channels.filter((c) => {
             const uploadCount = uploadCountByChannel.get(c.id) ?? 0;
             const scheduleEntry = entriesByChannel.get(c.id);
+            // No row for this channel/day means "yes, uploads this day" (the
+            // default) - only an explicit false hides it, never absence.
+            if (scheduleEntry?.is_upload_day === false) return false;
             if (onlyZeroUploads && uploadCount !== 0) return false;
             if (
               onlyUploadNow &&
@@ -429,6 +580,20 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
       })
       .filter((group) => group.channels.length > 0);
   }, [groups, groupFilter, onlyZeroUploads, onlyUploadNow, isToday, entriesByChannel, uploadCountByChannel]);
+
+  // Channels with every weekday turned off - the day filter above hides
+  // these from every single day, so they're surfaced here instead, outside
+  // the day view entirely, with a one-click way back in.
+  const pausedChannels = useMemo(() => {
+    return groups
+      .filter((group) => groupFilter === "all" || group.label === groupFilter)
+      .flatMap((group) => group.accounts.flatMap((account) => account.channels))
+      .filter((c) => {
+        const byDay = entriesByChannelAllDays.get(c.id);
+        if (!byDay) return false;
+        return DAYS.every((d) => (byDay[d.key]?.is_upload_day ?? true) === false);
+      });
+  }, [groups, groupFilter, entriesByChannelAllDays]);
 
   const headerActions = (
     <div className="flex w-full flex-wrap items-center gap-2">
@@ -540,7 +705,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading channels…</p>
         ) : groups.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">No connected channels yet.</p>
-        ) : visibleGroups.length === 0 ? (
+        ) : visibleGroups.length === 0 && pausedChannels.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">No channels match the current filters.</p>
         ) : (
           <div className="space-y-4">
@@ -560,6 +725,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
                       date={selectedDate}
                       isToday={isToday}
                       scheduleEntry={entriesByChannel.get(channel.id)}
+                      entriesByDay={entriesByChannelAllDays.get(channel.id) ?? {}}
                       uploadCount={uploadCountByChannel.get(channel.id) ?? 0}
                       token={token}
                     />
@@ -567,6 +733,18 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
                 </div>
               </div>
             ))}
+            {pausedChannels.length > 0 && (
+              <div className="rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700">
+                <h3 className="border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">
+                  Paused (no upload days set)
+                </h3>
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {pausedChannels.map((channel) => (
+                    <PausedChannelRow key={channel.id} channel={channel} token={token} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

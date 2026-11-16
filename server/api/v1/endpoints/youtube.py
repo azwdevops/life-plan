@@ -353,20 +353,19 @@ async def update_channel(
 
 @router.get("/posting-times", response_model=list[YoutubePostingTimeOut])
 async def list_posting_times(
-    day: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Every channel's best-time-to-post entry for one weekday, across all of
-    the user's accounts - only that single day's rows, not the full week."""
-    day = day.lower()
-    if day not in DAYS_OF_WEEK:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid day")
+    """Every channel's posting-time/upload-day row across all 7 weekdays, for
+    all of the user's accounts, in one shot - small enough per channel (at
+    most 7 rows) that the client deriving per-day lookups from the full set
+    is simpler than refetching per selected day, and it's what the
+    upload-day-toggle grid needs regardless of which day is selected."""
     return (
         db.query(YoutubeChannelPostingTime)
         .join(YoutubeChannel, YoutubeChannelPostingTime.channel_id == YoutubeChannel.id)
         .join(YoutubeAccount, YoutubeChannel.account_id == YoutubeAccount.id)
-        .filter(YoutubeAccount.user_id == current_user.id, YoutubeChannelPostingTime.day_of_week == day)
+        .filter(YoutubeAccount.user_id == current_user.id)
         .all()
     )
 

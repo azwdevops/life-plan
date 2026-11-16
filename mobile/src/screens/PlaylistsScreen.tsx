@@ -18,7 +18,7 @@ import { RowActionsMenu } from '../components/RowActionsMenu';
 import { formatSeconds, SeekBar } from '../components/SeekBar';
 import { listAudioFiles, type PlaylistTrack } from '../nativeFolderPlaylist';
 import { clearScreenBackHandler, setScreenBackHandler } from '../screenBackHandler';
-import { useHeaderAction, useHeaderTitle } from '../contexts/HeaderActionContext';
+import { useHeaderAction, useHeaderSearchBox, useHeaderTitle } from '../contexts/HeaderActionContext';
 import {
   getRestoredPlaybackState,
   loadAndPlay,
@@ -107,6 +107,9 @@ function PlaylistDetail({
   const [modeToastVisible, setModeToastVisible] = useState(false);
   const [playState, setPlayState] = useState<Record<string, TrackPlayState>>({});
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
+  const [searchActive, setSearchActive] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const progress = useProgress(500);
   const modeToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playStateRef = useRef<Record<string, TrackPlayState>>({});
@@ -114,6 +117,44 @@ function PlaylistDetail({
   const latestTrackRef = useRef<{ uri: string | undefined; position: number }>({ uri: undefined, position: 0 });
 
   const sortedTracks = useMemo(() => sortTracks(tracks, sortMode), [tracks, sortMode]);
+
+  // Only the file name is searched - these are picked folder files, not
+  // records with any separate title/content, so the name is all there is.
+  // Filtering itself is debounced (not every keystroke) since it's driven by
+  // debouncedSearchQuery below, even though it's a cheap in-memory filter -
+  // the typed text in the header input stays instantly responsive either way
+  // since that's bound to searchQuery, not the debounced value.
+  //
+  // Rows still show (and play from) sortedTracks's real indices - only which
+  // ones are rendered is filtered, so playback/currentIndex logic elsewhere
+  // never has to know about the search query.
+  const displayedTracks = useMemo(() => {
+    const indexed = sortedTracks.map((track, index) => ({ track, index }));
+    const query = debouncedSearchQuery.trim().toLowerCase();
+    if (!query) return indexed;
+    return indexed.filter(({ track }) => track.fileName.toLowerCase().includes(query));
+  }, [sortedTracks, debouncedSearchQuery]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearchQuery(searchQuery), 250);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const toggleSearch = useCallback(() => {
+    setSearchActive(prev => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (!searchActive) {
+      setSearchQuery('');
+      setDebouncedSearchQuery('');
+    }
+  }, [searchActive]);
+
+  useHeaderSearchBox(
+    searchActive ? { value: searchQuery, onChangeText: setSearchQuery, placeholder: 'Search files' } : null
+  );
+  useHeaderAction('search', '🔍', 'Search files', toggleSearch);
 
   useEffect(() => {
     return () => {
@@ -380,8 +421,10 @@ function PlaylistDetail({
           <Text style={styles.errorText}>{loadError}</Text>
         ) : sortedTracks.length === 0 ? (
           <Text style={styles.empty}>No audio files found in this folder.</Text>
+        ) : displayedTracks.length === 0 ? (
+          <Text style={styles.empty}>No files match "{debouncedSearchQuery.trim()}".</Text>
         ) : (
-          sortedTracks.map((track, index) => {
+          displayedTracks.map(({ track, index }) => {
             const active = loaded && index === currentIndex;
             const playCount = playState[track.uri]?.playCount ?? 0;
             return (
@@ -391,7 +434,7 @@ function PlaylistDetail({
                 onLongPress={() => setMenuTrack(track)}
                 style={[styles.trackRow, playCount > 0 && styles.trackRowPlayed, active && styles.trackRowActive]}
               >
-                <Text style={[styles.trackText, active && styles.trackTextActive]} numberOfLines={1}>
+                <Text style={[styles.trackText, active && styles.trackTextActive]}>
                   {active && isPlaying ? '▶ ' : ''}
                   {track.fileName}
                 </Text>

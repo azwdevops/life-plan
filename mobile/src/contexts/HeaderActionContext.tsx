@@ -7,11 +7,22 @@ export interface HeaderAction {
   onPress: () => void;
 }
 
+// A screen that wants its own search box in the header supplies this while
+// the box should be showing - the header renders the actual TextInput (in
+// place of the title) but the screen owns the query state and filtering.
+export interface HeaderSearchBox {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+}
+
 interface HeaderActionContextValue {
   headerTitle: string | null;
   setHeaderTitle: (title: string | null) => void;
   headerActions: HeaderAction[];
   setHeaderAction: (key: string, action: HeaderAction | null) => void;
+  headerSearchBox: HeaderSearchBox | null;
+  setHeaderSearchBox: (box: HeaderSearchBox | null) => void;
 }
 
 const HeaderActionContext = createContext<HeaderActionContextValue | null>(null);
@@ -19,6 +30,7 @@ const HeaderActionContext = createContext<HeaderActionContextValue | null>(null)
 export function HeaderActionProvider({ children }: { children: ReactNode }) {
   const [headerTitle, setHeaderTitle] = useState<string | null>(null);
   const [headerActions, setHeaderActions] = useState<HeaderAction[]>([]);
+  const [headerSearchBox, setHeaderSearchBox] = useState<HeaderSearchBox | null>(null);
 
   const setHeaderAction = useCallback((key: string, action: HeaderAction | null) => {
     setHeaderActions(prev => {
@@ -28,7 +40,9 @@ export function HeaderActionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <HeaderActionContext.Provider value={{ headerTitle, setHeaderTitle, headerActions, setHeaderAction }}>
+    <HeaderActionContext.Provider
+      value={{ headerTitle, setHeaderTitle, headerActions, setHeaderAction, headerSearchBox, setHeaderSearchBox }}
+    >
       {children}
     </HeaderActionContext.Provider>
   );
@@ -59,4 +73,15 @@ export function useHeaderTitle(title: string): void {
     setHeaderTitle(title);
     return () => setHeaderTitle(null);
   }, [title, setHeaderTitle]);
+}
+
+// A screen calls this with a non-null box while its own search input should
+// replace the header title; pass null the rest of the time (e.g. before the
+// search icon is tapped).
+export function useHeaderSearchBox(box: HeaderSearchBox | null): void {
+  const { setHeaderSearchBox } = useHeaderActionContext();
+  useEffect(() => {
+    setHeaderSearchBox(box);
+    return () => setHeaderSearchBox(null);
+  }, [box, setHeaderSearchBox]);
 }
