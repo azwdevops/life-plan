@@ -46,6 +46,7 @@ from models.youtube_channel import (
     YoutubeChannelStat,
     YoutubeChannelUploadLog,
 )
+from models.linkedin_page import LinkedinPage, LinkedinPagePostingTime, LinkedinPagePostLog
 
 __all__ = [
     "User",
@@ -94,4 +95,7 @@ __all__ = [
     "YoutubeAccount",
     "YoutubeChannel",
     "YoutubeChannelStat",
+    "LinkedinPage",
+    "LinkedinPagePostingTime",
+    "LinkedinPagePostLog",
 ]

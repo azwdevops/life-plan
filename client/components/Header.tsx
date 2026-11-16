@@ -10,6 +10,7 @@ import { HeaderCountdownTimer } from "@/components/HeaderCountdownTimer";
 import { HeaderWithdrawalBank } from "@/components/HeaderWithdrawalBank";
 import { HeaderDailyProductiveList } from "@/components/HeaderDailyProductiveList";
 import { ChannelsDrawer } from "@/components/music-business/ChannelsDrawer";
+import { LinkedInPagesDrawer } from "@/components/music-business/LinkedInPagesDrawer";
 import { usePageHeaderActionsValue, usePageHeaderExtraValue, usePageHeaderMenuExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
@@ -166,16 +167,19 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const pageHeaderMenuExtra = usePageHeaderMenuExtraValue();
   const { canInstall, promptInstall } = usePwaInstall();
   const [channelsDrawerOpen, setChannelsDrawerOpen] = useState(false);
-  // "Install App" and "View channels" live in the same global "more actions"
-  // menu rather than a fixed sidebar footer button - they're always-available
-  // utility actions, not page content, so they're appended to whatever the
-  // current page has registered instead of permanently occupying sidebar space.
+  const [linkedInDrawerOpen, setLinkedInDrawerOpen] = useState(false);
+  // "Install App", "View channels" and "View LinkedIn pages" live in the same
+  // global "more actions" menu rather than a fixed sidebar footer button -
+  // they're always-available utility actions, not page content, so they're
+  // appended to whatever the current page has registered instead of
+  // permanently occupying sidebar space.
   const moreActions = [
     ...pageHeaderActions,
     ...(canInstall
       ? [{ label: "Install App", onClick: promptInstall, icon: <span aria-hidden>⬇️</span> }]
       : []),
     { label: "View channels", onClick: () => setChannelsDrawerOpen(true), icon: <span aria-hidden>📺</span> },
+    { label: "View LinkedIn pages", onClick: () => setLinkedInDrawerOpen(true), icon: <span aria-hidden>💼</span> },
   ];
 
   return (
@@ -360,6 +364,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
       )}
     </header>
     <ChannelsDrawer open={channelsDrawerOpen} onClose={() => setChannelsDrawerOpen(false)} />
+    <LinkedInPagesDrawer open={linkedInDrawerOpen} onClose={() => setLinkedInDrawerOpen(false)} />
     </>
   );
 }

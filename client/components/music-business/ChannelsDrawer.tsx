@@ -8,6 +8,7 @@ import {
   getYoutubeAccounts,
   getYoutubePostingTimes,
   getYoutubeUploadLogs,
+  updateYoutubeChannel,
   upsertYoutubePostingTime,
   upsertYoutubeUploadLog,
   type YoutubeChannel,
@@ -65,10 +66,10 @@ function todayDateStr(): string {
   return dateToStr(new Date());
 }
 
-function formatWeekRange(weekStart: Date): string {
-  const weekEnd = addDays(weekStart, 6);
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${fmt(weekStart)} – ${fmt(weekEnd)}`;
+// e.g. "12-oct" - shown under the day abbreviation in each day pill.
+function formatDayDate(d: Date): string {
+  const month = d.toLocaleDateString("en-US", { month: "short" }).toLowerCase();
+  return `${d.getDate()}-${month}`;
 }
 
 // Backend sends time-of-day as "HH:MM:SS" - truncate to "HH:MM" for <input type="time">.
@@ -271,13 +272,6 @@ function VideosUploadedField({
   );
 }
 
-// Sets every weekday's is_upload_day at once - the deliberate "pause this
-// channel" / "resume this channel" action, distinct from toggling one day
-// at a time in UploadDaysToggle.
-async function setChannelAllUploadDays(token: string, channelId: number, value: boolean): Promise<void> {
-  await Promise.all(DAYS.map((d) => upsertYoutubePostingTime(token, channelId, d.key, { is_upload_day: value })));
-}
-
 // One toggle per weekday, always showing all 7 regardless of which day is
 // currently selected in the drawer - a channel hidden on the selected day
 // (its upload day turned off) would otherwise have no row left to toggle it
@@ -341,6 +335,7 @@ function ChannelPostingRow({
   scheduleEntry,
   entriesByDay,
   uploadCount,
+  dayInactive,
   token,
 }: {
   channel: YoutubeChannel;
@@ -350,6 +345,7 @@ function ChannelPostingRow({
   scheduleEntry: YoutubePostingTime | undefined;
   entriesByDay: Partial<Record<YoutubeDayOfWeek, YoutubePostingTime>>;
   uploadCount: number;
+  dayInactive: boolean;
   token: string;
 }) {
   const queryClient = useQueryClient();
@@ -365,11 +361,14 @@ function ChannelPostingRow({
     await queryClient.invalidateQueries({ queryKey: ["youtube-upload-logs", token, date] });
   };
 
+  // Only flips channel.is_paused - never touches the individual
+  // YoutubeChannelPostingTime rows, so resuming later restores exactly
+  // whatever per-weekday pattern was already set, not "every day on".
   const pauseChannel = async () => {
     setPausing(true);
     try {
-      await setChannelAllUploadDays(token, channel.id, false);
-      await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
+      await updateYoutubeChannel(token, channel.id, { is_paused: true });
+      await queryClient.invalidateQueries({ queryKey: ["youtube-accounts", token] });
     } finally {
       setPausing(false);
     }
@@ -379,12 +378,12 @@ function ChannelPostingRow({
   const isUploadTimeNow = isNowInRange(isToday, scheduleEntry?.start_time ?? null, scheduleEntry?.end_time ?? null);
   const rowHighlightClass = uploadedOnDate
     ? "bg-green-300 dark:bg-green-600/50"
-    : isUploadTimeNow
+    : !dayInactive && isUploadTimeNow
       ? "bg-yellow-300 dark:bg-yellow-500/50"
       : "";
 
   return (
-    <div className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${rowHighlightClass}`}>
+    <div className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${rowHighlightClass} ${dayInactive ? "opacity-60" : ""}`}>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {channel.thumbnail_url ? (
           <img src={channel.thumbnail_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
@@ -395,6 +394,10 @@ function ChannelPostingRow({
         {uploadedOnDate ? (
           <span className="shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-green-400 dark:text-green-950">
             Uploaded
+          </span>
+        ) : dayInactive ? (
+          <span className="shrink-0 rounded-full bg-zinc-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-600 dark:text-zinc-200">
+            Skipped today
           </span>
         ) : isUploadTimeNow ? (
           <span className="shrink-0 rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-yellow-400 dark:text-yellow-950">
@@ -415,7 +418,7 @@ function ChannelPostingRow({
         type="button"
         onClick={() => void pauseChannel()}
         disabled={pausing}
-        title="Pause this channel - turns every day off, can be resumed later"
+        title="Pause this channel - hides it from every day until resumed"
         className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
       >
         {pausing ? "…" : "Pause"}
@@ -424,18 +427,21 @@ function ChannelPostingRow({
   );
 }
 
-// Shown separately from the day-filtered list below, for a channel with
-// every weekday turned off - the day filter would otherwise hide it from
-// every single day, leaving no row anywhere to resume it from.
+// Shown separately from the day-filtered list below, for a paused channel -
+// the day filter would otherwise hide it from every single day, leaving no
+// row anywhere to resume it from.
 function PausedChannelRow({ channel, token }: { channel: YoutubeChannel; token: string }) {
   const queryClient = useQueryClient();
   const [resuming, setResuming] = useState(false);
 
+  // Only clears channel.is_paused - the per-weekday YoutubeChannelPostingTime
+  // rows were never touched by pausing, so whatever pattern existed before
+  // (e.g. weekends already off) comes back exactly as it was.
   const resumeChannel = async () => {
     setResuming(true);
     try {
-      await setChannelAllUploadDays(token, channel.id, true);
-      await queryClient.invalidateQueries({ queryKey: ["youtube-posting-times", token] });
+      await updateYoutubeChannel(token, channel.id, { is_paused: false });
+      await queryClient.invalidateQueries({ queryKey: ["youtube-accounts", token] });
     } finally {
       setResuming(false);
     }
@@ -478,6 +484,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [onlyZeroUploads, setOnlyZeroUploads] = useState(false);
   const [onlyUploadNow, setOnlyUploadNow] = useState(false);
+  const [showAllChannels, setShowAllChannels] = useState(false);
 
   const weekStart = useMemo(() => addDays(startOfWeek(new Date()), weekOffset * 7), [weekOffset]);
   const selectedDate = useMemo(() => dateToStr(addDays(weekStart, selectedDayIndex)), [weekStart, selectedDayIndex]);
@@ -554,6 +561,11 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
     return Array.from(labels).sort();
   }, [groups]);
 
+  // Paused channels always live in the separate "Paused" section below,
+  // regardless of showAllChannels, so they're excluded here unconditionally.
+  // A channel whose selected day is off (but isn't paused) is excluded only
+  // when showAllChannels is off; when it's on, such channels stay in and the
+  // row itself renders greyed out instead of being hidden.
   const visibleGroups = useMemo(() => {
     return groups
       .filter((group) => groupFilter === "all" || group.label === groupFilter)
@@ -562,11 +574,13 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         return {
           ...group,
           channels: channels.filter((c) => {
+            if (c.is_paused) return false;
             const uploadCount = uploadCountByChannel.get(c.id) ?? 0;
             const scheduleEntry = entriesByChannel.get(c.id);
             // No row for this channel/day means "yes, uploads this day" (the
-            // default) - only an explicit false hides it, never absence.
-            if (scheduleEntry?.is_upload_day === false) return false;
+            // default) - only an explicit false counts as inactive.
+            const dayInactive = scheduleEntry?.is_upload_day === false;
+            if (!showAllChannels && dayInactive) return false;
             if (onlyZeroUploads && uploadCount !== 0) return false;
             if (
               onlyUploadNow &&
@@ -579,69 +593,71 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
         };
       })
       .filter((group) => group.channels.length > 0);
-  }, [groups, groupFilter, onlyZeroUploads, onlyUploadNow, isToday, entriesByChannel, uploadCountByChannel]);
+  }, [groups, groupFilter, onlyZeroUploads, onlyUploadNow, showAllChannels, isToday, entriesByChannel, uploadCountByChannel]);
 
-  // Channels with every weekday turned off - the day filter above hides
-  // these from every single day, so they're surfaced here instead, outside
-  // the day view entirely, with a one-click way back in.
+  // Paused channels - the day filter above always hides these (regardless of
+  // showAllChannels), so they're surfaced here instead, outside the day view
+  // entirely, with a one-click way back in.
   const pausedChannels = useMemo(() => {
     return groups
       .filter((group) => groupFilter === "all" || group.label === groupFilter)
       .flatMap((group) => group.accounts.flatMap((account) => account.channels))
-      .filter((c) => {
-        const byDay = entriesByChannelAllDays.get(c.id);
-        if (!byDay) return false;
-        return DAYS.every((d) => (byDay[d.key]?.is_upload_day ?? true) === false);
-      });
-  }, [groups, groupFilter, entriesByChannelAllDays]);
+      .filter((c) => c.is_paused);
+  }, [groups, groupFilter]);
 
   const headerActions = (
     <div className="flex w-full flex-wrap items-center gap-2">
       <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={() => setWeekOffset((w) => w - 1)}
-          aria-label="Previous week"
-          className="rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        >
-          ‹
-        </button>
-        <span className="min-w-[7.5rem] text-center text-xs font-medium text-zinc-600 dark:text-zinc-300">
-          {formatWeekRange(weekStart)}
-        </span>
-        <button
-          type="button"
-          onClick={() => setWeekOffset((w) => w + 1)}
-          aria-label="Next week"
-          className="rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        >
-          ›
-        </button>
         {!isToday && (
           <button
             type="button"
             onClick={jumpToToday}
-            className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+            className="shrink-0 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
           >
             Today
           </button>
         )}
-      </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {DAYS.map((d, index) => (
-          <button
-            key={d.key}
-            type="button"
-            onClick={() => setSelectedDayIndex(index)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-              index === selectedDayIndex
-                ? "bg-blue-600 text-white"
-                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-            }`}
-          >
-            {d.label}
-          </button>
-        ))}
+        <button
+          type="button"
+          onClick={() => setWeekOffset((w) => w - 1)}
+          aria-label="Previous week"
+          className="shrink-0 rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          ‹
+        </button>
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {DAYS.map((d, index) => {
+            const date = addDays(weekStart, index);
+            const selected = index === selectedDayIndex;
+            return (
+              <button
+                key={d.key}
+                type="button"
+                onClick={() => setSelectedDayIndex(index)}
+                className={`flex shrink-0 flex-col items-center rounded-lg px-3 py-1 transition-colors ${
+                  selected
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                }`}
+              >
+                <span className="text-xs font-semibold">{d.label}</span>
+                <span
+                  className={`text-[10px] font-bold ${selected ? "text-amber-200" : "text-amber-600 dark:text-amber-400"}`}
+                >
+                  {formatDayDate(date)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setWeekOffset((w) => w + 1)}
+          aria-label="Next week"
+          className="shrink-0 rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          ›
+        </button>
       </div>
       <select
         value={groupFilter}
@@ -672,6 +688,15 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
           className="h-3.5 w-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-600"
         />
         Upload now
+      </label>
+      <label className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+        <input
+          type="checkbox"
+          checked={showAllChannels}
+          onChange={(e) => setShowAllChannels(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-600"
+        />
+        Show all
       </label>
       <button
         type="button"
@@ -727,6 +752,7 @@ export function ChannelsDrawer({ open, onClose }: { open: boolean; onClose: () =
                       scheduleEntry={entriesByChannel.get(channel.id)}
                       entriesByDay={entriesByChannelAllDays.get(channel.id) ?? {}}
                       uploadCount={uploadCountByChannel.get(channel.id) ?? 0}
+                      dayInactive={entriesByChannel.get(channel.id)?.is_upload_day === false}
                       token={token}
                     />
                   ))}

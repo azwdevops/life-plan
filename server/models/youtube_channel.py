@@ -80,6 +80,11 @@ class YoutubeChannel(Base):
     # User-set revenue-per-mille estimate; paired with month_to_date_views for a
     # rough earnings estimate. Real ad revenue isn't available via the public API.
     estimated_rpm = Column(Float, nullable=True)
+    # One-flag "pause this whole channel" - deliberately separate from each
+    # YoutubeChannelPostingTime row's is_upload_day, so resuming restores
+    # exactly whatever per-weekday pattern existed before pausing instead of
+    # turning every day back on.
+    is_paused = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

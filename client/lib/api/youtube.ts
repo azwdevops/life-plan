@@ -23,6 +23,7 @@ export interface YoutubeChannel {
   thumbnail_url: string | null;
   is_monetized: boolean;
   estimated_rpm: number | null;
+  is_paused: boolean;
   studio_url: string;
   latest_stat: YoutubeChannelStat | null;
   created_at: string;
@@ -40,6 +41,7 @@ export interface YoutubeAccount {
 export interface YoutubeChannelUpdate {
   is_monetized?: boolean;
   estimated_rpm?: number | null;
+  is_paused?: boolean;
 }
 
 export interface YoutubeAccountUpdate {

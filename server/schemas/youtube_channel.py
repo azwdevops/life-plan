@@ -31,6 +31,7 @@ class YoutubeChannelOut(BaseModel):
     thumbnail_url: Optional[str] = None
     is_monetized: bool
     estimated_rpm: Optional[float] = None
+    is_paused: bool = False
     studio_url: str
     latest_stat: Optional[YoutubeChannelStatOut] = None
     created_at: datetime
@@ -52,11 +53,12 @@ class YoutubeAccountOut(BaseModel):
 
 
 class YoutubeChannelUpdate(BaseModel):
-    """Both fields optional/independent - the monetized toggle and RPM estimate
-    are edited from separate controls in the UI (the toggle behind a confirm dialog)."""
+    """All fields optional/independent - the monetized toggle, RPM estimate,
+    and pause flag are each edited from separate controls in the UI."""
 
     is_monetized: Optional[bool] = None
     estimated_rpm: Optional[float] = None
+    is_paused: Optional[bool] = None
 
 
 class YoutubeAccountUpdate(BaseModel):

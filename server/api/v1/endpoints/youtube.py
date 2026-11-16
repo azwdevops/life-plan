@@ -58,6 +58,7 @@ def _channel_to_out(channel: YoutubeChannel) -> YoutubeChannelOut:
         thumbnail_url=channel.thumbnail_url,
         is_monetized=channel.is_monetized,
         estimated_rpm=channel.estimated_rpm,
+        is_paused=channel.is_paused,
         studio_url=f"https://studio.youtube.com/channel/{channel.youtube_channel_id}",
         latest_stat=YoutubeChannelStatOut.model_validate(latest) if latest else None,
         created_at=channel.created_at,
@@ -346,6 +347,8 @@ async def update_channel(
         channel.is_monetized = bool(patch["is_monetized"])
     if "estimated_rpm" in patch:
         channel.estimated_rpm = patch["estimated_rpm"]
+    if "is_paused" in patch:
+        channel.is_paused = bool(patch["is_paused"])
     db.commit()
     db.refresh(channel)
     return _channel_to_out(channel)
