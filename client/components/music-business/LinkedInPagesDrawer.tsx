@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RightDrawer } from "@/components/RightDrawer";
 import { Dialog } from "@/components/Dialog";
@@ -37,6 +37,23 @@ function IconPlus({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+    </svg>
+  );
+}
+
+function IconPause({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
+}
+
+function IconPlay({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path d="M8 5v14l11-7-11-7z" />
     </svg>
   );
 }
@@ -265,8 +282,7 @@ function PostsCountField({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      <span className="text-xs text-zinc-500 dark:text-zinc-400">Posts</span>
+    <div className="flex w-20 shrink-0 items-center gap-1.5" title="Posts published">
       <input
         type="number"
         min={0}
@@ -276,6 +292,7 @@ function PostsCountField({
           scheduleSave(e.target.value);
         }}
         placeholder="0"
+        aria-label="Posts published"
         className="w-16 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
       />
       {saving && <span className="text-xs text-zinc-400">saving…</span>}
@@ -313,25 +330,27 @@ function PostingDaysToggle({
   return (
     <div className="flex shrink-0 items-center gap-2">
       <span className="text-xs text-zinc-500 dark:text-zinc-400">Days</span>
-      <div className="flex items-center gap-1">
-        {DAYS.map((d) => {
+      <div className="flex items-center gap-2">
+        {DAYS.map((d, index) => {
           const isPostingDay = entriesByDay[d.key]?.is_posting_day ?? true;
           const saving = savingDay === d.key;
           return (
-            <button
-              key={d.key}
-              type="button"
-              title={`${d.label}${isPostingDay ? "" : " (skipped)"}`}
-              onClick={() => void toggleDay(d.key, isPostingDay)}
-              disabled={saving}
-              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
-                isPostingDay
-                  ? "bg-blue-600 text-white"
-                  : "bg-zinc-200 text-zinc-400 dark:bg-zinc-700 dark:text-zinc-500"
-              } ${saving ? "opacity-50" : ""}`}
-            >
-              {d.label[0]}
-            </button>
+            <Fragment key={d.key}>
+              {index > 0 && <span className="h-4 w-px shrink-0 bg-zinc-300 dark:bg-zinc-600" aria-hidden="true" />}
+              <button
+                type="button"
+                title={`${d.label}${isPostingDay ? "" : " (skipped)"}`}
+                onClick={() => void toggleDay(d.key, isPostingDay)}
+                disabled={saving}
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                  isPostingDay
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-200 text-zinc-400 dark:bg-zinc-700 dark:text-zinc-500"
+                } ${saving ? "opacity-50" : ""}`}
+              >
+                {d.label[0]}
+              </button>
+            </Fragment>
           );
         })}
       </div>
@@ -486,26 +505,34 @@ function LinkedInPageRow({
       ? "bg-yellow-300 dark:bg-yellow-500/50"
       : "";
 
+  // Every column after the title is fixed-width (not flex-wrap), so the same
+  // field lines up vertically across every row - e.g. Monday's dot sits at
+  // the same x for every page. The title itself stays flex-1 so it still
+  // uses the full available width instead of truncating names needlessly;
+  // since every row has the same fixed-width trailing columns, flex-1 still
+  // resolves to the same width for every row, so alignment holds either way.
   return (
-    <div className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${rowHighlightClass} ${dayInactive ? "opacity-60" : ""}`}>
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className={`flex items-center gap-3 px-3 py-2.5 ${rowHighlightClass} ${dayInactive ? "opacity-60" : ""}`}>
+      <div className="flex min-w-0 flex-1 items-center">
         <PageNameField name={page.name} onSave={saveName} />
+      </div>
+      <div className="w-28 shrink-0">
         {postedOnDate ? (
-          <span className="shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-green-400 dark:text-green-950">
+          <span className="rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-green-400 dark:text-green-950">
             Posted
           </span>
         ) : dayInactive ? (
-          <span className="shrink-0 rounded-full bg-zinc-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-600 dark:text-zinc-200">
+          <span className="rounded-full bg-zinc-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-600 dark:text-zinc-200">
             Skipped today
           </span>
         ) : isPostTimeNow ? (
-          <span className="shrink-0 rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-yellow-400 dark:text-yellow-950">
+          <span className="rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-yellow-400 dark:text-yellow-950">
             Post now
           </span>
         ) : null}
       </div>
       <PostingDaysToggle pageId={page.id} entriesByDay={entriesByDay} token={token} />
-      <div className="shrink-0">
+      <div className="w-36 shrink-0">
         <TimeRangeField
           startTime={scheduleEntry?.start_time ?? null}
           endTime={scheduleEntry?.end_time ?? null}
@@ -517,10 +544,11 @@ function LinkedInPageRow({
         type="button"
         onClick={() => void pausePage()}
         disabled={pausing}
+        aria-label="Pause"
         title="Pause this page - hides it from every day until resumed"
-        className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
       >
-        {pausing ? "…" : "Pause"}
+        <IconPause className="h-3.5 w-3.5" />
       </button>
       <DropdownMenu
         menuButtonAriaLabel={`Actions for ${page.name}`}
@@ -589,10 +617,11 @@ function PausedPageRow({ page, token }: { page: LinkedinPage; token: string }) {
         type="button"
         onClick={() => void resumePage()}
         disabled={resuming}
+        aria-label="Resume"
         title="Resume this page - turns every day back on"
-        className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white disabled:opacity-50"
       >
-        {resuming ? "…" : "Resume"}
+        <IconPlay className="h-3.5 w-3.5" />
       </button>
     </div>
   );
