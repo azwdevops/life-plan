@@ -27,6 +27,8 @@ export interface UserResponse {
   running_met?: number | null;
   /** Live run stats refresh period (seconds); null → client uses 3. */
   stats_refresh_interval_seconds?: number | null;
+  /** Which AzwBook holds this user's book ideas (shared across web/mobile). */
+  book_ideas_book_id?: number | null;
 }
 
 export interface UserFitnessProfile {
@@ -96,6 +98,22 @@ export async function putUserFitnessProfile(
               .join("; ")
           : "Failed to save exercise metrics";
     throw new Error(message || "Failed to save exercise metrics");
+  }
+  return response.json();
+}
+
+export async function putBookIdeasBook(token: string, bookId: number | null): Promise<UserResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/me/book-ideas-book`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ book_id: bookId }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to save which book holds your ideas");
   }
   return response.json();
 }

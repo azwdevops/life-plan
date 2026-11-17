@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     height_cm: Optional[float] = None
     running_met: Optional[float] = None
     stats_refresh_interval_seconds: Optional[int] = None
+    book_ideas_book_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -86,6 +87,12 @@ class UserFitnessProfilePut(BaseModel):
         if not (1 <= v <= 300):
             raise ValueError("stats_refresh_interval_seconds must be between 1 and 300")
         return v
+
+
+class BookIdeasBookUpdate(BaseModel):
+    """Which AzwBook holds the user's book ideas; null clears the choice."""
+
+    book_id: Optional[int] = None
 
 
 class Token(BaseModel):

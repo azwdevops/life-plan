@@ -9,10 +9,12 @@ from core.security import (
 )
 from models.user import User
 from models.group import Group
+from models.azw_book import AzwBook
 from schemas.auth import (
     UserLogin,
     UserResponse,
     UserFitnessProfilePut,
+    BookIdeasBookUpdate,
     Token,
     GroupResponse,
     SetUserGroupsRequest,
@@ -34,6 +36,7 @@ def user_to_response(user: User, db: Session) -> UserResponse:
         height_cm=float(user.height_cm) if user.height_cm is not None else None,
         running_met=float(user.running_met) if user.running_met is not None else None,
         stats_refresh_interval_seconds=user.stats_refresh_interval_seconds,
+        book_ideas_book_id=user.book_ideas_book_id,
     )
 
 router = APIRouter()
@@ -164,6 +167,28 @@ async def put_fitness_profile(
     current_user.height_cm = body.height_cm
     current_user.running_met = body.running_met
     current_user.stats_refresh_interval_seconds = body.stats_refresh_interval_seconds
+    db.commit()
+    db.refresh(current_user)
+    return user_to_response(current_user, db)
+
+
+@router.put("/me/book-ideas-book", response_model=UserResponse)
+async def put_book_ideas_book(
+    body: BookIdeasBookUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set (or clear) which AzwBook holds this user's book ideas - shared across
+    web and mobile, rather than a per-device localStorage/AsyncStorage pick."""
+    if body.book_id is not None:
+        book = (
+            db.query(AzwBook)
+            .filter(AzwBook.id == body.book_id, AzwBook.user_id == current_user.id)
+            .first()
+        )
+        if not book:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    current_user.book_ideas_book_id = body.book_id
     db.commit()
     db.refresh(current_user)
     return user_to_response(current_user, db)

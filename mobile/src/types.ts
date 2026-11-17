@@ -49,10 +49,12 @@ export interface AudioSchedule {
 
 export interface AppSettings {
   taskSnoozeSeconds: number;
+  backendUrl: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   taskSnoozeSeconds: 300,
+  backendUrl: '',
 };
 
 /** A picked folder, treated as a playlist - its tracks are re-read from the

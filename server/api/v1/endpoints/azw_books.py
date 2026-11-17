@@ -121,7 +121,7 @@ async def list_azw_books(
             selectinload(AzwBook.chapters),
         )
         .filter(AzwBook.user_id == current_user.id)
-        .order_by(AzwBook.created_at.desc())
+        .order_by(AzwBook.title)
         .all()
     )
     return [_book_to_out(row) for row in rows]

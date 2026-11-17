@@ -6,18 +6,22 @@ import { TasksScreen } from './src/screens/TasksScreen';
 import { AudioScheduleScreen } from './src/screens/AudioScheduleScreen';
 import { RecordingsScreen } from './src/screens/RecordingsScreen';
 import { PlaylistsScreen } from './src/screens/PlaylistsScreen';
+import { BookIdeasScreen } from './src/screens/BookIdeasScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { LeftSidebar } from './src/components/LeftSidebar';
+import { QuickDictateModal } from './src/components/QuickDictateModal';
 import { runScreenBackHandler } from './src/screenBackHandler';
 import { HeaderActionProvider, useHeaderActionContext } from './src/contexts/HeaderActionContext';
+import { AuthProvider } from './src/contexts/AuthContext';
 
-type Route = 'tasks' | 'alarms' | 'record' | 'playlists' | 'settings';
+type Route = 'tasks' | 'alarms' | 'record' | 'playlists' | 'bookIdeas' | 'settings';
 
 const SIDEBAR_ITEMS: { key: Route; label: string; icon: string; color: keyof typeof colors.light }[] = [
   { key: 'tasks', label: 'Tasks', icon: '☑', color: 'accent' },
   { key: 'alarms', label: 'Alarms', icon: '⏰', color: 'secondary' },
   { key: 'record', label: 'Record', icon: '🎙', color: 'accent' },
   { key: 'playlists', label: 'Playlists', icon: '🎵', color: 'secondary' },
+  { key: 'bookIdeas', label: 'Book Ideas', icon: '📖', color: 'accent' },
   { key: 'settings', label: 'Settings', icon: '⚙', color: 'textMuted' },
 ];
 
@@ -28,6 +32,7 @@ function AppContent() {
   const [route, setRoute] = useState<Route>('tasks');
   const [history, setHistory] = useState<Route[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dictateOpen, setDictateOpen] = useState(false);
   const { headerTitle, headerActions, headerSearchBox } = useHeaderActionContext();
   const styles = makeStyles(c, insets.top, insets.bottom);
 
@@ -94,6 +99,14 @@ function AppContent() {
             <Text style={styles.headerActionIcon}>{action.icon}</Text>
           </Pressable>
         ))}
+        <Pressable
+          onPress={() => setDictateOpen(true)}
+          hitSlop={10}
+          accessibilityLabel="Dictate book idea"
+          style={styles.headerActionButton}
+        >
+          <Text style={styles.headerActionIcon}>🎙</Text>
+        </Pressable>
       </View>
 
       <View style={styles.content}>
@@ -105,6 +118,8 @@ function AppContent() {
           <RecordingsScreen />
         ) : route === 'playlists' ? (
           <PlaylistsScreen />
+        ) : route === 'bookIdeas' ? (
+          <BookIdeasScreen />
         ) : (
           <SettingsScreen />
         )}
@@ -118,6 +133,8 @@ function AppContent() {
         onSelect={key => navigateTo(key as Route)}
         c={c}
       />
+
+      <QuickDictateModal visible={dictateOpen} onClose={() => setDictateOpen(false)} />
     </View>
   );
 }
@@ -125,9 +142,11 @@ function AppContent() {
 function App() {
   return (
     <SafeAreaProvider>
-      <HeaderActionProvider>
-        <AppContent />
-      </HeaderActionProvider>
+      <AuthProvider>
+        <HeaderActionProvider>
+          <AppContent />
+        </HeaderActionProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

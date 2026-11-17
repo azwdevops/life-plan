@@ -8,6 +8,7 @@ const AUDIO_SCHEDULES_KEY = 'lifeplan:audio_schedules';
 const SETTINGS_KEY = 'lifeplan:settings';
 const PLAYLISTS_KEY = 'lifeplan:playlists';
 const TRACK_PLAY_STATE_KEY = 'lifeplan:track_play_state';
+const AUTH_TOKEN_KEY = 'lifeplan:auth_token';
 
 export interface TrackPlayState {
   lastPositionSeconds: number;
@@ -71,4 +72,16 @@ export async function loadTrackPlayState(): Promise<Record<string, TrackPlayStat
 
 export async function saveTrackPlayState(state: Record<string, TrackPlayState>): Promise<void> {
   await AsyncStorage.setItem(TRACK_PLAY_STATE_KEY, JSON.stringify(state));
+}
+
+export async function loadAuthToken(): Promise<string | null> {
+  return AsyncStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export async function saveAuthToken(token: string): Promise<void> {
+  await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export async function clearAuthToken(): Promise<void> {
+  await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
 }
