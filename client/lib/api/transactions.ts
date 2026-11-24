@@ -9,7 +9,8 @@ export type TransactionType = "MONEY_RECEIVED" | "MONEY_PAID" | "JOURNAL";
 export type EntryType = "DEBIT" | "CREDIT";
 
 export interface TransactionItem {
-  ledger_id: number;
+  ledger_id?: number;
+  item_id?: number | null;
   entry_type: EntryType;
   amount: number;
 }
@@ -29,6 +30,7 @@ export interface TransactionItemResponse {
   id: number;
   transaction_id: number;
   ledger_id: number;
+  item_id: number | null;
   entry_type: EntryType;
   amount: number;
   created_at: string;

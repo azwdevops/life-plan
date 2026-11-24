@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, case, nullslast
 from typing import List, Optional
 from decimal import Decimal
@@ -8,7 +8,15 @@ from datetime import date, datetime
 from core.database import get_db
 from api.v1.endpoints.auth import get_current_user
 from models.user import User
-from models.finance import Transaction, TransactionItem, Ledger, LedgerGroup, ParentLedgerGroup, EntryType
+from models.finance import (
+    Transaction,
+    TransactionItem,
+    Ledger,
+    LedgerGroup,
+    ParentLedgerGroup,
+    LedgerItem,
+    EntryType,
+)
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -468,6 +476,196 @@ async def get_ledger_report(
         end_date=end_date,
         opening_balance=opening_balance,
         closing_balance=closing_balance,
+        entries=entries,
+        total_debit=total_debit,
+        total_credit=total_credit,
+    )
+
+
+class ItemBalanceItem(BaseModel):
+    item_id: int
+    item_name: str
+    ledger_id: int
+    ledger_name: str
+    total_debit: Decimal
+    total_credit: Decimal
+
+
+class ItemBalancesResponse(BaseModel):
+    start_date: date
+    end_date: date
+    items: List[ItemBalanceItem]
+
+
+@router.get("/item-balances", response_model=ItemBalancesResponse)
+async def get_item_balances(
+    start_date: date = Query(..., description="Start date for the item breakdown"),
+    end_date: date = Query(..., description="End date for the item breakdown"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-item debit/credit totals for a period - e.g. how much was spent on
+    each purchased item (Tea Leaves, Sugar, ...) in a given month."""
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Start date must be before or equal to end date",
+        )
+
+    period_query = (
+        db.query(
+            TransactionItem.item_id,
+            func.sum(
+                case((TransactionItem.entry_type == EntryType.DEBIT, TransactionItem.amount), else_=0)
+            ).label("total_debit"),
+            func.sum(
+                case((TransactionItem.entry_type == EntryType.CREDIT, TransactionItem.amount), else_=0)
+            ).label("total_credit"),
+        )
+        .join(Transaction, Transaction.id == TransactionItem.transaction_id)
+        .filter(Transaction.user_id == current_user.id)
+        .filter(TransactionItem.item_id.isnot(None))
+        .filter(
+            and_(
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date <= end_date,
+            )
+        )
+        .group_by(TransactionItem.item_id)
+    )
+    period_results = {row.item_id: row for row in period_query.all()}
+
+    items: List[ItemBalanceItem] = []
+    if period_results:
+        ledger_items = (
+            db.query(LedgerItem)
+            .options(joinedload(LedgerItem.ledger))
+            .filter(LedgerItem.id.in_(period_results.keys()))
+            .filter(LedgerItem.user_id == current_user.id)
+            .all()
+        )
+        for ledger_item in ledger_items:
+            row = period_results[ledger_item.id]
+            items.append(
+                ItemBalanceItem(
+                    item_id=ledger_item.id,
+                    item_name=ledger_item.name,
+                    ledger_id=ledger_item.ledger_id,
+                    ledger_name=ledger_item.ledger.name,
+                    total_debit=Decimal(str(row.total_debit or 0)),
+                    total_credit=Decimal(str(row.total_credit or 0)),
+                )
+            )
+        items.sort(key=lambda i: i.item_name)
+
+    return ItemBalancesResponse(start_date=start_date, end_date=end_date, items=items)
+
+
+class ItemReportEntry(BaseModel):
+    transaction_id: int
+    transaction_date: date
+    reference: Optional[str]
+    transaction_type: str
+    entry_type: str
+    amount: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+class ItemReportResponse(BaseModel):
+    item_id: int
+    item_name: str
+    ledger_id: int
+    ledger_name: str
+    start_date: date
+    end_date: date
+    entries: List[ItemReportEntry]
+    total_debit: Decimal
+    total_credit: Decimal
+
+
+@router.get("/item", response_model=ItemReportResponse)
+async def get_item_report(
+    item_id: int = Query(..., description="Ledger item ID for the report"),
+    start_date: date = Query(..., description="Start date for the item report"),
+    end_date: date = Query(..., description="End date for the item report"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """All transaction lines tagged with one item in a date range - e.g. how
+    much was spent on Tea Leaves specifically."""
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Start date must be before or equal to end date",
+        )
+
+    item = (
+        db.query(LedgerItem)
+        .options(joinedload(LedgerItem.ledger))
+        .filter(LedgerItem.id == item_id)
+        .filter(LedgerItem.user_id == current_user.id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found or does not belong to user",
+        )
+
+    entries_query = (
+        db.query(
+            Transaction.id.label("transaction_id"),
+            Transaction.transaction_date,
+            Transaction.reference,
+            Transaction.transaction_type,
+            TransactionItem.entry_type,
+            TransactionItem.amount,
+        )
+        .join(TransactionItem, TransactionItem.transaction_id == Transaction.id)
+        .filter(Transaction.user_id == current_user.id)
+        .filter(TransactionItem.item_id == item_id)
+        .filter(
+            and_(
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date <= end_date,
+            )
+        )
+        .order_by(Transaction.transaction_date, Transaction.id)
+        .all()
+    )
+
+    entries = []
+    total_debit = Decimal("0")
+    total_credit = Decimal("0")
+    for row in entries_query:
+        amount = Decimal(str(row.amount))
+        if row.entry_type == EntryType.DEBIT:
+            total_debit += amount
+        else:
+            total_credit += amount
+
+        entries.append(
+            ItemReportEntry(
+                transaction_id=row.transaction_id,
+                transaction_date=row.transaction_date,
+                reference=row.reference,
+                transaction_type=row.transaction_type.value
+                if hasattr(row.transaction_type, "value")
+                else str(row.transaction_type),
+                entry_type=row.entry_type.value if hasattr(row.entry_type, "value") else str(row.entry_type),
+                amount=amount,
+            )
+        )
+
+    return ItemReportResponse(
+        item_id=item.id,
+        item_name=item.name,
+        ledger_id=item.ledger_id,
+        ledger_name=item.ledger.name,
+        start_date=start_date,
+        end_date=end_date,
         entries=entries,
         total_debit=total_debit,
         total_credit=total_credit,

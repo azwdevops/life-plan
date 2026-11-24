@@ -1,5 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { getTrialBalance, getLedgerReport, getLedgerBalances } from "@/lib/api/reports";
+import {
+  getTrialBalance,
+  getLedgerReport,
+  getLedgerBalances,
+  getItemBalances,
+  getItemReport,
+} from "@/lib/api/reports";
 import { useAuth } from "./use-auth";
 
 export function useLedgerBalances(parentGroupName?: string) {
@@ -47,6 +53,44 @@ export function useLedgerReport(
       return getLedgerReport(token, ledgerId, startDate, endDate);
     },
     enabled: !!token && !!ledgerId && !!startDate && !!endDate,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useItemBalances(startDate: string, endDate: string) {
+  const { token } = useAuth();
+
+  return useQuery({
+    queryKey: ["item-balances", startDate, endDate],
+    queryFn: () => {
+      if (!token) throw new Error("Not authenticated");
+      return getItemBalances(token, startDate, endDate);
+    },
+    enabled: !!token && !!startDate && !!endDate,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useItemReport(
+  itemId: number | null,
+  startDate: string,
+  endDate: string
+) {
+  const { token } = useAuth();
+
+  return useQuery({
+    queryKey: ["item-report", itemId, startDate, endDate],
+    queryFn: () => {
+      if (!token || !itemId) throw new Error("Not authenticated or item not selected");
+      return getItemReport(token, itemId, startDate, endDate);
+    },
+    enabled: !!token && !!itemId && !!startDate && !!endDate,
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: true,

@@ -8,7 +8,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
-import { Dialog } from "@/components/Dialog";
+import { RightDrawer } from "@/components/RightDrawer";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -20,13 +20,16 @@ import {
   useCreateSpendingType,
   useCreateLedgerGroup,
   useParentLedgerGroups,
+  useLedgerItems,
+  useCreateLedgerItem,
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction, useTransactions } from "@/lib/hooks/use-transactions";
 import { useQueryClient } from "@tanstack/react-query";
 import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
 import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
 import { usePersistedPeriodFilter } from "@/lib/hooks/use-persisted-period-filter";
-import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
+import type { LedgerCreate, LedgerGroupCreate, LedgerItemCreate } from "@/lib/api/accounts";
+import type { TransactionItem } from "@/lib/api/transactions";
 
 function formatKsh(value: number): string {
   return `KSh ${value.toLocaleString("en-US", {
@@ -47,13 +50,16 @@ function ExpensesContent() {
   const { data: groups = [] } = useLedgerGroups();
   const { data: parentGroups = [] } = useParentLedgerGroups();
   const { data: spendingTypes = [], refetch: refetchSpendingTypes } = useSpendingTypes();
+  const { data: ledgerItems = [], refetch: refetchLedgerItems } = useLedgerItems();
   const { data: expenseTransactions = [], refetch: refetchExpenses, isLoading: isLoadingTransactions } = useTransactions("MONEY_PAID");
   const queryClient = useQueryClient();
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createSpendingTypeMutation = useCreateSpendingType();
   const createLedgerGroupMutation = useCreateLedgerGroup();
+  const createLedgerItemMutation = useCreateLedgerItem();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [breakdownView, setBreakdownView] = useState<"chart" | "table">("chart");
   const {
     periodType,
     selectedMonthDate,
@@ -93,16 +99,32 @@ function ExpensesContent() {
   const chargeLedgers = ledgers.filter((ledger) =>
     chargeGroups.some((group) => group.id === ledger.ledger_group_id)
   );
+  // Items the user can pick instead of a ledger when posting an expense -
+  // only items that currently resolve to an expense ledger are relevant here.
+  const expenseItems = ledgerItems.filter((item) =>
+    expenseLedgers.some((ledger) => ledger.id === item.ledger_id)
+  );
+  const itemLedgerNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    ledgerItems.forEach((item) => {
+      const ledger = ledgers.find((l) => l.id === item.ledger_id);
+      if (ledger) map.set(item.id, ledger.name);
+    });
+    return map;
+  }, [ledgerItems, ledgers]);
 
   const [showPostExpenseDialog, setShowPostExpenseDialog] = useState(false);
   const [showCreateLedgerDialog, setShowCreateLedgerDialog] = useState(false);
   const [showCreateAssetLedgerDialog, setShowCreateAssetLedgerDialog] = useState(false);
   const [showCreateChargeLedgerDialog, setShowCreateChargeLedgerDialog] = useState(false);
+  const [showCreateItemDialog, setShowCreateItemDialog] = useState(false);
   const [showSpendingTypeForm, setShowSpendingTypeForm] = useState(false);
   const [showLedgerGroupForm, setShowLedgerGroupForm] = useState(false);
   const [pendingLedgerName, setPendingLedgerName] = useState("");
   const [pendingAssetLedgerName, setPendingAssetLedgerName] = useState("");
   const [pendingChargeLedgerName, setPendingChargeLedgerName] = useState("");
+  const [pendingItemName, setPendingItemName] = useState("");
+  const [creatingItemForLineIndex, setCreatingItemForLineIndex] = useState<number | null>(null);
   const [pendingLedgerGroupName, setPendingLedgerGroupName] = useState("");
   const [creatingLedgerGroupFromForm, setCreatingLedgerGroupFromForm] = useState<"expense" | "asset" | "charge" | null>(null);
   const [spendingTypeFormData, setSpendingTypeFormData] = useState({
@@ -115,12 +137,21 @@ function ExpensesContent() {
   });
   const [formData, setFormData] = useState({
     transaction_date: new Date(),
-    expense_ledger_id: 0,
     paying_account_id: 0,
     charge_ledger_id: 0,
     charge_amount: "",
-    amount: "",
     reference: "",
+  });
+  interface PurchaseLine {
+    item_id: number;
+    amount: string;
+  }
+  const [purchaseLines, setPurchaseLines] = useState<PurchaseLine[]>([
+    { item_id: 0, amount: "" },
+  ]);
+  const [itemFormData, setItemFormData] = useState<LedgerItemCreate>({
+    name: "",
+    ledger_id: 0,
   });
   const [ledgerFormData, setLedgerFormData] = useState<LedgerCreate>({
     name: "",
@@ -255,9 +286,53 @@ function ExpensesContent() {
     expenseLedgers,
   ]);
 
-  const expensesByLedgerDisplay = useMemo(
-    () => withMinDisplayShare(expensesByLedger, 4),
-    [expensesByLedger]
+  // Map of ledger_item.id to item name
+  const itemNameMap = useMemo(() => {
+    const map = new Map<number, string>();
+    ledgerItems.forEach((item) => {
+      map.set(item.id, item.name);
+    });
+    return map;
+  }, [ledgerItems]);
+
+  // Group expenses by item (what was bought), instead of by ledger
+  const expensesByItem = useMemo(() => {
+    const itemTotals = new Map<number, number>();
+
+    expenseTransactionsWithItems.forEach((transaction) => {
+      (transaction.items ?? []).forEach((item) => {
+        if (item.entry_type !== "DEBIT" || !item.item_id) return;
+        const amount =
+          typeof item.amount === "string" ? parseFloat(item.amount) : Number(item.amount) || 0;
+        if (amount <= 0) return;
+        const existing = itemTotals.get(item.item_id) || 0;
+        itemTotals.set(item.item_id, existing + amount);
+      });
+    });
+
+    const totalExpenses = Array.from(itemTotals.values()).reduce((sum, total) => sum + total, 0);
+
+    return Array.from(itemTotals.entries())
+      .map(([itemId, total]) => ({
+        name: itemNameMap.get(itemId) || `Unknown item (ID: ${itemId})`,
+        value: Number(total.toFixed(2)),
+        percentage: totalExpenses > 0 ? (total / totalExpenses) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [expenseTransactionsWithItems, itemNameMap]);
+
+  const [breakdownGroupBy, setBreakdownGroupBy] = useState<"ledger" | "item">("ledger");
+  const activeBreakdown = breakdownGroupBy === "item" ? expensesByItem : expensesByLedger;
+  const activeBreakdownLabel = breakdownGroupBy === "item" ? "item" : "ledger";
+
+  const activeBreakdownDisplay = useMemo(
+    () => withMinDisplayShare(activeBreakdown, 4),
+    [activeBreakdown]
+  );
+
+  const breakdownTotal = useMemo(
+    () => activeBreakdown.reduce((sum, entry) => sum + entry.value, 0),
+    [activeBreakdown]
   );
 
   // Colors for the pie chart
@@ -282,6 +357,7 @@ function ExpensesContent() {
         refetchExpenses(),
         refetchLedgers(),
         refetchSpendingTypes(),
+        refetchLedgerItems(),
       ]);
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -337,23 +413,39 @@ function ExpensesContent() {
     return `${year}-${month}-${day}`;
   };
 
+  const handleAddPurchaseLine = () => {
+    setPurchaseLines([...purchaseLines, { item_id: 0, amount: "" }]);
+  };
+
+  const handleRemovePurchaseLine = (index: number) => {
+    if (purchaseLines.length > 1) {
+      setPurchaseLines(purchaseLines.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleUpdatePurchaseLine = (
+    index: number,
+    field: "item_id" | "amount",
+    value: number | string
+  ) => {
+    const updated = [...purchaseLines];
+    const line = { ...updated[index] };
+    if (field === "item_id") {
+      line.item_id = typeof value === "number" ? value : parseInt(value as string);
+    } else {
+      line.amount = value as string;
+    }
+    updated[index] = line;
+    setPurchaseLines(updated);
+  };
+
   const handlePostExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     // Validation
-    if (!formData.expense_ledger_id) {
-      setError("Please select an expense category");
-      return;
-    }
-
     if (!formData.paying_account_id) {
       setError("Please select a paying account");
-      return;
-    }
-
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      setError("Please enter a valid amount");
       return;
     }
 
@@ -362,7 +454,22 @@ function ExpensesContent() {
       return;
     }
 
-    const amount = parseFloat(formData.amount);
+    for (let i = 0; i < purchaseLines.length; i++) {
+      const line = purchaseLines[i];
+      if (!line.item_id) {
+        setError(`Please select what was bought for row ${i + 1}`);
+        return;
+      }
+      if (!line.amount || parseFloat(line.amount) <= 0) {
+        setError(`Please enter a valid amount for row ${i + 1}`);
+        return;
+      }
+    }
+
+    const itemsTotal = purchaseLines.reduce(
+      (sum, line) => sum + (parseFloat(line.amount) || 0),
+      0
+    );
     const chargeAmount = formData.charge_ledger_id && formData.charge_amount
       ? parseFloat(formData.charge_amount)
       : 0;
@@ -375,17 +482,15 @@ function ExpensesContent() {
     }
 
     // Build transaction items
-    const items: Array<{
-      ledger_id: number;
-      entry_type: "DEBIT" | "CREDIT";
-      amount: number;
-    }> = [];
+    const items: TransactionItem[] = [];
 
-    // Debit: Expense ledger
-    items.push({
-      ledger_id: formData.expense_ledger_id,
-      entry_type: "DEBIT",
-      amount: amount,
+    // Debit: one line per purchased item (ledger resolved server-side from item_id)
+    purchaseLines.forEach((line) => {
+      items.push({
+        item_id: line.item_id,
+        entry_type: "DEBIT",
+        amount: parseFloat(line.amount),
+      });
     });
 
     // If charge ledger is selected and charge amount is provided, add it as a debit
@@ -397,8 +502,8 @@ function ExpensesContent() {
       });
     }
 
-    // Credit: Asset ledger (paying account) - total of expense + charge
-    const totalCreditAmount = amount + chargeAmount;
+    // Credit: Asset ledger (paying account) - total of all items + charge
+    const totalCreditAmount = itemsTotal + chargeAmount;
     items.push({
       ledger_id: formData.paying_account_id,
       entry_type: "CREDIT",
@@ -407,7 +512,7 @@ function ExpensesContent() {
 
     try {
       // Create transaction with double-entry accounting for expense:
-      // Debit: Expense ledger (increases expense)
+      // Debit: each purchased item's ledger (increases expense)
       // Debit: Charge ledger (if selected, increases charge expense)
       // Credit: Asset ledger (decreases asset - cash/bank account)
       await createTransactionMutation.mutateAsync({
@@ -424,13 +529,12 @@ function ExpensesContent() {
       // Reset form and close dialog
       setFormData({
         transaction_date: new Date(),
-        expense_ledger_id: 0,
         paying_account_id: 0,
         charge_ledger_id: 0,
         charge_amount: "",
-        amount: "",
         reference: "",
       });
+      setPurchaseLines([{ item_id: 0, amount: "" }]);
       setShowPostExpenseDialog(false);
       alert("Expense posted successfully!");
     } catch (err) {
@@ -454,11 +558,12 @@ function ExpensesContent() {
 
     try {
       const newLedger = await createLedgerMutation.mutateAsync(ledgerFormData);
-      
-      // Set the newly created ledger as the selected expense category
-      setFormData({
-        ...formData,
-        expense_ledger_id: newLedger.id,
+
+      // Set the newly created ledger on the item form (this dialog is only
+      // reachable from the "new item" dialog's ledger picker)
+      setItemFormData({
+        ...itemFormData,
+        ledger_id: newLedger.id,
       });
 
       // Reset ledger form and close dialog
@@ -471,6 +576,43 @@ function ExpensesContent() {
       setPendingLedgerName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create ledger");
+    }
+  };
+
+  const handleCreateNewItem = (searchTerm: string, lineIndex: number) => {
+    setPendingItemName(searchTerm);
+    setCreatingItemForLineIndex(lineIndex);
+    setItemFormData({ name: searchTerm, ledger_id: expenseLedgers[0]?.id || 0 });
+    setShowCreateItemDialog(true);
+  };
+
+  const handleCreateItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!itemFormData.name.trim()) {
+      setError("Item name is required");
+      return;
+    }
+
+    if (!itemFormData.ledger_id) {
+      setError("Please select which ledger this item posts to");
+      return;
+    }
+
+    try {
+      const newItem = await createLedgerItemMutation.mutateAsync(itemFormData);
+
+      if (creatingItemForLineIndex !== null) {
+        handleUpdatePurchaseLine(creatingItemForLineIndex, "item_id", newItem.id);
+      }
+
+      setItemFormData({ name: "", ledger_id: 0 });
+      setShowCreateItemDialog(false);
+      setPendingItemName("");
+      setCreatingItemForLineIndex(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create item");
     }
   };
 
@@ -685,7 +827,58 @@ function ExpensesContent() {
                 <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
                   Expenses
                 </h2>
-              
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBreakdownView("chart")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      breakdownView === "chart"
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    Chart
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBreakdownView("table")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      breakdownView === "table"
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    Table
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-zinc-500 dark:text-zinc-400">Group by</span>
+                  <button
+                    type="button"
+                    onClick={() => setBreakdownGroupBy("ledger")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      breakdownGroupBy === "ledger"
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    Ledger
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBreakdownGroupBy("item")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      breakdownGroupBy === "item"
+                        ? "bg-blue-600 text-white dark:bg-blue-500"
+                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    Item
+                  </button>
+                </div>
+
                 {/* Period Filter */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <div className="flex items-center gap-2">
@@ -757,24 +950,89 @@ function ExpensesContent() {
               <div className="py-12 text-center">
                 <p className="text-zinc-600 dark:text-zinc-400">Loading expense breakdown...</p>
               </div>
-            ) : expensesByLedger.length > 0 ? (
-              <div className="flex flex-col gap-8">
+            ) : activeBreakdown.length > 0 ? (
+              breakdownView === "table" ? (
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                    Total: {formatKsh(breakdownTotal)}
+                  </p>
+
+                  {/* Mobile: stacked cards */}
+                  <div className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800 md:hidden">
+                    {activeBreakdown.map((item) => (
+                      <div key={item.name} className="flex items-center justify-between gap-3 px-4 py-3">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{item.name}</span>
+                        <div className="text-right">
+                          <div className="font-bold text-zinc-900 dark:text-zinc-100">
+                            {formatKsh(item.value)}
+                          </div>
+                          <div className="text-sm text-zinc-500 dark:text-zinc-400">
+                            {item.percentage.toFixed(2)}%
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between gap-3 bg-zinc-50 px-4 py-3 dark:bg-zinc-800/50">
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">Total</span>
+                      <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                        {formatKsh(breakdownTotal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Desktop: table */}
+                  <table className="hidden w-full text-sm md:table">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                        <th className="py-2 font-medium capitalize">{activeBreakdownLabel}</th>
+                        <th className="py-2 text-right font-medium">Amount</th>
+                        <th className="py-2 text-right font-medium">% of total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeBreakdown.map((item) => (
+                        <tr key={item.name} className="border-b border-zinc-100 dark:border-zinc-800">
+                          <td className="py-2 text-zinc-900 dark:text-zinc-100">{item.name}</td>
+                          <td className="py-2 text-right text-zinc-900 dark:text-zinc-100">
+                            {formatKsh(item.value)}
+                          </td>
+                          <td className="py-2 text-right text-zinc-500 dark:text-zinc-400">
+                            {item.percentage.toFixed(2)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-zinc-200 font-semibold text-zinc-900 dark:border-zinc-700 dark:text-zinc-100">
+                        <td className="py-2">Total</td>
+                        <td className="py-2 text-right">{formatKsh(breakdownTotal)}</td>
+                        <td className="py-2 text-right">100%</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              ) : (
+              <div className="flex flex-col gap-4">
+                <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  Total: {formatKsh(breakdownTotal)}
+                </p>
                 {/* Pie Chart */}
                 <div className="flex items-center justify-center min-h-0 p-0 sm:p-2 md:p-2">
-                  <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none">
+                  <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none [&_svg]:overflow-visible">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
+                      <PieChart margin={{ top: 20, right: 110, bottom: 20, left: 110 }}>
                         <Pie
-                          data={expensesByLedgerDisplay}
+                          data={activeBreakdownDisplay}
                           cx="50%"
                           cy="30%"
                           outerRadius="60%"
-                          label={renderElbowPieLabel(expensesByLedgerDisplay, formatKsh)}
+                          label={renderElbowPieLabel(activeBreakdownDisplay, formatKsh)}
                           labelLine={false}
+                          isAnimationActive={false}
                         fill="#8884d8"
                         dataKey="displayValue"
                       >
-                        {expensesByLedgerDisplay.map((entry, index) => (
+                        {activeBreakdownDisplay.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
                             fill={COLORS[index % COLORS.length]}
@@ -797,7 +1055,7 @@ function ExpensesContent() {
                 {/* Legend with amounts */}
                 <div className="flex flex-col justify-center">
                   <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                    {expensesByLedgerDisplay.map((item, index) => (
+                    {activeBreakdownDisplay.map((item, index) => (
                       <div
                         key={item.name}
                         className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
@@ -830,6 +1088,7 @@ function ExpensesContent() {
                   </div>
                 </div>
               </div>
+              )
             ) : (
               <div className="py-12 text-center">
                 <p className="text-zinc-600 dark:text-zinc-400">
@@ -846,17 +1105,92 @@ function ExpensesContent() {
         </div>
       </main>
 
-      {/* Post Expense Dialog */}
-      <Dialog
-        isOpen={showPostExpenseDialog}
+      {/* Post Expense Drawer */}
+      <RightDrawer
+        open={showPostExpenseDialog}
         onClose={() => {
           setShowPostExpenseDialog(false);
           setError(null);
         }}
         title="Post Expense"
-        size="lg"
+        width="2xl"
       >
         <form onSubmit={handlePostExpense} className="space-y-4">
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Items *
+            </label>
+            {purchaseLines.map((line, index) => (
+              <div
+                key={index}
+                className="space-y-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex-1">
+                    <SearchableSelect
+                      options={expenseItems.map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                        searchText: item.name,
+                      }))}
+                      value={line.item_id || 0}
+                      onChange={(value) => handleUpdatePurchaseLine(index, "item_id", value)}
+                      placeholder="What did you buy?"
+                      searchPlaceholder="Type to search items..."
+                      required
+                      allowClear
+                      onCreateNew={(searchTerm) => handleCreateNewItem(searchTerm, index)}
+                      createNewLabel={(searchTerm) => `Create "${searchTerm}" item`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={line.amount}
+                      onChange={(e) =>
+                        handleUpdatePurchaseLine(index, "amount", e.target.value)
+                      }
+                      required
+                      placeholder="0.00"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 sm:w-32"
+                    />
+                    {purchaseLines.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePurchaseLine(index)}
+                        className="shrink-0 rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        aria-label="Remove item"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {line.item_id > 0 && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Posts to: {itemLedgerNameById.get(line.item_id) ?? "…"}
+                  </p>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={handleAddPurchaseLine}
+              className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              + Add another item
+            </button>
+            {expenseItems.length === 0 && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                No items yet - type a name above (e.g. &quot;Tea Leaves&quot;) and choose &quot;Create&quot; to add one.
+              </p>
+            )}
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -900,45 +1234,6 @@ function ExpensesContent() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Expense Category *
-              </label>
-              <SearchableSelect
-                options={expenseLedgers.map((ledger) => ({
-                  value: ledger.id,
-                  label: ledger.name,
-                  searchText: ledger.name,
-                }))}
-                value={formData.expense_ledger_id || 0}
-                onChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    expense_ledger_id:
-                      typeof value === "number" ? value : parseInt(value as string),
-                  })
-                }
-                placeholder="Select expense category"
-                searchPlaceholder="Type to search expense categories..."
-                required
-                className="w-full"
-                allowClear
-                onCreateNew={handleCreateNewLedger}
-                createNewLabel={(searchTerm) => `Create "${searchTerm}" expense ledger`}
-              />
-              {expenseLedgers.length === 0 && !ledgersLoading && (
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  No expense accounts found. Create one in{" "}
-                  <Link
-                    href="/accounts"
-                    className="text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    Accounts
-                  </Link>
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Paying Account *
               </label>
               <SearchableSelect
@@ -974,24 +1269,6 @@ function ExpensesContent() {
                   </Link>
                 </p>
               )}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Amount *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={formData.amount}
-                onChange={(e) =>
-                  setFormData({ ...formData, amount: e.target.value })
-                }
-                required
-                placeholder="0.00"
-                className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              />
             </div>
 
             <div>
@@ -1069,18 +1346,106 @@ function ExpensesContent() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </RightDrawer>
 
-      {/* Create Ledger Dialog */}
-      <Dialog
-        isOpen={showCreateLedgerDialog}
+      {/* Create Item Drawer */}
+      <RightDrawer
+        open={showCreateItemDialog}
+        onClose={() => {
+          setShowCreateItemDialog(false);
+          setError(null);
+          setPendingItemName("");
+          setCreatingItemForLineIndex(null);
+        }}
+        title="Create Item"
+        width="md"
+        stackLevel={1}
+      >
+        <form onSubmit={handleCreateItem} className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Item Name *
+            </label>
+            <input
+              type="text"
+              value={itemFormData.name}
+              onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
+              required
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              placeholder="e.g., Tea Leaves, Sugar, Cloud Subscription"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Posts to Ledger *
+            </label>
+            <SearchableSelect
+              options={expenseLedgers.map((ledger) => ({
+                value: ledger.id,
+                label: ledger.name,
+                searchText: ledger.name,
+              }))}
+              value={itemFormData.ledger_id || 0}
+              onChange={(value) =>
+                setItemFormData({
+                  ...itemFormData,
+                  ledger_id: typeof value === "number" ? value : parseInt(value as string),
+                })
+              }
+              placeholder="Select which ledger this item posts to"
+              searchPlaceholder="Type to search ledgers..."
+              required
+              className="w-full"
+              onCreateNew={handleCreateNewLedger}
+              createNewLabel={(searchTerm) => `Create "${searchTerm}" expense ledger`}
+            />
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              You can change this later - every past transaction for this item will move with it.
+            </p>
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateItemDialog(false);
+                setError(null);
+                setPendingItemName("");
+                setCreatingItemForLineIndex(null);
+              }}
+              className="rounded-lg border border-zinc-300 px-6 py-2 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createLedgerItemMutation.isPending}
+              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+            >
+              {createLedgerItemMutation.isPending ? "Creating..." : "Create Item"}
+            </button>
+          </div>
+        </form>
+      </RightDrawer>
+
+      {/* Create Ledger Drawer */}
+      <RightDrawer
+        open={showCreateLedgerDialog}
         onClose={() => {
           setShowCreateLedgerDialog(false);
           setError(null);
           setPendingLedgerName("");
         }}
         title="Create Expense Ledger"
-        size="lg"
+        width="md"
+        stackLevel={2}
       >
         <form onSubmit={handleCreateLedger} className="space-y-4">
           <div>
@@ -1198,18 +1563,19 @@ function ExpensesContent() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </RightDrawer>
 
-      {/* Create Asset Ledger Dialog */}
-      <Dialog
-        isOpen={showCreateAssetLedgerDialog}
+      {/* Create Asset Ledger Drawer */}
+      <RightDrawer
+        open={showCreateAssetLedgerDialog}
         onClose={() => {
           setShowCreateAssetLedgerDialog(false);
           setError(null);
           setPendingAssetLedgerName("");
         }}
         title="Create Account"
-        size="lg"
+        width="md"
+        stackLevel={1}
       >
         <form onSubmit={handleCreateAssetLedger} className="space-y-4">
           <div>
@@ -1293,14 +1659,15 @@ function ExpensesContent() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </RightDrawer>
 
-      {/* Create Spending Category Dialog */}
-      <Dialog
-        isOpen={showSpendingTypeForm}
+      {/* Create Spending Category Drawer */}
+      <RightDrawer
+        open={showSpendingTypeForm}
         onClose={() => setShowSpendingTypeForm(false)}
         title="Create Spending Category"
-        size="md"
+        width="sm"
+        stackLevel={3}
       >
         <form onSubmit={handleSpendingTypeSubmit} className="space-y-4">
           <div>
@@ -1347,18 +1714,19 @@ function ExpensesContent() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </RightDrawer>
 
-      {/* Create Charge Ledger Dialog */}
-      <Dialog
-        isOpen={showCreateChargeLedgerDialog}
+      {/* Create Charge Ledger Drawer */}
+      <RightDrawer
+        open={showCreateChargeLedgerDialog}
         onClose={() => {
           setShowCreateChargeLedgerDialog(false);
           setError(null);
           setPendingChargeLedgerName("");
         }}
         title="Create Transaction Charges Ledger"
-        size="lg"
+        width="md"
+        stackLevel={1}
       >
         <form onSubmit={handleCreateChargeLedger} className="space-y-4">
           <div>
@@ -1442,11 +1810,14 @@ function ExpensesContent() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </RightDrawer>
 
-      {/* Create Ledger Group Dialog */}
-      <Dialog
-        isOpen={showLedgerGroupForm}
+      {/* Create Ledger Group Drawer - opened from the Create Ledger (expense
+          item) drawer at stackLevel 2, or from the Asset/Charge ledger
+          drawers at stackLevel 1, so its own level must sit one above
+          whichever of those triggered it. */}
+      <RightDrawer
+        open={showLedgerGroupForm}
         onClose={() => {
           setShowLedgerGroupForm(false);
           setLedgerGroupFormData({
@@ -1458,7 +1829,8 @@ function ExpensesContent() {
           setCreatingLedgerGroupFromForm(null);
         }}
         title="Create Ledger Group"
-        size="lg"
+        width="lg"
+        stackLevel={creatingLedgerGroupFromForm === "expense" ? 3 : 2}
       >
         <form onSubmit={handleLedgerGroupSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -1562,7 +1934,7 @@ function ExpensesContent() {
             </button>
           </div>
         </form>
-      </Dialog>
+      </RightDrawer>
     </div>
   );
 }

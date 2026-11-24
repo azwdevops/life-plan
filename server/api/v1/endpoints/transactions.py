@@ -6,15 +6,52 @@ from decimal import Decimal
 from core.database import get_db
 from api.v1.endpoints.auth import get_current_user
 from models.user import User
-from models.finance import Transaction, TransactionItem, TransactionType, EntryType, Ledger
+from models.finance import Transaction, TransactionItem, TransactionType, EntryType, Ledger, LedgerItem
 from schemas.finance import (
     TransactionCreate,
     TransactionResponse,
     TransactionWithItems,
     TransactionUpdate,
+    TransactionItemCreate,
 )
 
 router = APIRouter()
+
+
+def _resolve_item_ledger_ids(
+    db: Session, user_id: int, items: List[TransactionItemCreate]
+) -> dict[int, int]:
+    """Looks up the current ledger for every item_id referenced by `items`,
+    so each line's posting ledger always reflects the item's current
+    classification, not whatever ledger_id the client happened to send."""
+    item_ids = {item.item_id for item in items if item.item_id is not None}
+    if not item_ids:
+        return {}
+
+    ledger_items = (
+        db.query(LedgerItem)
+        .filter(LedgerItem.id.in_(item_ids))
+        .filter(LedgerItem.user_id == user_id)
+        .filter(LedgerItem.is_active == True)
+        .all()
+    )
+    if len(ledger_items) != len(item_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more items not found or do not belong to user",
+        )
+    return {ledger_item.id: ledger_item.ledger_id for ledger_item in ledger_items}
+
+
+def _effective_ledger_id(item_data: TransactionItemCreate, item_ledger_map: dict[int, int]) -> int:
+    if item_data.item_id is not None:
+        return item_ledger_map[item_data.item_id]
+    if item_data.ledger_id is not None:
+        return item_data.ledger_id
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Each transaction line needs either an item_id or a ledger_id",
+    )
 
 
 @router.post(
@@ -28,17 +65,21 @@ async def create_transaction(
     db: Session = Depends(get_db),
 ):
     """Create a new transaction with double-entry accounting validation."""
-    # Validate that items exist and belong to user
-    ledger_ids = [item.ledger_id for item in transaction_data.items]
+    item_ledger_map = _resolve_item_ledger_ids(db, current_user.id, transaction_data.items)
+    resolved_ledger_ids = [
+        _effective_ledger_id(item, item_ledger_map) for item in transaction_data.items
+    ]
+
+    # Validate that ledgers exist and belong to user
     ledgers = (
         db.query(Ledger)
-        .filter(Ledger.id.in_(ledger_ids))
+        .filter(Ledger.id.in_(resolved_ledger_ids))
         .filter(Ledger.user_id == current_user.id)
         .filter(Ledger.is_active == True)
         .all()
     )
 
-    if len(ledgers) != len(set(ledger_ids)):
+    if len(ledgers) != len(set(resolved_ledger_ids)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="One or more ledgers not found or do not belong to user",
@@ -82,7 +123,8 @@ async def create_transaction(
     for item_data in transaction_data.items:
         new_item = TransactionItem(
             transaction_id=new_transaction.id,
-            ledger_id=item_data.ledger_id,
+            ledger_id=_effective_ledger_id(item_data, item_ledger_map),
+            item_id=item_data.item_id,
             entry_type=item_data.entry_type,
             amount=item_data.amount,
         )
@@ -169,17 +211,21 @@ async def update_transaction(
 
     # If items are being updated, validate them
     if transaction_data.items is not None:
-        # Validate that items exist and belong to user
-        ledger_ids = [item.ledger_id for item in transaction_data.items]
+        item_ledger_map = _resolve_item_ledger_ids(db, current_user.id, transaction_data.items)
+        resolved_ledger_ids = [
+            _effective_ledger_id(item, item_ledger_map) for item in transaction_data.items
+        ]
+
+        # Validate that ledgers exist and belong to user
         ledgers = (
             db.query(Ledger)
-            .filter(Ledger.id.in_(ledger_ids))
+            .filter(Ledger.id.in_(resolved_ledger_ids))
             .filter(Ledger.user_id == current_user.id)
             .filter(Ledger.is_active == True)
             .all()
         )
 
-        if len(ledgers) != len(set(ledger_ids)):
+        if len(ledgers) != len(set(resolved_ledger_ids)):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="One or more ledgers not found or do not belong to user",
@@ -215,7 +261,8 @@ async def update_transaction(
         for item_data in transaction_data.items:
             new_item = TransactionItem(
                 transaction_id=transaction.id,
-                ledger_id=item_data.ledger_id,
+                ledger_id=_effective_ledger_id(item_data, item_ledger_map),
+                item_id=item_data.item_id,
                 entry_type=item_data.entry_type,
                 amount=item_data.amount,
             )

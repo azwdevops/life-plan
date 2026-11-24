@@ -53,9 +53,18 @@ export function SearchableSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-  /** Below sidebar (z-40) and header (z-50) on normal pages; above dialog shell when inside a modal */
-  const [dropdownZClass, setDropdownZClass] = useState("z-30");
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  }>({ top: 0, left: 0, width: 0, maxHeight: 240 });
+  /** Below sidebar (z-40) and header (z-50) on normal pages; above whatever
+   * dialog/drawer it's nested in otherwise - read from the ambient
+   * ancestor's actual resolved z-index rather than a guessed constant, so
+   * this works at any Dialog or RightDrawer stackLevel depth. */
+  const [dropdownZIndex, setDropdownZIndex] = useState<number>(30);
 
   // Get selected option label (String compare so uuid string matches option values reliably)
   const selectedOption = options.find((opt) => optionValuesEqual(opt.value, value));
@@ -87,18 +96,36 @@ export function SearchableSelect({
   // Update dropdown position when opened
   useEffect(() => {
     if (isOpen && containerRef.current) {
-      const inDialog = !!containerRef.current.closest('[role="dialog"]');
-      setDropdownZClass(inDialog ? "z-[60]" : "z-30");
+      const dialogAncestor = containerRef.current.closest('[role="dialog"]') as HTMLElement | null;
+      if (dialogAncestor) {
+        const ambientZ = parseInt(window.getComputedStyle(dialogAncestor).zIndex, 10);
+        setDropdownZIndex(Number.isFinite(ambientZ) ? ambientZ + 10 : 300);
+      } else {
+        setDropdownZIndex(30);
+      }
 
       const updatePosition = () => {
         const rect = containerRef.current?.getBoundingClientRect();
-        if (rect) {
-          setDropdownPosition({
-            top: rect.bottom + 4, // Fixed positioning is relative to viewport
-            left: rect.left,
-            width: rect.width,
-          });
-        }
+        if (!rect) return;
+
+        const viewportMargin = 8;
+        const preferredHeight = 240; // matches the options list's max-h-60
+        const spaceBelow = window.innerHeight - rect.bottom - viewportMargin;
+        const spaceAbove = rect.top - viewportMargin;
+        // Flip to open upward if there isn't enough room below but there's
+        // more room above - otherwise the dropdown (and its "Create" option)
+        // can run off the bottom of the viewport/drawer and become
+        // unreachable instead of just shorter.
+        const openAbove = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
+        const availableHeight = Math.max(120, openAbove ? spaceAbove : spaceBelow);
+
+        setDropdownPosition({
+          top: openAbove ? undefined : rect.bottom + 4,
+          bottom: openAbove ? window.innerHeight - rect.top + 4 : undefined,
+          left: rect.left,
+          width: rect.width,
+          maxHeight: Math.min(preferredHeight, availableHeight),
+        });
       };
 
       updatePosition();
@@ -282,17 +309,20 @@ export function SearchableSelect({
       {isOpen && typeof document !== "undefined" && createPortal(
         <div
           ref={dropdownRef}
-          className={`fixed rounded-lg border border-zinc-300 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-800 ${dropdownZClass}`}
+          className="fixed flex flex-col rounded-lg border border-zinc-300 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-800"
           style={{
-            top: `${dropdownPosition.top}px`,
+            top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : undefined,
+            bottom: dropdownPosition.bottom !== undefined ? `${dropdownPosition.bottom}px` : undefined,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`,
+            maxHeight: `${dropdownPosition.maxHeight}px`,
+            zIndex: dropdownZIndex,
           }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Search Input */}
-          <div className="border-b border-zinc-200 p-2 dark:border-zinc-700">
+          <div className="shrink-0 border-b border-zinc-200 p-2 dark:border-zinc-700">
             <input
               ref={inputRef}
               type="text"
@@ -309,7 +339,7 @@ export function SearchableSelect({
           {/* Options List */}
           <ul
             ref={listRef}
-            className="max-h-60 overflow-auto p-1"
+            className="min-h-0 flex-1 overflow-auto p-1"
             role="listbox"
           >
             {filteredOptions.length === 0 && !showCreateNew ? (

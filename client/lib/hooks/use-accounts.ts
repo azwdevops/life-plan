@@ -14,10 +14,15 @@ import {
   updateLedger,
   deleteLedger,
   getLedgers,
+  getLedgerItems,
+  createLedgerItem,
+  updateLedgerItem,
+  deleteLedgerItem,
   LedgerCreate,
   ParentLedgerGroupCreate,
   LedgerGroupCreate,
   SpendingTypeCreate,
+  LedgerItemCreate,
 } from "@/lib/api/accounts";
 import { useAuth } from "./use-auth";
 
@@ -139,6 +144,60 @@ export function useDeleteLedger() {
     mutationFn: (id: number) => deleteLedger(token!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ledgers"] });
+    },
+  });
+}
+
+export function useLedgerItems() {
+  const { token } = useAuth();
+
+  return useQuery({
+    queryKey: ["ledgerItems"],
+    queryFn: () => getLedgerItems(token!),
+    enabled: !!token,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnMount: false,
+  });
+}
+
+export function useCreateLedgerItem() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: LedgerItemCreate) => createLedgerItem(token!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ledgerItems"] });
+    },
+  });
+}
+
+export function useUpdateLedgerItem() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: LedgerItemCreate }) =>
+      updateLedgerItem(token!, id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ledgerItems"] });
+      // Reclassification can change past report numbers everywhere.
+      queryClient.invalidateQueries({ queryKey: ["item-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["item-report"] });
+      queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["ledger-report"] });
+    },
+  });
+}
+
+export function useDeleteLedgerItem() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) => deleteLedgerItem(token!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ledgerItems"] });
     },
   });
 }

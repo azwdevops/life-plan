@@ -52,6 +52,21 @@ export interface Ledger {
   spending_type?: SpendingType;
 }
 
+export interface LedgerItem {
+  id: number;
+  user_id: number;
+  name: string;
+  ledger_id: number;
+  is_active: boolean;
+  created_at: string;
+  ledger?: Ledger;
+}
+
+export interface LedgerItemCreate {
+  name: string;
+  ledger_id: number;
+}
+
 export interface ParentLedgerGroupCreate {
   name: string;
   sort_order?: number | null;
@@ -345,6 +360,96 @@ export async function deleteLedgerGroup(token: string, groupId: number): Promise
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to delete ledger group");
+  }
+}
+
+export async function getLedgerItems(token: string): Promise<LedgerItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/ledger-items`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch items");
+  }
+
+  return response.json();
+}
+
+export async function createLedgerItem(
+  token: string,
+  data: LedgerItemCreate
+): Promise<LedgerItem> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/ledger-items`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to create item");
+  }
+
+  return response.json();
+}
+
+export async function updateLedgerItem(
+  token: string,
+  itemId: number,
+  data: LedgerItemCreate
+): Promise<LedgerItem> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/ledger-items/${itemId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to update item");
+  }
+
+  return response.json();
+}
+
+export async function deleteLedgerItem(token: string, itemId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/ledger-items/${itemId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to delete item");
   }
 }
 

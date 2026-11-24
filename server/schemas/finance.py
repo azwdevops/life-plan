@@ -99,9 +99,37 @@ class LedgerWithGroup(LedgerResponse):
         from_attributes = True
 
 
+# Ledger Item Schemas
+class LedgerItemBase(BaseModel):
+    name: str
+    ledger_id: int
+
+
+class LedgerItemCreate(LedgerItemBase):
+    pass
+
+
+class LedgerItemResponse(LedgerItemBase):
+    id: int
+    user_id: int
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LedgerItemWithLedger(LedgerItemResponse):
+    ledger: LedgerResponse
+
+    class Config:
+        from_attributes = True
+
+
 # Transaction Schemas
 class TransactionItemBase(BaseModel):
-    ledger_id: int
+    ledger_id: Optional[int] = None
+    item_id: Optional[int] = None
     entry_type: EntryType
     amount: Decimal
 
@@ -110,9 +138,13 @@ class TransactionItemCreate(TransactionItemBase):
     pass
 
 
-class TransactionItemResponse(TransactionItemBase):
+class TransactionItemResponse(BaseModel):
     id: int
     transaction_id: int
+    ledger_id: int
+    item_id: Optional[int] = None
+    entry_type: EntryType
+    amount: Decimal
     created_at: datetime
 
     class Config:

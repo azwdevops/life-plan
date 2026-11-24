@@ -88,6 +88,28 @@ class Ledger(Base):
     transaction_items = relationship("TransactionItem", back_populates="ledger", cascade="all, delete-orphan")
 
 
+class LedgerItem(Base):
+    """What a transaction line actually represents to the user (e.g. "Tea
+    Leaves"), resolving to a ledger. Reassigning `ledger_id` reclassifies
+    every past TransactionItem tagged with this item (see
+    update_ledger_item in accounts.py) - distinct from SpendingType, which
+    tags a ledger itself rather than a transaction line."""
+
+    __tablename__ = "ledger_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    ledger_id = Column(Integer, ForeignKey("ledgers.id"), nullable=False, index=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    ledger = relationship("Ledger")
+    transaction_items = relationship("TransactionItem", back_populates="item")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 
@@ -110,6 +132,7 @@ class TransactionItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False, index=True)
     ledger_id = Column(Integer, ForeignKey("ledgers.id"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("ledger_items.id"), nullable=True, index=True)
     entry_type = Column(Enum(EntryType), nullable=False)
     amount = Column(Numeric(15, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -117,6 +140,7 @@ class TransactionItem(Base):
     # Relationships
     transaction = relationship("Transaction", back_populates="items")
     ledger = relationship("Ledger", back_populates="transaction_items")
+    item = relationship("LedgerItem", back_populates="transaction_items")
 
 
 class UpcomingExpense(Base):

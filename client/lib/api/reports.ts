@@ -161,3 +161,105 @@ export async function getLedgerReport(
   return response.json();
 }
 
+export interface ItemBalanceItem {
+  item_id: number;
+  item_name: string;
+  ledger_id: number;
+  ledger_name: string;
+  total_debit: number;
+  total_credit: number;
+}
+
+export interface ItemBalancesResponse {
+  start_date: string;
+  end_date: string;
+  items: ItemBalanceItem[];
+}
+
+export async function getItemBalances(
+  token: string,
+  startDate: string,
+  endDate: string
+): Promise<ItemBalancesResponse> {
+  const params = new URLSearchParams();
+  params.append("start_date", startDate);
+  params.append("end_date", endDate);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/reports/item-balances?${params.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to fetch item balances");
+  }
+
+  return response.json();
+}
+
+export interface ItemReportEntry {
+  transaction_id: number;
+  transaction_date: string;
+  reference: string | null;
+  transaction_type: string;
+  entry_type: string;
+  amount: number;
+}
+
+export interface ItemReportResponse {
+  item_id: number;
+  item_name: string;
+  ledger_id: number;
+  ledger_name: string;
+  start_date: string;
+  end_date: string;
+  entries: ItemReportEntry[];
+  total_debit: number;
+  total_credit: number;
+}
+
+export async function getItemReport(
+  token: string,
+  itemId: number,
+  startDate: string,
+  endDate: string
+): Promise<ItemReportResponse> {
+  const params = new URLSearchParams();
+  params.append("item_id", itemId.toString());
+  params.append("start_date", startDate);
+  params.append("end_date", endDate);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/reports/item?${params.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to fetch item report");
+  }
+
+  return response.json();
+}
+

@@ -5,7 +5,7 @@ from typing import List
 from core.database import get_db
 from api.v1.endpoints.auth import get_current_user
 from models.user import User
-from models.finance import Ledger, LedgerGroup, ParentLedgerGroup, SpendingType
+from models.finance import Ledger, LedgerGroup, ParentLedgerGroup, SpendingType, LedgerItem, TransactionItem
 from schemas.finance import (
     LedgerCreate,
     LedgerResponse,
@@ -17,6 +17,9 @@ from schemas.finance import (
     ParentLedgerGroupResponse,
     SpendingTypeCreate,
     SpendingTypeResponse,
+    LedgerItemCreate,
+    LedgerItemResponse,
+    LedgerItemWithLedger,
 )
 
 router = APIRouter()
@@ -192,6 +195,143 @@ async def create_spending_type(
     db.refresh(new_spending_type)
 
     return new_spending_type
+
+
+def _get_active_ledger_for_user(db: Session, ledger_id: int, user_id: int) -> Ledger:
+    ledger = (
+        db.query(Ledger)
+        .filter(Ledger.id == ledger_id, Ledger.user_id == user_id, Ledger.is_active == True)
+        .first()
+    )
+    if not ledger:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ledger not found")
+    return ledger
+
+
+@router.get("/ledger-items", response_model=List[LedgerItemWithLedger])
+async def get_ledger_items(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all ledger items (what the user buys/earns, e.g. "Tea Leaves") for the current user."""
+    items = (
+        db.query(LedgerItem)
+        .options(joinedload(LedgerItem.ledger))
+        .filter(LedgerItem.user_id == current_user.id)
+        .filter(LedgerItem.is_active == True)
+        .order_by(LedgerItem.name)
+        .all()
+    )
+    return items
+
+
+@router.post(
+    "/ledger-items",
+    response_model=LedgerItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_ledger_item(
+    item_data: LedgerItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new ledger item. Transaction lines post to item.ledger_id."""
+    _get_active_ledger_for_user(db, item_data.ledger_id, current_user.id)
+
+    existing = (
+        db.query(LedgerItem)
+        .filter(
+            LedgerItem.name == item_data.name,
+            LedgerItem.user_id == current_user.id,
+            LedgerItem.is_active == True,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Item with this name already exists",
+        )
+
+    new_item = LedgerItem(
+        user_id=current_user.id,
+        name=item_data.name,
+        ledger_id=item_data.ledger_id,
+    )
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+
+    return new_item
+
+
+@router.put("/ledger-items/{item_id}", response_model=LedgerItemResponse)
+async def update_ledger_item(
+    item_id: int,
+    item_data: LedgerItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a ledger item. Reassigning ledger_id re-posts every past
+    transaction line tagged with this item to the new ledger, so historical
+    reports reflect the new classification immediately."""
+    item = (
+        db.query(LedgerItem)
+        .filter(LedgerItem.id == item_id, LedgerItem.user_id == current_user.id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+
+    _get_active_ledger_for_user(db, item_data.ledger_id, current_user.id)
+
+    existing = (
+        db.query(LedgerItem)
+        .filter(
+            LedgerItem.name == item_data.name,
+            LedgerItem.user_id == current_user.id,
+            LedgerItem.id != item_id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Item with this name already exists",
+        )
+
+    item.name = item_data.name
+    if item_data.ledger_id != item.ledger_id:
+        db.query(TransactionItem).filter(TransactionItem.item_id == item.id).update(
+            {TransactionItem.ledger_id: item_data.ledger_id}
+        )
+        item.ledger_id = item_data.ledger_id
+
+    db.commit()
+    db.refresh(item)
+
+    return item
+
+
+@router.delete("/ledger-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ledger_item(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Soft delete a ledger item by setting is_active to False."""
+    item = (
+        db.query(LedgerItem)
+        .filter(LedgerItem.id == item_id, LedgerItem.user_id == current_user.id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+
+    item.is_active = False
+    db.commit()
+
+    return None
 
 
 @router.post("/", response_model=LedgerResponse, status_code=status.HTTP_201_CREATED)
