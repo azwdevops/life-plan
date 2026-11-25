@@ -38,21 +38,6 @@ import {
 } from "@/components/time-tracker/SearchableSelectPicker";
 import { registerTrackerPresetHandler } from "@/lib/time-tracker-preset-bridge";
 
-/** Dedicated worker so 1s ticks are less aggressively throttled than main-thread timers in background tabs. */
-const TIMER_TICK_WORKER_SOURCE = `
-let id = null;
-self.onmessage = function (e) {
-  if (e.data === "start") {
-    if (id != null) clearInterval(id);
-    id = setInterval(function () { self.postMessage(0); }, 1000);
-  }
-  if (e.data === "stop") {
-    if (id != null) clearInterval(id);
-    id = null;
-  }
-};
-`;
-
 function IconPlay({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -228,6 +213,32 @@ function buildStartBodyFromPreset(
   };
 }
 
+/** Starts the ticking display from "now" immediately, before the
+ * start-session request even reaches the server - so the timer doesn't sit
+ * frozen at 0 for however long that round trip takes. The server's reply
+ * (a started_at a little earlier than this) replaces it moments later; the
+ * only visible effect is the elapsed count nudging forward slightly, never
+ * a stall. Category is unknown until that reply arrives, so it's left null
+ * here - harmless since nothing reads it before the real session lands. */
+function optimisticSessionFromBody(body: StartActiveSessionBody): TimeTrackerSession {
+  return {
+    kind: body.kind,
+    subjectId:
+      body.kind === "goal"
+        ? String(body.goal_id ?? "")
+        : String(body.project_id ?? ""),
+    subjectName: body.subject_name,
+    categoryId: null,
+    categoryName: null,
+    parentGoalId: body.parent_goal_id ?? null,
+    parentGoalName: body.parent_goal_name ?? null,
+    description: body.description ?? "",
+    startedAt: new Date().toISOString(),
+    accumulatedPauseMs: 0,
+    pauseStartedAt: null,
+  };
+}
+
 export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const { token } = useAuth();
   const [hydrated, setHydrated] = useState(false);
@@ -323,6 +334,10 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
         if (!token) return;
         const body = buildStartBodyFromPreset(kindArg, d, goals, projects);
         if (!body) return;
+        const previousSession = session;
+        const optimistic = optimisticSessionFromBody(body);
+        setSession(optimistic);
+        saveSession(optimistic);
         try {
           const result = await startActiveSession(token, body);
           setSession(result.session);
@@ -331,6 +346,8 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
             window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
           }
         } catch {
+          setSession(previousSession);
+          saveSession(previousSession);
           return;
         }
         setKind(kindArg);
@@ -347,7 +364,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       );
       setDescription(desc);
     },
-    [token, goals, projects]
+    [token, goals, projects, session]
   );
 
   useEffect(() => {
@@ -411,30 +428,18 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       backupId = window.setInterval(bump, 10_000);
     }
 
-    let stopWorker: () => void;
-    try {
-      const blob = new Blob([TIMER_TICK_WORKER_SOURCE], {
-        type: "application/javascript",
-      });
-      const url = URL.createObjectURL(blob);
-      const worker = new Worker(url);
-      worker.onmessage = () => bump();
-      worker.postMessage("start");
-      stopWorker = () => {
-        worker.postMessage("stop");
-        worker.terminate();
-        URL.revokeObjectURL(url);
-      };
-    } catch {
-      const mainId = window.setInterval(bump, 1000);
-      stopWorker = () => window.clearInterval(mainId);
-    }
+    // Ticking is purely local: elapsedMs(session) is always recomputed from
+    // the server's started_at against the current time, never accumulated
+    // tick-by-tick, so this interval only drives how often the display
+    // re-renders - a missed or delayed tick can never cause drift, it just
+    // catches up to the correct value on the next one.
+    const tickId = window.setInterval(bump, 1000);
 
     return () => {
       document.removeEventListener("visibilitychange", syncHiddenBackup);
       window.removeEventListener("focus", onFocus);
       if (backupId != null) clearInterval(backupId);
-      stopWorker();
+      window.clearInterval(tickId);
     };
   }, [session]);
 
@@ -522,6 +527,9 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     if (!body) return;
     setStarting(true);
     setStartError(null);
+    const optimistic = optimisticSessionFromBody(body);
+    setSession(optimistic);
+    saveSession(optimistic);
     try {
       const result = await startActiveSession(token, body);
       setSession(result.session);
@@ -533,6 +541,8 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
         window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
       }
     } catch (err) {
+      setSession(null);
+      saveSession(null);
       setStartError(err instanceof Error ? err.message : "Failed to start timer");
     } finally {
       setStarting(false);

@@ -260,22 +260,37 @@ function getFilteredDaily(
   return fillRangeDaily(start, end, dailyMap);
 }
 
+function subjectFk(e: TimeTrackerEntry): number | null {
+  return e.kind === "goal" ? e.goalId : e.projectId;
+}
+
+/**
+ * One bar per project/goal. A resolved FK (`goalId`/`projectId`) is the
+ * authoritative "same project" signal; entries with no resolved FK (legacy
+ * rows from before projects had real backend ids) fall back to matching by
+ * name, merging into whichever bar - FK-based or name-only - already covers
+ * that name. Mirrors groupDayItemsBySubject in TimeTrackingPanel.tsx -
+ * without this, a project tracked partly before and partly after being
+ * assigned a category (or before its project id was resolvable at all)
+ * would otherwise render as two separate bars for what's really one project.
+ */
 function aggregateProjectsForDay(
   entries: TimeTrackerEntry[],
   dayIso: string
 ): ProjectDayPoint[] {
+  const dayRows = entries.filter((row) => entryLocalDate(row.startedAt) === dayIso);
   const map = new Map<string, ProjectDayPoint>();
-  for (const row of entries) {
-    if (entryLocalDate(row.startedAt) !== dayIso) continue;
-    const subjectKey = `${row.kind}:${row.subjectId || row.subjectName}`;
-    const prev = map.get(subjectKey);
+  const fkKeyByName = new Map<string, string>();
+
+  const addTo = (key: string, row: TimeTrackerEntry) => {
+    const prev = map.get(key);
     if (prev) {
       prev.totalMs += row.durationMs;
       prev.totalMinutes = prev.totalMs / 60000;
       prev.sessions += 1;
     } else {
-      map.set(subjectKey, {
-        subjectKey,
+      map.set(key, {
+        subjectKey: key,
         name: row.subjectName,
         kind: row.kind,
         totalMs: row.durationMs,
@@ -283,7 +298,23 @@ function aggregateProjectsForDay(
         sessions: 1,
       });
     }
+  };
+
+  for (const row of dayRows) {
+    const fk = subjectFk(row);
+    if (fk == null) continue;
+    const key = `${row.kind}:fk:${fk}`;
+    const nameKey = `${row.kind}:${row.subjectName.trim().toLowerCase()}`;
+    if (!fkKeyByName.has(nameKey)) fkKeyByName.set(nameKey, key);
+    addTo(key, row);
   }
+  for (const row of dayRows) {
+    if (subjectFk(row) != null) continue;
+    const nameKey = `${row.kind}:${row.subjectName.trim().toLowerCase()}`;
+    const key = fkKeyByName.get(nameKey) ?? `${row.kind}:name:${nameKey}`;
+    addTo(key, row);
+  }
+
   return Array.from(map.values()).sort((a, b) => b.totalMs - a.totalMs);
 }
 
