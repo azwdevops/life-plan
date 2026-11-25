@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -15,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  TIME_TRACKER_PALETTE,
   formatDurationMs,
   type TimeTrackerEntry,
   type TimeTrackerKind,
@@ -97,71 +96,6 @@ function formatMinutesAxis(totalMinutes: number): string {
   if (h === 0) return `${rem}m`;
   if (rem === 0) return `${h}h`;
   return `${h}h ${rem}m`;
-}
-
-function truncateLabel(name: string, max = 14): string {
-  if (name.length <= max) return name;
-  return `${name.slice(0, max - 1)}…`;
-}
-
-function fitLabelToWidth(name: string, width: number, fontSize = 11): string {
-  const maxChars = Math.max(8, Math.floor(width / (fontSize * 0.55)));
-  return truncateLabel(name, maxChars);
-}
-
-function renderProjectBarShape(props: {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  fill?: string;
-  payload?: ProjectDayPoint;
-}) {
-  const { x, y, width, height, fill, payload } = props;
-  if (x == null || y == null || width == null || height == null || !payload) {
-    return null;
-  }
-
-  const barHeight = Math.max(height, 72);
-  const cx = x + width / 2;
-  const padX = 8;
-  const label = fitLabelToWidth(payload.name, width - padX * 2);
-  const duration = formatDurationMs(payload.totalMs);
-  const kindLabel = payload.kind === "goal" ? "Goal" : "Project";
-  const startY = y + 18;
-
-  return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={barHeight}
-        rx={6}
-        ry={6}
-        fill={fill ?? CHART_LINE}
-      />
-      <text
-        x={cx}
-        y={startY}
-        textAnchor="middle"
-        fill="#ffffff"
-        fontSize={11}
-        fontWeight={700}
-        stroke="#0f172a"
-        strokeWidth={0.45}
-        paintOrder="stroke"
-      >
-        <tspan x={cx}>{label}</tspan>
-        <tspan x={cx} dy={18} fontSize={10} fontWeight={600}>
-          {kindLabel} · {duration}
-        </tspan>
-      </text>
-      {label !== payload.name ? (
-        <title>{payload.name}</title>
-      ) : null}
-    </g>
-  );
 }
 
 function aggregateDailyFromEntries(
@@ -393,6 +327,10 @@ export function TimeTrackingCharts({
         ? aggregateProjectsForDay(entries, selectedDayIso)
         : [],
     [entries, selectedDayIso]
+  );
+  const selectedDayProjectTotalMs = useMemo(
+    () => selectedDayProjectSeries.reduce((sum, p) => sum + p.totalMs, 0),
+    [selectedDayProjectSeries]
   );
 
   const periodSummaryLabel = useMemo(() => {
@@ -695,51 +633,41 @@ export function TimeTrackingCharts({
                 No time was tracked on this day.
               </p>
             ) : (
-              <ResponsiveContainer width="100%" height="100%" debounce={150}>
-                <BarChart
-                  data={selectedDayProjectSeries}
-                  margin={{ top: 12, right: 8, left: 0, bottom: 8 }}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke={CHART_GRID}
-                    className="dark:opacity-30"
-                  />
-                  <XAxis dataKey="subjectKey" hide />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: CHART_AXIS }}
-                    width={48}
-                    domain={[0, "auto"]}
-                    tickFormatter={(v) => formatMinutesAxis(Number(v))}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 8,
-                      border: "1px solid #e4e4e7",
-                    }}
-                    formatter={(value, _name, item) => {
-                      const p = item?.payload as ProjectDayPoint | undefined;
-                      const sessions = p?.sessions ?? 0;
-                      const kind = p?.kind === "goal" ? "Goal" : "Project";
-                      return [
-                        `${formatDurationMs(Math.round(Number(value ?? 0) * 60000))} (${sessions} session${sessions === 1 ? "" : "s"})`,
-                        kind,
-                      ];
-                    }}
-                    labelFormatter={(_, payload) =>
-                      (payload?.[0]?.payload as ProjectDayPoint | undefined)
-                        ?.name ?? ""
-                    }
-                  />
-                  <Bar
-                    dataKey="totalMinutes"
-                    stroke={CHART_LINE}
-                    fill={CHART_LINE}
-                    minPointSize={72}
-                    shape={(props) => renderProjectBarShape(props as never)}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <ul className="flex h-full flex-col gap-1.5 overflow-y-auto pr-1">
+                {selectedDayProjectSeries.map((p, idx) => {
+                  const rawPct =
+                    selectedDayProjectTotalMs > 0
+                      ? (p.totalMs / selectedDayProjectTotalMs) * 100
+                      : 0;
+                  const pct =
+                    selectedDayProjectTotalMs > 0 ? Math.max(rawPct, 3) : 0;
+                  const color =
+                    TIME_TRACKER_PALETTE[idx % TIME_TRACKER_PALETTE.length];
+                  return (
+                    <li
+                      key={p.subjectKey}
+                      className="relative shrink-0 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                    >
+                      <div
+                        className="absolute inset-y-0 left-0"
+                        style={{ width: `${pct}%`, backgroundColor: color }}
+                      />
+                      <div className="relative flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                        <span className="truncate font-bold text-zinc-900 dark:text-white">
+                          {p.name}
+                          <span className="ml-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                            · {p.sessions} session{p.sessions === 1 ? "" : "s"}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                          {formatDurationMs(p.totalMs)} ·{" "}
+                          <span style={{ color }}>{Math.round(rawPct)}%</span>
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         </div>

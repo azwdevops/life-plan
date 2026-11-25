@@ -92,6 +92,20 @@ export interface TimeTrackerEntry {
   durationMs: number;
 }
 
+/** Cycled by index for category/project breakdown rows and bars, so the same slot always gets the same color within one list. */
+export const TIME_TRACKER_PALETTE = [
+  "#1d4ed8",
+  "#7e22ce",
+  "#15803d",
+  "#b45309",
+  "#b91c1c",
+  "#0e7490",
+  "#be185d",
+  "#4d7c0f",
+  "#6d28d9",
+  "#c2410c",
+];
+
 function safeParse<T>(raw: string | null, fallback: T): T {
   if (raw == null || raw === "") return fallback;
   try {

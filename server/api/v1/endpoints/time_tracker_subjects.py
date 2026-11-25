@@ -84,7 +84,7 @@ def _assert_unique_name(
 
 
 @router.get("/goals", response_model=List[TimeTrackerGoalOut])
-async def list_time_tracker_goals(
+def list_time_tracker_goals(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -97,7 +97,7 @@ async def list_time_tracker_goals(
 
 
 @router.post("/goals", response_model=TimeTrackerGoalOut, status_code=status.HTTP_201_CREATED)
-async def create_time_tracker_goal(
+def create_time_tracker_goal(
     body: TimeTrackerGoalCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -114,7 +114,7 @@ async def create_time_tracker_goal(
 
 
 @router.put("/goals/{goal_id}", response_model=TimeTrackerGoalOut)
-async def update_time_tracker_goal(
+def update_time_tracker_goal(
     goal_id: int,
     body: TimeTrackerGoalUpdate,
     current_user: User = Depends(get_current_user),
@@ -136,7 +136,7 @@ async def update_time_tracker_goal(
 
 
 @router.delete("/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_time_tracker_goal(
+def delete_time_tracker_goal(
     goal_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -150,7 +150,7 @@ async def delete_time_tracker_goal(
 
 
 @router.get("/projects", response_model=List[TimeTrackerProjectOut])
-async def list_time_tracker_projects(
+def list_time_tracker_projects(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -165,7 +165,7 @@ async def list_time_tracker_projects(
 @router.post(
     "/projects", response_model=TimeTrackerProjectOut, status_code=status.HTTP_201_CREATED
 )
-async def create_time_tracker_project(
+def create_time_tracker_project(
     body: TimeTrackerProjectCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -191,7 +191,7 @@ async def create_time_tracker_project(
 
 
 @router.put("/projects/{project_id}", response_model=TimeTrackerProjectOut)
-async def update_time_tracker_project(
+def update_time_tracker_project(
     project_id: int,
     body: TimeTrackerProjectUpdate,
     current_user: User = Depends(get_current_user),
@@ -219,7 +219,7 @@ async def update_time_tracker_project(
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_time_tracker_project(
+def delete_time_tracker_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -233,7 +233,7 @@ async def delete_time_tracker_project(
 
 
 @router.get("/categories", response_model=List[TimeTrackerCategoryOut])
-async def list_time_tracker_categories(
+def list_time_tracker_categories(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -248,7 +248,7 @@ async def list_time_tracker_categories(
 @router.post(
     "/categories", response_model=TimeTrackerCategoryOut, status_code=status.HTTP_201_CREATED
 )
-async def create_time_tracker_category(
+def create_time_tracker_category(
     body: TimeTrackerCategoryCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -265,7 +265,7 @@ async def create_time_tracker_category(
 
 
 @router.put("/categories/{category_id}", response_model=TimeTrackerCategoryOut)
-async def update_time_tracker_category(
+def update_time_tracker_category(
     category_id: int,
     body: TimeTrackerCategoryUpdate,
     current_user: User = Depends(get_current_user),
@@ -285,7 +285,7 @@ async def update_time_tracker_category(
 
 
 @router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_time_tracker_category(
+def delete_time_tracker_category(
     category_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

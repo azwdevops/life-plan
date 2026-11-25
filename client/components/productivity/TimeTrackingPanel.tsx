@@ -17,6 +17,7 @@ import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { HeaderTimeTracker } from "@/components/HeaderTimeTracker";
 import {
   TIME_TRACKER_ENTRIES_UPDATED_EVENT,
+  TIME_TRACKER_PALETTE,
   formatDurationMs,
   type TimeTrackerEntry,
   type TimeTrackerKind,
@@ -549,19 +550,6 @@ function groupDayItemsBySubject(dayItems: TimeTrackerEntry[]): SubjectGroup[] {
   return groups;
 }
 
-const CATEGORY_COLORS = [
-  "#2563eb",
-  "#9333ea",
-  "#16a34a",
-  "#d97706",
-  "#dc2626",
-  "#0891b2",
-  "#db2777",
-  "#65a30d",
-  "#7c3aed",
-  "#ea580c",
-];
-
 type CategoryBreakdownRow = {
   categoryId: string | null;
   name: string;
@@ -597,6 +585,57 @@ function categoryBreakdownForDay(dayItems: TimeTrackerEntry[]): CategoryBreakdow
   }
   rows.sort((a, b) => b.totalMs - a.totalMs);
   return rows;
+}
+
+type CategoryConstituentRow = {
+  key: string;
+  name: string;
+  totalMs: number;
+};
+
+/**
+ * What a category breakdown row is made of: each project tracked under it
+ * that day, by its own frozen categoryId (same matching rule as
+ * categoryBreakdownForDay above) grouped by project - FK first, name as a
+ * fallback for legacy rows without one, mirroring subjectFk's use elsewhere.
+ */
+function categoryConstituentsForDay(
+  dayItems: TimeTrackerEntry[],
+  categoryId: string | null
+): CategoryConstituentRow[] {
+  const matches = dayItems.filter((e) => {
+    if (e.kind !== "project") return false;
+    const key = e.categoryId != null ? String(e.categoryId) : null;
+    return key === categoryId;
+  });
+
+  const map = new Map<string, CategoryConstituentRow>();
+  const fkKeyByName = new Map<string, string>();
+  const addTo = (key: string, row: TimeTrackerEntry) => {
+    const prev = map.get(key);
+    if (prev) {
+      prev.totalMs += row.durationMs;
+    } else {
+      map.set(key, { key, name: row.subjectName, totalMs: row.durationMs });
+    }
+  };
+
+  for (const row of matches) {
+    const fk = subjectFk(row);
+    if (fk == null) continue;
+    const key = `project:fk:${fk}`;
+    const nameKey = row.subjectName.trim().toLowerCase();
+    if (!fkKeyByName.has(nameKey)) fkKeyByName.set(nameKey, key);
+    addTo(key, row);
+  }
+  for (const row of matches) {
+    if (subjectFk(row) != null) continue;
+    const nameKey = row.subjectName.trim().toLowerCase();
+    const key = fkKeyByName.get(nameKey) ?? `project:name:${nameKey}`;
+    addTo(key, row);
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.totalMs - a.totalMs);
 }
 
 function expandKey(dayKey: string, groupKey: string): string {
@@ -1893,39 +1932,97 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
 
                       {categoryBreakdown.length > 0 ? (
                         <div className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-                          <ul className="flex flex-col gap-2">
+                          <ul className="flex flex-col gap-1.5">
                             {categoryBreakdown.map((row, idx) => {
-                              const pct =
+                              const rawPct =
                                 categoryBreakdownTotalMs > 0
                                   ? (row.totalMs / categoryBreakdownTotalMs) * 100
                                   : 0;
+                              const pct = categoryBreakdownTotalMs > 0 ? Math.max(rawPct, 3) : 0;
                               const color =
-                                CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                                TIME_TRACKER_PALETTE[idx % TIME_TRACKER_PALETTE.length];
+                              const groupKey = `category:${row.categoryId ?? "uncategorized"}`;
+                              const ek = expandKey(day.dayKey, groupKey);
+                              const isOpen = expanded[ek] ?? false;
+                              const constituents = isOpen
+                                ? categoryConstituentsForDay(day.items, row.categoryId)
+                                : [];
                               return (
-                                <li key={row.categoryId ?? "uncategorized"}>
-                                  <div className="flex items-center justify-between gap-2 text-sm">
-                                    <span className="flex min-w-0 items-center gap-2">
-                                      <span
-                                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                        style={{ backgroundColor: color }}
+                                <li
+                                  key={row.categoryId ?? "uncategorized"}
+                                  className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(day.dayKey, groupKey)}
+                                    aria-expanded={isOpen}
+                                    aria-controls={`${ek}-panel`}
+                                    className="relative flex w-full items-center gap-2 overflow-hidden px-3 py-2 text-left text-sm"
+                                  >
+                                    <div
+                                      className="absolute inset-y-0 left-0"
+                                      style={{ width: `${pct}%`, backgroundColor: color }}
+                                    />
+                                    <svg
+                                      className={`relative h-3.5 w-3.5 shrink-0 transition-transform ${
+                                        isOpen ? "rotate-90" : ""
+                                      }`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      viewBox="0 0 24 24"
+                                      aria-hidden
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M9 5l7 7-7 7"
                                       />
-                                      <span className="truncate text-zinc-800 dark:text-zinc-200">
+                                    </svg>
+                                    <span className="relative flex min-w-0 flex-1 items-center justify-between gap-2">
+                                      <span className="truncate font-bold text-zinc-900 dark:text-white">
                                         {row.name}
                                       </span>
+                                      <span className="shrink-0 font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                                        {formatDurationMs(row.totalMs)} ·{" "}
+                                        <span style={{ color }}>
+                                          {Math.round(rawPct)}%
+                                        </span>
+                                      </span>
                                     </span>
-                                    <span className="shrink-0 font-mono text-xs text-zinc-600 dark:text-zinc-400">
-                                      {formatDurationMs(row.totalMs)}
-                                    </span>
-                                  </div>
-                                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${pct}%`,
-                                        backgroundColor: color,
-                                      }}
-                                    />
-                                  </div>
+                                  </button>
+                                  {isOpen ? (
+                                    <ul
+                                      id={`${ek}-panel`}
+                                      className="flex flex-col divide-y divide-zinc-100 border-t border-zinc-200 dark:divide-zinc-800 dark:border-zinc-700"
+                                    >
+                                      {constituents.length === 0 ? (
+                                        <li className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                          No projects to show.
+                                        </li>
+                                      ) : (
+                                        constituents.map((c) => {
+                                          const cPct =
+                                            row.totalMs > 0
+                                              ? (c.totalMs / row.totalMs) * 100
+                                              : 0;
+                                          return (
+                                            <li
+                                              key={c.key}
+                                              className="flex items-center justify-between gap-2 px-3 py-1.5 pl-9 text-xs"
+                                            >
+                                              <span className="truncate text-zinc-700 dark:text-zinc-300">
+                                                {c.name}
+                                              </span>
+                                              <span className="shrink-0 font-mono text-zinc-500 dark:text-zinc-400">
+                                                {formatDurationMs(c.totalMs)} ({Math.round(cPct)}%)
+                                              </span>
+                                            </li>
+                                          );
+                                        })
+                                      )}
+                                    </ul>
+                                  ) : null}
                                 </li>
                               );
                             })}

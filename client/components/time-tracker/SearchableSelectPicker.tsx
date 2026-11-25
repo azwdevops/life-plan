@@ -53,7 +53,13 @@ export function SearchableSelectPicker({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [panelFilter, setPanelFilter] = useState("");
-  const [panelBox, setPanelBox] = useState({ top: 0, left: 0, width: 160 });
+  const [panelBox, setPanelBox] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  }>({ top: 0, left: 0, width: 160, maxHeight: 176 });
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -71,10 +77,21 @@ export function SearchableSelectPicker({
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
+    const margin = 8;
+    const spaceBelow = window.innerHeight - r.bottom - 4 - margin;
+    const spaceAbove = r.top - 4 - margin;
+    const preferredHeight = 176; // matches the listbox's old max-h-44
+    const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
     setPanelBox({
-      top: r.bottom + 4,
+      ...(openUpward
+        ? { bottom: window.innerHeight - r.top + 4 }
+        : { top: r.bottom + 4 }),
       left: r.left,
       width: Math.max(r.width, 168),
+      maxHeight: Math.max(
+        80,
+        Math.min(preferredHeight, openUpward ? spaceAbove : spaceBelow)
+      ),
     });
   }, []);
 
@@ -139,6 +156,7 @@ export function SearchableSelectPicker({
         style={{
           position: "fixed",
           top: panelBox.top,
+          bottom: panelBox.bottom,
           left: panelBox.left,
           width: panelBox.width,
         }}
@@ -147,7 +165,8 @@ export function SearchableSelectPicker({
         <ul
           id={`${instanceId}-listbox`}
           role="listbox"
-          className="max-h-44 overflow-y-auto py-1"
+          style={{ maxHeight: panelBox.maxHeight }}
+          className="overflow-y-auto py-1"
         >
           {noneOptionLabel && onSelectNone ? (
             <li key="__none__" role="option">
