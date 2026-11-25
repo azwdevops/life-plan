@@ -26,7 +26,6 @@ import {
   startActiveSession,
   stopActiveSession,
   patchActiveSession,
-  activeSessionStreamUrl,
   type StartActiveSessionBody,
 } from "@/lib/api/time-tracker-active-session";
 import { useAuth } from "@/lib/hooks/use-auth";
@@ -293,24 +292,32 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
     };
   }, [token]);
 
-  // One-shot "something changed elsewhere" push — on any message, just
-  // re-fetch the authoritative state rather than trying to apply partial
-  // state from the event payload.
+  // No live cross-device push: instead, re-fetch the authoritative state
+  // whenever this tab regains focus/visibility, so a session stopped or
+  // changed elsewhere is caught up on promptly without an always-open
+  // connection per tab.
   useEffect(() => {
     if (!token) return;
-    const es = new EventSource(activeSessionStreamUrl(token));
-    es.onmessage = () => {
+    const refetch = () => {
       void getActiveSession(token)
         .then((s) => {
           setSession(s);
           saveSession(s);
         })
         .catch(() => {
-          /* ignore transient errors; next message or reload will recover */
+          /* keep current value on transient errors */
         });
       window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
     };
-    return () => es.close();
+    const onVisibility = () => {
+      if (!document.hidden) refetch();
+    };
+    window.addEventListener("focus", refetch);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", refetch);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [token]);
 
   const applyPreset = useCallback(

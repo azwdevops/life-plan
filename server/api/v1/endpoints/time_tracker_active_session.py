@@ -2,14 +2,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from api.v1.endpoints.auth import get_current_user
 from core.database import get_db
-from core.security import decode_access_token
-from core.redis import publish_active_session_event, subscribe_active_session_events
 from models.user import User
 from models.time_tracker_entry import TimeTrackerEntry as TimeTrackerEntryModel
 from models.time_tracker_active_session import TimeTrackerActiveSession
@@ -24,26 +21,6 @@ from schemas.time_tracker_active_session import (
 from schemas.time_tracker_entry import TimeTrackerEntryResponse
 
 router = APIRouter()
-
-
-async def get_current_user_from_query_token(
-    token: str = Query(...), db: Session = Depends(get_db)
-) -> User:
-    """SSE-only auth path: the browser's native EventSource can't set an
-    Authorization header, so the token travels as a query param instead."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials"
-    )
-    payload = decode_access_token(token)
-    if payload is None:
-        raise credentials_exception
-    user_id = payload.get("sub")
-    if user_id is None:
-        raise credentials_exception
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if user is None:
-        raise credentials_exception
-    return user
 
 
 def _elapsed_ms(
@@ -105,7 +82,7 @@ def _close_session_into_entry(
 
 
 @router.get("/active-session", response_model=Optional[TimeTrackerActiveSessionOut])
-async def get_active_session(
+def get_active_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -121,7 +98,7 @@ async def get_active_session(
     response_model=TimeTrackerActiveSessionStartResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def start_active_session(
+def start_active_session(
     body: TimeTrackerActiveSessionStart,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -178,11 +155,6 @@ async def start_active_session(
     db.commit()
     db.refresh(new_session)
 
-    await publish_active_session_event(
-        current_user.id,
-        {"type": "replaced" if auto_closed_entry else "started"},
-    )
-
     return TimeTrackerActiveSessionStartResponse(
         active_session=TimeTrackerActiveSessionOut.model_validate(new_session),
         auto_closed_entry=(
@@ -192,7 +164,7 @@ async def start_active_session(
 
 
 @router.post("/active-session/stop", response_model=TimeTrackerEntryResponse)
-async def stop_active_session(
+def stop_active_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -211,13 +183,11 @@ async def stop_active_session(
     db.commit()
     db.refresh(entry)
 
-    await publish_active_session_event(current_user.id, {"type": "stopped"})
-
     return _entry_row_to_response(entry)
 
 
 @router.patch("/active-session", response_model=TimeTrackerActiveSessionOut)
-async def update_active_session(
+def update_active_session(
     body: TimeTrackerActiveSessionUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -244,17 +214,4 @@ async def update_active_session(
     db.commit()
     db.refresh(session)
 
-    await publish_active_session_event(current_user.id, {"type": "updated"})
-
     return session
-
-
-@router.get("/active-session/stream")
-async def stream_active_session(
-    current_user: User = Depends(get_current_user_from_query_token),
-):
-    async def event_generator():
-        async for message in subscribe_active_session_events(current_user.id):
-            yield f"data: {message}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")

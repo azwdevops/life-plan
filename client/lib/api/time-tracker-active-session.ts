@@ -113,10 +113,3 @@ export async function patchActiveSession(
   if (!response.ok) throw new Error(await errorDetail(response, "Failed to update timer"));
   return apiRowToSession((await response.json()) as ActiveSessionApiRow);
 }
-
-/** SSE stream URL. Native EventSource can't set an Authorization header, so the
- * token travels as a query param (accepted only by this one endpoint). */
-export function activeSessionStreamUrl(token: string): string {
-  const params = new URLSearchParams({ token });
-  return `${API_BASE_URL}/api/v1/time-tracker/active-session/stream?${params.toString()}`;
-}
