@@ -18,7 +18,12 @@ from models.feedback import Feedback, FeedbackType
 from models.run_session import RunSession
 from models.resume_document import ResumeDocument
 from models.time_tracker_entry import TimeTrackerEntry
-from models.time_tracker_subject import TimeTrackerGoal, TimeTrackerProject
+from models.time_tracker_subject import (
+    TimeTrackerGoal,
+    TimeTrackerProject,
+    TimeTrackerCategory,
+)
+from models.time_tracker_active_session import TimeTrackerActiveSession
 from models.feasibility import FeasibilityProject, FeasibilityLineItem
 from models.reading_library import (
     ReadingAuthor,
@@ -72,6 +77,8 @@ __all__ = [
     "TimeTrackerEntry",
     "TimeTrackerGoal",
     "TimeTrackerProject",
+    "TimeTrackerCategory",
+    "TimeTrackerActiveSession",
     "FeasibilityProject",
     "FeasibilityLineItem",
     "ReadingAuthor",

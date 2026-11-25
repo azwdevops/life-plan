@@ -1,6 +1,7 @@
 const SESSION_KEY = "life-plan-time-tracker-session";
 const GOALS_KEY = "life-plan-time-tracker-goals";
 const PROJECTS_KEY = "life-plan-time-tracker-projects";
+const CATEGORIES_KEY = "life-plan-time-tracker-categories";
 /** Fired on `window` after a time entry is saved to the server (same-tab refresh). */
 export const TIME_TRACKER_ENTRIES_UPDATED_EVENT =
   "life-plan-time-tracker-entries-updated";
@@ -19,6 +20,11 @@ export type TimeTrackerPresetProjectDetail = {
   /** From a past time entry when replaying; used if the project row is missing from storage. */
   parentGoalId?: string | null;
   parentGoalName?: string | null;
+  /** The entry's own already-resolved FK, when replaying from a past entry - preferred over
+   * re-deriving subjectId/name matches, since it's always correct even for legacy entries
+   * whose frozen subjectId predates the DB-backed project/goal ids. */
+  goalId?: number | null;
+  projectId?: number | null;
 };
 
 /** Same shape as {@link TimeTrackerPresetProjectDetail}; used for goal preset events. */
@@ -41,12 +47,22 @@ export interface TimeTrackerProject {
   id: string;
   name: string;
   goalId: string | null;
+  /** Groups this project for the "actual time spent" breakdown; distinct from `goalId`. */
+  categoryId: string | null;
+}
+
+export interface TimeTrackerCategory {
+  id: string;
+  name: string;
 }
 
 export interface TimeTrackerSession {
   kind: TimeTrackerKind;
   subjectId: string;
   subjectName: string;
+  /** Frozen from the project's category when the session started; never re-resolved while running. */
+  categoryId: number | null;
+  categoryName: string | null;
   parentGoalId: string | null;
   parentGoalName: string | null;
   description: string;
@@ -62,6 +78,12 @@ export interface TimeTrackerEntry {
   kind: TimeTrackerKind;
   subjectId: string;
   subjectName: string;
+  /** Real backend ids, resolved server-side from subjectId; null if unresolved (e.g. a stale local-only reference). */
+  goalId: number | null;
+  projectId: number | null;
+  /** The project's category frozen at tracking time - never re-resolved, so reclassifying the project later doesn't rewrite this entry's history. */
+  categoryId: number | null;
+  categoryName: string | null;
   parentGoalId: string | null;
   parentGoalName: string | null;
   description: string;
@@ -100,11 +122,6 @@ export function loadGoals(): TimeTrackerGoal[] {
     .filter((g): g is TimeTrackerGoal => g != null);
 }
 
-export function saveGoals(goals: TimeTrackerGoal[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
-}
-
 export function loadProjects(): TimeTrackerProject[] {
   if (typeof window === "undefined") return [];
   const list = safeParse<TimeTrackerProject[]>(
@@ -114,9 +131,13 @@ export function loadProjects(): TimeTrackerProject[] {
   return Array.isArray(list) ? list : [];
 }
 
-export function saveProjects(projects: TimeTrackerProject[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+export function loadCategories(): TimeTrackerCategory[] {
+  if (typeof window === "undefined") return [];
+  const list = safeParse<TimeTrackerCategory[]>(
+    localStorage.getItem(CATEGORIES_KEY),
+    []
+  );
+  return Array.isArray(list) ? list : [];
 }
 
 export function loadSession(): TimeTrackerSession | null {
@@ -142,6 +163,8 @@ export function loadSession(): TimeTrackerSession | null {
           : null;
       return {
         ...s,
+        categoryId: typeof s.categoryId === "number" ? s.categoryId : null,
+        categoryName: typeof s.categoryName === "string" ? s.categoryName : null,
         parentGoalId: s.parentGoalId ?? null,
         parentGoalName: s.parentGoalName ?? null,
         description: typeof s.description === "string" ? s.description : "",
@@ -162,39 +185,6 @@ export function saveSession(session: TimeTrackerSession | null): void {
     return;
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
-
-export type AppendTimeEntryServerHook = (
-  entry: TimeTrackerEntry
-) => void | Promise<void>;
-
-let appendTimeEntryServerHook: AppendTimeEntryServerHook | null = null;
-
-export function registerAppendTimeEntryServerHook(
-  fn: AppendTimeEntryServerHook | null
-): void {
-  appendTimeEntryServerHook = fn;
-}
-
-/** Persists one completed session to the server (via registered hook). */
-export async function appendTimeEntry(
-  entry: TimeTrackerEntry
-): Promise<void> {
-  const h = appendTimeEntryServerHook;
-  if (!h) {
-    throw new Error("Time entry sync is not configured");
-  }
-  await h(entry);
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
-  }
-}
-
-export function newId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 export function elapsedMs(session: TimeTrackerSession): number {

@@ -4,14 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type TimeTrackerGoal,
   type TimeTrackerProject,
-  newId,
+  type TimeTrackerCategory,
 } from "@/lib/time-tracker-storage";
 import {
-  useAddTimeTrackerProjectToCache,
-  useUpdateTimeTrackerProjectInCache,
+  useCreateTimeTrackerProject,
+  useUpdateTimeTrackerProject,
 } from "@/lib/hooks/use-time-tracker-subjects";
 import { RightDrawer } from "@/components/RightDrawer";
 import { CreateGoalModal } from "./CreateGoalModal";
+import { CreateCategoryModal } from "./CreateCategoryModal";
 import { SearchableSelectPicker } from "./SearchableSelectPicker";
 
 type Props = {
@@ -19,6 +20,7 @@ type Props = {
   initialName: string;
   goals: TimeTrackerGoal[];
   projects: TimeTrackerProject[];
+  categories: TimeTrackerCategory[];
   onClose: () => void;
   onCreated: (id: string, name: string) => void;
   refreshGoals: () => void;
@@ -33,6 +35,7 @@ export function CreateProjectModal({
   initialName,
   goals,
   projects,
+  categories,
   onClose,
   onCreated,
   refreshGoals,
@@ -44,8 +47,14 @@ export function CreateProjectModal({
   const [goalLabel, setGoalLabel] = useState("");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [goalModalInitial, setGoalModalInitial] = useState("");
-  const addProjectToCache = useAddTimeTrackerProjectToCache();
-  const updateProjectInCache = useUpdateTimeTrackerProjectInCache();
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [categoryLabel, setCategoryLabel] = useState("");
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryModalInitial, setCategoryModalInitial] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const createProject = useCreateTimeTrackerProject();
+  const updateProject = useUpdateTimeTrackerProject();
+  const saving = createProject.isPending || updateProject.isPending;
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const goalPickerItems = useMemo(
@@ -56,6 +65,16 @@ export function CreateProjectModal({
         matchKey: g.name,
       })),
     [goals]
+  );
+
+  const categoryPickerItems = useMemo(
+    () =>
+      categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        matchKey: c.name,
+      })),
+    [categories]
   );
 
   useEffect(() => {
@@ -70,8 +89,18 @@ export function CreateProjectModal({
       );
       setGoalModalOpen(false);
       setGoalModalInitial("");
+      const targetCategoryId = editTarget?.categoryId ?? "";
+      setCategoryId(targetCategoryId);
+      setCategoryLabel(
+        targetCategoryId
+          ? categories.find((c) => c.id === targetCategoryId)?.name ?? ""
+          : ""
+      );
+      setCategoryModalOpen(false);
+      setCategoryModalInitial("");
+      setError(null);
     }
-  }, [open, initialName, editTarget, goals]);
+  }, [open, initialName, editTarget, goals, categories]);
 
   // RightDrawer stays mounted while closed, so native `autoFocus` (mount-time
   // only) would fire while off-screen and scroll the page to it. Focus only
@@ -80,7 +109,7 @@ export function CreateProjectModal({
     if (open) nameInputRef.current?.focus();
   }, [open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = name.trim();
     if (!n) return;
@@ -90,20 +119,30 @@ export function CreateProjectModal({
           p.id !== editTarget?.id && p.name.toLowerCase() === n.toLowerCase()
       )
     ) {
+      setError("A project with this name already exists");
       return;
     }
-    const gid = goalId === "" ? null : goalId;
-    if (editTarget) {
-      const project: TimeTrackerProject = { ...editTarget, name: n, goalId: gid };
-      updateProjectInCache(project);
-      onCreated(project.id, n);
-    } else {
-      const id = newId();
-      const project: TimeTrackerProject = { id, name: n, goalId: gid };
-      addProjectToCache(project);
-      onCreated(id, n);
+    const gid = goalId === "" ? null : Number(goalId);
+    const cid = categoryId === "" ? null : Number(categoryId);
+    try {
+      if (editTarget) {
+        const project = await updateProject.mutateAsync({
+          id: editTarget.id,
+          body: { name: n, goal_id: gid, category_id: cid },
+        });
+        onCreated(project.id, n);
+      } else {
+        const project = await createProject.mutateAsync({
+          name: n,
+          goal_id: gid,
+          category_id: cid,
+        });
+        onCreated(project.id, n);
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save project");
     }
-    onClose();
   };
 
   return (
@@ -167,6 +206,43 @@ export function CreateProjectModal({
               />
             </div>
           </div>
+          <div>
+            <label
+              htmlFor="create-project-category-picker"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Category (optional)
+            </label>
+            <div className="mt-1">
+              <SearchableSelectPicker
+                instanceId="create-project-category-picker"
+                items={categoryPickerItems}
+                valueLabel={categoryLabel}
+                triggerPlaceholder="Search categories or create…"
+                onSelectExisting={(id, label) => {
+                  setCategoryId(id);
+                  setCategoryLabel(label);
+                }}
+                onRequestCreate={(suggested) => {
+                  setCategoryModalInitial(suggested);
+                  setCategoryModalOpen(true);
+                }}
+                allowCreate
+                noneOptionLabel="No category"
+                onSelectNone={() => {
+                  setCategoryId("");
+                  setCategoryLabel("");
+                }}
+                panelZClass="z-[10050]"
+                triggerClassName="rounded-lg py-2 text-sm"
+                formatCreateLabel={(t) => `Create category "${t}"`}
+                className="w-full"
+              />
+            </div>
+          </div>
+          {error ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          ) : null}
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
@@ -177,7 +253,8 @@ export function CreateProjectModal({
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              disabled={saving}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
               {editTarget ? "Save changes" : "Save project"}
             </button>
@@ -195,6 +272,19 @@ export function CreateProjectModal({
           setGoalId(newGoalId);
           setGoalLabel(newName);
           setGoalModalOpen(false);
+        }}
+        stackLevel={stackLevel + 1}
+      />
+
+      <CreateCategoryModal
+        open={categoryModalOpen}
+        initialName={categoryModalInitial}
+        categories={categories}
+        onClose={() => setCategoryModalOpen(false)}
+        onCreated={(newCategoryId, newName) => {
+          setCategoryId(newCategoryId);
+          setCategoryLabel(newName);
+          setCategoryModalOpen(false);
         }}
         stackLevel={stackLevel + 1}
       />

@@ -34,9 +34,9 @@ class TimeTrackerEntry(Base):
     subject_name = Column(String(512), nullable=False)
     parent_goal_id = Column(String(512), nullable=True)
     parent_goal_name = Column(String(512), nullable=True)
-    # Real FKs, backfilled from subject_name/kind (see
-    # api/v1/endpoints/time_tracker_subjects.py). Nullable/additive alongside
-    # the legacy subject_id/subject_name strings above, not a replacement.
+    # Real FKs, resolved from subject_id/kind at entry-creation time (see
+    # api/v1/endpoints/time_entries.py). Nullable/additive alongside the
+    # legacy subject_id/subject_name strings above, not a replacement.
     goal_id = Column(
         Integer,
         ForeignKey("time_tracker_goals.id", ondelete="SET NULL"),
@@ -49,6 +49,17 @@ class TimeTrackerEntry(Base):
         nullable=True,
         index=True,
     )
+    # The project's category at the moment this entry was tracked, frozen
+    # here (never re-read from the live TimeTrackerProject.category_id) so
+    # reclassifying a project later doesn't retroactively rewrite historical
+    # reports - same principle as subject_name/parent_goal_name above.
+    category_id = Column(
+        Integer,
+        ForeignKey("time_tracker_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    category_name = Column(String(512), nullable=True)
     description = Column(Text, nullable=False)
     started_at = Column(DateTime(timezone=True), nullable=False, index=True)
     ended_at = Column(DateTime(timezone=True), nullable=False)

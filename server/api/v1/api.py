@@ -18,6 +18,7 @@ from api.v1.endpoints import (
     resumes,
     time_entries,
     time_tracker_subjects,
+    time_tracker_active_session,
     reading_library,
     productivity_blog,
     ai_schedule,
@@ -55,6 +56,11 @@ api_router.include_router(
     time_tracker_subjects.router,
     prefix="/time-tracker-subjects",
     tags=["time-tracker-subjects"],
+)
+api_router.include_router(
+    time_tracker_active_session.router,
+    prefix="/time-tracker",
+    tags=["time-tracker-active-session"],
 )
 api_router.include_router(reading_library.router, prefix="/reading-library", tags=["reading-library"])
 api_router.include_router(

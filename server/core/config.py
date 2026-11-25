@@ -32,5 +32,10 @@ class Settings(BaseSettings):
     # Where to send the browser back to after the OAuth callback completes.
     FRONTEND_URL: str = _env_config("LIFE_PLAN_FRONTEND_URL", default="http://localhost:3000")
 
+    # Backs the time tracker's active-session pub/sub (cross-device "your timer was
+    # stopped" SSE push). Defaults to the local redis-server already running on this
+    # machine.
+    REDIS_URL: str = _env_config("LIFE_PLAN_REDIS_URL", default="redis://127.0.0.1:6379/0")
+
 
 settings = Settings()

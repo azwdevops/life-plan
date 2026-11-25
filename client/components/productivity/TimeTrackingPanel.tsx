@@ -23,6 +23,7 @@ import {
 } from "@/lib/time-tracker-storage";
 import { emitTrackerPreset } from "@/lib/time-tracker-preset-bridge";
 import {
+  backfillTimeEntryCategories,
   deleteTimeEntry,
   duplicateTimeEntry,
   getEarliestTimeEntry,
@@ -33,22 +34,47 @@ import {
 import {
   type TimeTrackerGoal,
   type TimeTrackerProject,
+  type TimeTrackerCategory,
 } from "@/lib/time-tracker-storage";
 import {
   useTimeTrackerGoals,
   useTimeTrackerProjects,
-  useSyncTimeTrackerSubjectsFromServer,
-  useDeleteTimeTrackerGoalFromCache,
-  useDeleteTimeTrackerProjectFromCache,
+  useTimeTrackerCategories,
+  useUploadLocalTimeTrackerData,
+  useDeleteTimeTrackerGoal,
+  useDeleteTimeTrackerProject,
+  useDeleteTimeTrackerCategory,
+  useUpdateTimeTrackerProject,
 } from "@/lib/hooks/use-time-tracker-subjects";
 import { CreateGoalModal } from "@/components/time-tracker/CreateGoalModal";
 import { CreateProjectModal } from "@/components/time-tracker/CreateProjectModal";
+import { CreateCategoryModal } from "@/components/time-tracker/CreateCategoryModal";
+import { SearchableSelectPicker } from "@/components/time-tracker/SearchableSelectPicker";
 import { TimeTrackingCharts } from "@/components/productivity/TimeTrackingCharts";
 
 function IconPlay({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M8 5v14l11-7L8 5z" />
+    </svg>
+  );
+}
+
+function IconUpload({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 9l5-5 5 5M12 4v12"
+      />
     </svg>
   );
 }
@@ -104,6 +130,26 @@ function IconFolder({ className }: { className?: string }) {
         strokeLinejoin="round"
         d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
       />
+    </svg>
+  );
+}
+
+function IconTag({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M20.59 13.41L11 3.83A2 2 0 009.59 3.24L4 3a1 1 0 00-1 1l.24 5.59a2 2 0 00.58 1.41l9.59 9.59a2 2 0 002.83 0l4.35-4.35a2 2 0 000-2.83z"
+      />
+      <circle cx="7.5" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -439,14 +485,46 @@ type SubjectGroup = {
   totalMs: number;
 };
 
+function subjectFk(e: TimeTrackerEntry): number | null {
+  return e.kind === "goal" ? e.goalId : e.projectId;
+}
+
+/**
+ * Groups entries into one row per project/goal. A resolved FK
+ * (`goalId`/`projectId`) is the authoritative "same project" signal - two
+ * entries sharing it always merge, even across a rename, since the FK
+ * doesn't change when the name does. Entries with no resolved FK (legacy
+ * rows from before projects had real backend ids) fall back to matching by
+ * name, merging into whichever group - FK-based or name-only - already
+ * covers that name, instead of splitting into a separate, duplicate row for
+ * what's really the same project (e.g. entries tracked before vs. after it
+ * was assigned a category, which otherwise ended up on different legacy vs.
+ * resolved ids for the same underlying project).
+ */
 function groupDayItemsBySubject(dayItems: TimeTrackerEntry[]): SubjectGroup[] {
   const map = new Map<string, TimeTrackerEntry[]>();
+  const fkGroupKeyByName = new Map<string, string>();
+
   for (const e of dayItems) {
-    const k = `${e.kind}:${e.subjectId || e.subjectName}`;
+    const fk = subjectFk(e);
+    if (fk == null) continue;
+    const k = `${e.kind}:fk:${fk}`;
+    const nameKey = `${e.kind}:${e.subjectName.trim().toLowerCase()}`;
+    if (!fkGroupKeyByName.has(nameKey)) fkGroupKeyByName.set(nameKey, k);
     const list = map.get(k);
     if (list) list.push(e);
     else map.set(k, [e]);
   }
+
+  for (const e of dayItems) {
+    if (subjectFk(e) != null) continue;
+    const nameKey = `${e.kind}:${e.subjectName.trim().toLowerCase()}`;
+    const k = fkGroupKeyByName.get(nameKey) ?? `${e.kind}:name:${nameKey}`;
+    const list = map.get(k);
+    if (list) list.push(e);
+    else map.set(k, [e]);
+  }
+
   const groups: SubjectGroup[] = [];
   for (const [groupKey, list] of map) {
     list.sort(
@@ -469,6 +547,56 @@ function groupDayItemsBySubject(dayItems: TimeTrackerEntry[]): SubjectGroup[] {
       new Date(a.entries[0]!.startedAt).getTime()
   );
   return groups;
+}
+
+const CATEGORY_COLORS = [
+  "#2563eb",
+  "#9333ea",
+  "#16a34a",
+  "#d97706",
+  "#dc2626",
+  "#0891b2",
+  "#db2777",
+  "#65a30d",
+  "#7c3aed",
+  "#ea580c",
+];
+
+type CategoryBreakdownRow = {
+  categoryId: string | null;
+  name: string;
+  totalMs: number;
+};
+
+const UNCATEGORIZED_LABEL = "Uncategorized";
+
+/**
+ * Groups by each entry's own frozen categoryId/categoryName (set at
+ * tracking time, never re-resolved) rather than the *current* project list
+ * - so reclassifying a project's category later doesn't retroactively
+ * rewrite past days' breakdowns.
+ */
+function categoryBreakdownForDay(dayItems: TimeTrackerEntry[]): CategoryBreakdownRow[] {
+  const totals = new Map<string, number>();
+  const namesByKey = new Map<string, string>();
+  for (const e of dayItems) {
+    if (e.kind !== "project") continue;
+    const key = e.categoryId != null ? String(e.categoryId) : "__uncategorized__";
+    totals.set(key, (totals.get(key) ?? 0) + e.durationMs);
+    if (!namesByKey.has(key)) {
+      namesByKey.set(key, e.categoryName ?? UNCATEGORIZED_LABEL);
+    }
+  }
+  const rows: CategoryBreakdownRow[] = [];
+  for (const [key, totalMs] of totals) {
+    rows.push({
+      categoryId: key === "__uncategorized__" ? null : key,
+      name: namesByKey.get(key) ?? UNCATEGORIZED_LABEL,
+      totalMs,
+    });
+  }
+  rows.sort((a, b) => b.totalMs - a.totalMs);
+  return rows;
 }
 
 function expandKey(dayKey: string, groupKey: string): string {
@@ -597,6 +725,7 @@ function SubjectSidePanel({
     parentGoalName: string | null
   ) => void;
 }) {
+  const { token } = useAuth();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<
     TimeTrackerGoal | TimeTrackerProject | null
@@ -607,61 +736,153 @@ function SubjectSidePanel({
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [searchKind, setSearchKind] = useState(kind);
-  const { token } = useAuth();
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
   const goalsQuery = useTimeTrackerGoals();
   const projectsQuery = useTimeTrackerProjects();
-  const syncFromServer = useSyncTimeTrackerSubjectsFromServer();
-  const deleteGoalFromCache = useDeleteTimeTrackerGoalFromCache();
-  const deleteProjectFromCache = useDeleteTimeTrackerProjectFromCache();
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const categoriesQuery = useTimeTrackerCategories();
+  const uploadLocalData = useUploadLocalTimeTrackerData();
+  const deleteGoal = useDeleteTimeTrackerGoal();
+  const deleteProject = useDeleteTimeTrackerProject();
+  const updateProject = useUpdateTimeTrackerProject();
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [categorizeMode, setCategorizeMode] = useState(false);
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string>>({});
+  const [savingCategorize, setSavingCategorize] = useState(false);
+  const [categorizeError, setCategorizeError] = useState<string | null>(null);
+  const [categorizeCategoryModalOpen, setCategorizeCategoryModalOpen] = useState(false);
+  const [categorizeCategoryModalInitial, setCategorizeCategoryModalInitial] = useState("");
+  const [categorizeTargetProjectId, setCategorizeTargetProjectId] = useState<string | null>(
+    null
+  );
   const goals = goalsQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
+  const categories = categoriesQuery.data ?? [];
+
+  const categoryPickerItems = useMemo(
+    () => categories.map((c) => ({ id: c.id, name: c.name, matchKey: c.name })),
+    [categories]
+  );
+
+  const enterCategorizeMode = useCallback(() => {
+    setCategoryDrafts(
+      Object.fromEntries(projects.map((p) => [p.id, p.categoryId ?? ""]))
+    );
+    setCategorizeError(null);
+    setCategorizeMode(true);
+  }, [projects]);
+
+  const cancelCategorizeMode = useCallback(() => {
+    setCategorizeMode(false);
+    setCategoryDrafts({});
+    setCategorizeError(null);
+  }, []);
+
+  const saveCategorizeMode = useCallback(async () => {
+    const changed = projects.filter(
+      (p) => (categoryDrafts[p.id] ?? "") !== (p.categoryId ?? "")
+    );
+    if (changed.length === 0) {
+      setCategorizeMode(false);
+      return;
+    }
+    setSavingCategorize(true);
+    setCategorizeError(null);
+    try {
+      await Promise.all(
+        changed.map((p) => {
+          const draft = categoryDrafts[p.id] ?? "";
+          return updateProject.mutateAsync({
+            id: p.id,
+            body: { category_id: draft === "" ? null : Number(draft) },
+          });
+        })
+      );
+      setCategorizeMode(false);
+      setCategoryDrafts({});
+    } catch (err) {
+      setCategorizeError(
+        err instanceof Error ? err.message : "Failed to save categories"
+      );
+    } finally {
+      setSavingCategorize(false);
+    }
+  }, [projects, categoryDrafts, updateProject]);
+
+  useEffect(() => {
+    if (!open) {
+      setCategorizeMode(false);
+      setCategoryDrafts({});
+      setCategorizeError(null);
+    }
+  }, [open]);
 
   const closeSubjectModal = useCallback(() => {
     setCreateModalOpen(false);
     setEditTarget(null);
   }, []);
 
-  const confirmDelete = useCallback(() => {
+  const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeleteBusy(true);
     try {
       if (kind === "goal") {
-        deleteGoalFromCache(deleteTarget.id);
+        await deleteGoal.mutateAsync(deleteTarget.id);
       } else {
-        deleteProjectFromCache(deleteTarget.id);
+        await deleteProject.mutateAsync(deleteTarget.id);
       }
       setDeleteTarget(null);
     } finally {
       setDeleteBusy(false);
     }
-  }, [deleteTarget, kind, deleteGoalFromCache, deleteProjectFromCache]);
+  }, [deleteTarget, kind, deleteGoal, deleteProject]);
 
   if (kind !== searchKind) {
     setSearchKind(kind);
     setSearch("");
+    setCategorizeMode(false);
+    setCategoryDrafts({});
+    setCategorizeError(null);
   }
 
-  const handleRefresh = useCallback(async () => {
-    setSyncing(true);
-    setSyncMessage(null);
+  const handleUploadLocalData = useCallback(async () => {
+    setUploading(true);
+    setUploadMessage(null);
     try {
-      if (token) {
-        const result = await syncFromServer(token);
-        if (result.goalsAdded > 0 || result.projectsAdded > 0) {
-          setSyncMessage(
-            `Imported ${result.goalsAdded} goal(s), ${result.projectsAdded} project(s) from the server.`
-          );
-        }
-      }
-      await (kind === "goal" ? goalsQuery.refetch() : projectsQuery.refetch());
+      const result = await uploadLocalData();
+      setUploadMessage(
+        `Uploaded ${result.goalsAdded} goal(s), ${result.projectsAdded} project(s), ${result.categoriesAdded} category(ies) from this browser.`
+      );
     } catch (err) {
-      setSyncMessage(err instanceof Error ? err.message : "Refresh failed");
+      setUploadMessage(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setSyncing(false);
+      setUploading(false);
     }
-  }, [token, syncFromServer, kind, goalsQuery, projectsQuery]);
+  }, [uploadLocalData]);
+
+  const handleBackfillCategories = useCallback(async () => {
+    if (!token) return;
+    setBackfilling(true);
+    setBackfillMessage(null);
+    try {
+      const result = await backfillTimeEntryCategories(token);
+      setBackfillMessage(
+        result.updatedEntries === 0 && result.updatedActiveSessions === 0
+          ? "Nothing to backfill - every entry already has a category or its project is uncategorized."
+          : `Backfilled ${result.updatedEntries} entry(ies)${
+              result.updatedActiveSessions > 0
+                ? ` and ${result.updatedActiveSessions} running session(s)`
+                : ""
+            } across ${result.projectsChecked} categorized project(s).`
+      );
+      bumpTimeEntriesEvent();
+    } catch (err) {
+      setBackfillMessage(err instanceof Error ? err.message : "Backfill failed");
+    } finally {
+      setBackfilling(false);
+    }
+  }, [token]);
 
   const items = (
     kind === "goal"
@@ -677,19 +898,21 @@ function SubjectSidePanel({
         open={open}
         onClose={onClose}
         title={kind === "goal" ? "Goals" : "Projects"}
-        width="xl"
+        width="4xl"
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={syncing}
-              aria-label={kind === "goal" ? "Refresh goals" : "Refresh projects"}
-              title="Refresh (also pulls in goals/projects created server-side)"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              <IconRefresh className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-            </button>
+            {!categorizeMode ? (
+              <button
+                type="button"
+                onClick={() => void handleUploadLocalData()}
+                disabled={uploading}
+                aria-label="Upload local data"
+                title="Upload any Goals/Projects/Categories sitting only in this browser's local storage"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                <IconUpload className={`h-4 w-4 ${uploading ? "animate-pulse" : ""}`} />
+              </button>
+            ) : null}
             <input
               type="search"
               value={search}
@@ -698,23 +921,81 @@ function SubjectSidePanel({
               aria-label={`Search ${kind === "goal" ? "goals" : "projects"}`}
               className="w-full min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
             />
-            <button
-              type="button"
-              onClick={() => {
-                setEditTarget(null);
-                setCreateModalOpen(true);
-              }}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              <IconPlus className="h-4 w-4" />
-              {kind === "goal" ? "Add goal" : "Add project"}
-            </button>
+            {kind === "project" ? (
+              categorizeMode ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={cancelCategorizeMode}
+                    disabled={savingCategorize}
+                    className="inline-flex h-8 shrink-0 items-center rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveCategorizeMode()}
+                    disabled={savingCategorize}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                  >
+                    {savingCategorize ? "Saving…" : "Save"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={enterCategorizeMode}
+                    title="Assign categories to multiple projects at once"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                  >
+                    <IconTag className="h-4 w-4" />
+                    Categorize
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleBackfillCategories()}
+                    disabled={backfilling}
+                    title="Apply each categorized project's category to its own past entries tracked before it had one"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                  >
+                    <IconUpload
+                      className={`h-4 w-4 rotate-180 ${backfilling ? "animate-pulse" : ""}`}
+                    />
+                    {backfilling ? "Backfilling…" : "Backfill categories"}
+                  </button>
+                </>
+              )
+            ) : null}
+            {!categorizeMode ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditTarget(null);
+                  setCreateModalOpen(true);
+                }}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                <IconPlus className="h-4 w-4" />
+                {kind === "goal" ? "Add goal" : "Add project"}
+              </button>
+            ) : null}
           </>
         }
       >
-      {syncMessage ? (
+      {categorizeError ? (
+        <p className="mb-2 rounded-lg bg-red-50 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+          {categorizeError}
+        </p>
+      ) : null}
+      {backfillMessage ? (
         <p className="mb-2 rounded-lg bg-blue-50 p-2 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-          {syncMessage}
+          {backfillMessage}
+        </p>
+      ) : null}
+      {uploadMessage ? (
+        <p className="mb-2 rounded-lg bg-blue-50 p-2 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+          {uploadMessage}
         </p>
       ) : null}
       {items.length === 0 ? (
@@ -746,24 +1027,75 @@ function SubjectSidePanel({
                     {formatDurationMs(ms)} tracked
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onStartTracking(item.id, item.name, parentGoalId, parentGoalName)
-                  }
-                  aria-label={`Start tracking ${item.name}`}
-                  title="Start tracking"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <IconPlay className="h-4 w-4" />
-                </button>
-                <SubjectItemMenu
-                  onEdit={() => {
-                    setEditTarget(item);
-                    setCreateModalOpen(true);
-                  }}
-                  onDeleteClick={() => setDeleteTarget(item)}
-                />
+                {kind === "project" && categorizeMode ? (
+                  <div className="w-48 shrink-0">
+                    <SearchableSelectPicker
+                      instanceId={`categorize-category-${item.id}`}
+                      items={categoryPickerItems}
+                      valueLabel={
+                        categoryDrafts[item.id]
+                          ? categories.find((c) => c.id === categoryDrafts[item.id])
+                              ?.name ?? ""
+                          : ""
+                      }
+                      triggerPlaceholder="No category"
+                      onSelectExisting={(id) =>
+                        setCategoryDrafts((prev) => ({ ...prev, [item.id]: id }))
+                      }
+                      onRequestCreate={(suggested) => {
+                        setCategorizeTargetProjectId(item.id);
+                        setCategorizeCategoryModalInitial(suggested);
+                        setCategorizeCategoryModalOpen(true);
+                      }}
+                      allowCreate
+                      noneOptionLabel="No category"
+                      onSelectNone={() =>
+                        setCategoryDrafts((prev) => ({ ...prev, [item.id]: "" }))
+                      }
+                      formatCreateLabel={(t) => `Create category "${t}"`}
+                      triggerClassName="rounded-lg py-1.5 text-sm"
+                      panelZClass="z-[60]"
+                      className="w-full"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {kind === "project" ? (
+                      <div className="w-40 shrink-0 truncate">
+                        {(item as TimeTrackerProject).categoryId ? (
+                          <span className="inline-flex max-w-full items-center truncate rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            {categories.find(
+                              (c) =>
+                                c.id === (item as TimeTrackerProject).categoryId
+                            )?.name ?? "—"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                            No category
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onStartTracking(item.id, item.name, parentGoalId, parentGoalName)
+                      }
+                      aria-label={`Start tracking ${item.name}`}
+                      title="Start tracking"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                    >
+                      <IconPlay className="h-4 w-4" />
+                    </button>
+                    <SubjectItemMenu
+                      onEdit={() => {
+                        setEditTarget(item);
+                        setCreateModalOpen(true);
+                      }}
+                      onDeleteClick={() => setDeleteTarget(item)}
+                    />
+                  </>
+                )}
               </li>
             );
           })}
@@ -787,6 +1119,7 @@ function SubjectSidePanel({
           initialName=""
           goals={goals}
           projects={projects}
+          categories={categories}
           refreshGoals={() => {}}
           editTarget={editTarget as TimeTrackerProject | null}
           onClose={closeSubjectModal}
@@ -794,6 +1127,25 @@ function SubjectSidePanel({
           stackLevel={1}
         />
       )}
+
+      {kind === "project" ? (
+        <CreateCategoryModal
+          open={categorizeCategoryModalOpen}
+          initialName={categorizeCategoryModalInitial}
+          categories={categories}
+          onClose={() => setCategorizeCategoryModalOpen(false)}
+          onCreated={(newCategoryId) => {
+            if (categorizeTargetProjectId) {
+              setCategoryDrafts((prev) => ({
+                ...prev,
+                [categorizeTargetProjectId]: newCategoryId,
+              }));
+            }
+            setCategorizeCategoryModalOpen(false);
+          }}
+          stackLevel={1}
+        />
+      ) : null}
 
       <Dialog
         isOpen={deleteTarget != null}
@@ -809,6 +1161,164 @@ function SubjectSidePanel({
           {kind === "goal"
             ? " Projects under this goal will keep their own time entries but lose their link to it."
             : ""}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={deleteBusy}
+            onClick={() => setDeleteTarget(null)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={deleteBusy}
+            onClick={confirmDelete}
+            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white dark:bg-red-600"
+          >
+            Delete
+          </button>
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
+function CategorySidePanel({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<TimeTrackerCategory | null>(
+    null
+  );
+  const [deleteTarget, setDeleteTarget] = useState<TimeTrackerCategory | null>(
+    null
+  );
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const categoriesQuery = useTimeTrackerCategories();
+  const projectsQuery = useTimeTrackerProjects();
+  const deleteCategory = useDeleteTimeTrackerCategory();
+  const categories = categoriesQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
+
+  const closeCategoryModal = useCallback(() => {
+    setCreateModalOpen(false);
+    setEditTarget(null);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await deleteCategory.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [deleteTarget, deleteCategory]);
+
+  const items = [...categories]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()));
+
+  return (
+    <>
+      <RightDrawer
+        open={open}
+        onClose={onClose}
+        title="Categories"
+        width="4xl"
+        actions={
+          <>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search categories…"
+              aria-label="Search categories"
+              className="w-full min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setEditTarget(null);
+                setCreateModalOpen(true);
+              }}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            >
+              <IconPlus className="h-4 w-4" />
+              Add category
+            </button>
+          </>
+        }
+      >
+        {items.length === 0 ? (
+          <p className="p-2 text-sm text-zinc-500 dark:text-zinc-400">
+            {search.trim()
+              ? `No categories match "${search.trim()}".`
+              : "No categories yet."}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {items.map((item) => {
+              const projectCount = projects.filter(
+                (p) => p.categoryId === item.id
+              ).length;
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">
+                      {item.name}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                      {projectCount} project{projectCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <SubjectItemMenu
+                    onEdit={() => {
+                      setEditTarget(item);
+                      setCreateModalOpen(true);
+                    }}
+                    onDeleteClick={() => setDeleteTarget(item)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </RightDrawer>
+
+      <CreateCategoryModal
+        open={createModalOpen}
+        initialName=""
+        categories={categories}
+        editTarget={editTarget}
+        onClose={closeCategoryModal}
+        onCreated={closeCategoryModal}
+        stackLevel={1}
+      />
+
+      <Dialog
+        isOpen={deleteTarget != null}
+        onClose={() => {
+          if (!deleteBusy) setDeleteTarget(null);
+        }}
+        title="Delete category"
+        size="sm"
+      >
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Delete &quot;{deleteTarget?.name}&quot; permanently? This cannot be
+          undone. Projects under this category will keep their own time
+          entries but lose their link to it.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button
@@ -860,6 +1370,7 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
     setSidePanelKind(kind);
     setSidePanelOpen(true);
   }, []);
+  const [categoryPanelOpen, setCategoryPanelOpen] = useState(false);
 
   const startTrackingSubject = useCallback(
     (
@@ -1124,6 +1635,16 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                   <IconFolder className="h-4 w-4" />
                   Projects
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryPanelOpen(true)}
+                  aria-label="View categories"
+                  title="Categories"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  <IconTag className="h-4 w-4" />
+                  Categories
+                </button>
                 {!token ? (
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     Sign in to load entries from the server.
@@ -1148,6 +1669,11 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                 );
                 const goalGroups = subjectGroups.filter(
                   (g) => g.kind === "goal"
+                );
+                const categoryBreakdown = categoryBreakdownForDay(day.items);
+                const categoryBreakdownTotalMs = categoryBreakdown.reduce(
+                  (sum, row) => sum + row.totalMs,
+                  0
                 );
 
                 const renderGroupLi = (g: SubjectGroup) => {
@@ -1224,6 +1750,9 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                                       subjectName: g.name,
                                       autoStart: true,
                                       description: notes,
+                                      goalId: g.kind === "goal" ? first.goalId : null,
+                                      projectId:
+                                        g.kind === "project" ? first.projectId : null,
                                       ...(g.kind === "project"
                                         ? {
                                             parentGoalId:
@@ -1253,8 +1782,8 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                                   <IconPlay className="h-4 w-4" />
                                 </button>
                               </div>
-                              <div className="flex shrink-0 items-center border-l border-zinc-200 px-3 py-3 dark:border-zinc-800">
-                                <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                              <div className="flex w-24 shrink-0 items-center justify-end border-l border-zinc-200 px-3 py-3 dark:border-zinc-800">
+                                <span className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-400">
                                   {formatDurationMs(g.totalMs)}
                                 </span>
                               </div>
@@ -1336,24 +1865,72 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                         </span>
                       </h2>
                     </div>
-                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start sm:gap-4">
-                      {projectGroups.length > 0 ? (
-                        <ul
-                          role="list"
-                          className="flex min-w-0 flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800"
-                          aria-label="Projects"
-                        >
-                          {projectGroups.map(renderGroupLi)}
-                        </ul>
-                      ) : null}
-                      {goalGroups.length > 0 ? (
-                        <ul
-                          role="list"
-                          className="flex min-w-0 flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800"
-                          aria-label="Goals"
-                        >
-                          {goalGroups.map(renderGroupLi)}
-                        </ul>
+                    <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start sm:gap-4">
+                        {projectGroups.length > 0 ? (
+                          <ul
+                            role="list"
+                            className={`flex min-w-0 flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800 ${
+                              goalGroups.length === 0 ? "sm:col-span-2" : ""
+                            }`}
+                            aria-label="Projects"
+                          >
+                            {projectGroups.map(renderGroupLi)}
+                          </ul>
+                        ) : null}
+                        {goalGroups.length > 0 ? (
+                          <ul
+                            role="list"
+                            className={`flex min-w-0 flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800 ${
+                              projectGroups.length === 0 ? "sm:col-span-2" : ""
+                            }`}
+                            aria-label="Goals"
+                          >
+                            {goalGroups.map(renderGroupLi)}
+                          </ul>
+                        ) : null}
+                      </div>
+
+                      {categoryBreakdown.length > 0 ? (
+                        <div className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                          <ul className="flex flex-col gap-2">
+                            {categoryBreakdown.map((row, idx) => {
+                              const pct =
+                                categoryBreakdownTotalMs > 0
+                                  ? (row.totalMs / categoryBreakdownTotalMs) * 100
+                                  : 0;
+                              const color =
+                                CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                              return (
+                                <li key={row.categoryId ?? "uncategorized"}>
+                                  <div className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="flex min-w-0 items-center gap-2">
+                                      <span
+                                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                        style={{ backgroundColor: color }}
+                                      />
+                                      <span className="truncate text-zinc-800 dark:text-zinc-200">
+                                        {row.name}
+                                      </span>
+                                    </span>
+                                    <span className="shrink-0 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                                      {formatDurationMs(row.totalMs)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${pct}%`,
+                                        backgroundColor: color,
+                                      }}
+                                    />
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
                       ) : null}
                     </div>
                   </section>
@@ -1526,6 +2103,11 @@ export const TimeTrackingPanel = memo(function TimeTrackingPanel() {
                 parentGoalName
               )
             }
+          />
+
+          <CategorySidePanel
+            open={categoryPanelOpen}
+            onClose={() => setCategoryPanelOpen(false)}
           />
         </div>
   );

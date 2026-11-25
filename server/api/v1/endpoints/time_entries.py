@@ -3,14 +3,17 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from api.v1.endpoints.auth import get_current_user
 from core.database import get_db
 from models.user import User
 from models.time_tracker_entry import TimeTrackerEntry as TimeTrackerEntryModel
+from models.time_tracker_subject import TimeTrackerGoal, TimeTrackerProject, TimeTrackerCategory
+from models.time_tracker_active_session import TimeTrackerActiveSession
 from schemas.time_tracker_entry import (
+    TimeTrackerBackfillCategoriesResponse,
     TimeTrackerEntryCreate,
     TimeTrackerEntryDurationSummary,
     TimeTrackerEntryEarliest,
@@ -21,12 +24,66 @@ from schemas.time_tracker_entry import (
 router = APIRouter()
 
 
+def _resolve_subject_fk(
+    db: Session, user_id: int, kind: str, subject_id: str
+) -> tuple[int | None, int | None]:
+    """Resolve a client-sent subject_id (now the backend's real integer id,
+    stringified) to a (goal_id, project_id) pair, best-effort. Returns
+    (None, None) if it doesn't parse as an int or doesn't resolve to an
+    owned row (e.g. a stale local-only id from before the backend migration)."""
+    try:
+        numeric_id = int(subject_id)
+    except (TypeError, ValueError):
+        return None, None
+    if kind == "goal":
+        goal = (
+            db.query(TimeTrackerGoal)
+            .filter(TimeTrackerGoal.id == numeric_id, TimeTrackerGoal.user_id == user_id)
+            .first()
+        )
+        return (goal.id, None) if goal else (None, None)
+    if kind == "project":
+        project = (
+            db.query(TimeTrackerProject)
+            .filter(
+                TimeTrackerProject.id == numeric_id,
+                TimeTrackerProject.user_id == user_id,
+            )
+            .first()
+        )
+        return (None, project.id) if project else (None, None)
+    return None, None
+
+
+def _resolve_category_snapshot(
+    db: Session, project_id: int | None
+) -> tuple[int | None, str | None]:
+    """Freezes the project's *current* category at this moment, for storage
+    on an entry/active-session row - never re-resolved later, so reassigning
+    a project's category afterwards doesn't rewrite past entries."""
+    if project_id is None:
+        return None, None
+    project = db.query(TimeTrackerProject).filter(TimeTrackerProject.id == project_id).first()
+    if project is None or project.category_id is None:
+        return None, None
+    category = (
+        db.query(TimeTrackerCategory)
+        .filter(TimeTrackerCategory.id == project.category_id)
+        .first()
+    )
+    return (project.category_id, category.name if category else None)
+
+
 def _row_to_response(row: TimeTrackerEntryModel) -> TimeTrackerEntryResponse:
     return TimeTrackerEntryResponse(
         id=row.client_entry_id,
         kind=row.kind,  # type: ignore[arg-type]
         subject_id=row.subject_id,
         subject_name=row.subject_name,
+        goal_id=row.goal_id,
+        project_id=row.project_id,
+        category_id=row.category_id,
+        category_name=row.category_name,
         parent_goal_id=row.parent_goal_id,
         parent_goal_name=row.parent_goal_name,
         description=row.description or "",
@@ -151,12 +208,20 @@ async def create_time_entry(
     if existing:
         return _row_to_response(existing)
 
+    goal_id, project_id = _resolve_subject_fk(
+        db, current_user.id, body.kind, body.subject_id
+    )
+    category_id, category_name = _resolve_category_snapshot(db, project_id)
     row = TimeTrackerEntryModel(
         user_id=current_user.id,
         client_entry_id=body.id[:64],
         kind=body.kind,
         subject_id=body.subject_id[:512],
         subject_name=body.subject_name[:512],
+        goal_id=goal_id,
+        project_id=project_id,
+        category_id=category_id,
+        category_name=category_name,
         parent_goal_id=(body.parent_goal_id[:512] if body.parent_goal_id else None),
         parent_goal_name=(
             body.parent_goal_name[:512] if body.parent_goal_name else None
@@ -220,6 +285,12 @@ async def update_time_entry(
         row.kind = data["kind"]
     if "subject_id" in data:
         row.subject_id = data["subject_id"][:512]
+        goal_id, project_id = _resolve_subject_fk(
+            db, current_user.id, data.get("kind", row.kind), data["subject_id"]
+        )
+        row.goal_id = goal_id
+        row.project_id = project_id
+        row.category_id, row.category_name = _resolve_category_snapshot(db, project_id)
     if "subject_name" in data:
         row.subject_name = data["subject_name"][:512]
     if "parent_goal_id" in data:
@@ -264,6 +335,10 @@ async def duplicate_time_entry(
         kind=src.kind,
         subject_id=src.subject_id,
         subject_name=src.subject_name,
+        goal_id=src.goal_id,
+        project_id=src.project_id,
+        category_id=src.category_id,
+        category_name=src.category_name,
         parent_goal_id=src.parent_goal_id,
         parent_goal_name=src.parent_goal_name,
         description=src.description or "",
@@ -275,3 +350,103 @@ async def duplicate_time_entry(
     db.commit()
     db.refresh(copy_row)
     return _row_to_response(copy_row)
+
+
+@router.post("/backfill-categories", response_model=TimeTrackerBackfillCategoriesResponse)
+async def backfill_time_entry_categories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """One-time, idempotent catch-up: stamps each project's *current*
+    category onto entries/active sessions that were tracked before the
+    project had any category at all (category_id IS NULL). Only ever touches
+    rows that are still NULL, so it never rewrites a classification that was
+    already frozen onto a row (by an earlier run of this or by a real
+    reclassification) - safe to re-run, or to run again after only some
+    projects were categorized, without ever duplicating entries since it's a
+    plain UPDATE, never an INSERT.
+
+    Matches a project's rows two ways: by its real `project_id` FK (the
+    normal case), and - for legacy rows from before projects had real
+    backend ids - by `project_id IS NULL` plus a case-insensitive name match
+    on `subject_name`. Backfilling `project_id` itself on those legacy rows
+    here is a plain bug fix (filling in a link that was simply never
+    resolved), not a retroactive rewrite - unlike `category_id`, a FK isn't a
+    point-in-time classification snapshot.
+    """
+    categorized_projects = (
+        db.query(TimeTrackerProject)
+        .filter(
+            TimeTrackerProject.user_id == current_user.id,
+            TimeTrackerProject.category_id.isnot(None),
+        )
+        .all()
+    )
+    categories_by_id = {
+        c.id: c
+        for c in db.query(TimeTrackerCategory).filter(
+            TimeTrackerCategory.user_id == current_user.id
+        )
+    }
+
+    updated_entries = 0
+    updated_active_sessions = 0
+    for project in categorized_projects:
+        category = categories_by_id.get(project.category_id)
+        if category is None:
+            continue
+        name_key = project.name.strip().lower()
+        match_filter = or_(
+            TimeTrackerEntryModel.project_id == project.id,
+            and_(
+                TimeTrackerEntryModel.project_id.is_(None),
+                TimeTrackerEntryModel.kind == "project",
+                func.lower(func.trim(TimeTrackerEntryModel.subject_name)) == name_key,
+            ),
+        )
+        entry_rows = (
+            db.query(TimeTrackerEntryModel)
+            .filter(
+                TimeTrackerEntryModel.user_id == current_user.id,
+                TimeTrackerEntryModel.category_id.is_(None),
+                match_filter,
+            )
+            .all()
+        )
+        for row in entry_rows:
+            if row.project_id is None:
+                row.project_id = project.id
+            row.category_id = category.id
+            row.category_name = category.name
+        updated_entries += len(entry_rows)
+
+        session_match_filter = or_(
+            TimeTrackerActiveSession.project_id == project.id,
+            and_(
+                TimeTrackerActiveSession.project_id.is_(None),
+                TimeTrackerActiveSession.kind == "project",
+                func.lower(func.trim(TimeTrackerActiveSession.subject_name)) == name_key,
+            ),
+        )
+        session_rows = (
+            db.query(TimeTrackerActiveSession)
+            .filter(
+                TimeTrackerActiveSession.user_id == current_user.id,
+                TimeTrackerActiveSession.category_id.is_(None),
+                session_match_filter,
+            )
+            .all()
+        )
+        for row in session_rows:
+            if row.project_id is None:
+                row.project_id = project.id
+            row.category_id = category.id
+            row.category_name = category.name
+        updated_active_sessions += len(session_rows)
+    db.commit()
+
+    return TimeTrackerBackfillCategoriesResponse(
+        updated_entries=updated_entries,
+        updated_active_sessions=updated_active_sessions,
+        projects_checked=len(categorized_projects),
+    )

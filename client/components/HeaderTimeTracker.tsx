@@ -4,23 +4,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TIME_TRACKER_PRESET_GOAL_EVENT,
   TIME_TRACKER_PRESET_PROJECT_EVENT,
+  TIME_TRACKER_ENTRIES_UPDATED_EVENT,
   type TimeTrackerKind,
   type TimeTrackerGoal,
   type TimeTrackerPresetGoalDetail,
   type TimeTrackerPresetProjectDetail,
   type TimeTrackerProject,
   type TimeTrackerSession,
-  appendTimeEntry,
   elapsedMs,
   formatElapsed,
-  loadGoals,
-  loadProjects,
   loadSession,
-  newId,
-  registerAppendTimeEntryServerHook,
   saveSession,
 } from "@/lib/time-tracker-storage";
-import { createTimeEntry } from "@/lib/api/time-entries";
+import {
+  useTimeTrackerGoals,
+  useTimeTrackerProjects,
+  useTimeTrackerCategories,
+} from "@/lib/hooks/use-time-tracker-subjects";
+import {
+  getActiveSession,
+  startActiveSession,
+  stopActiveSession,
+  patchActiveSession,
+  activeSessionStreamUrl,
+  type StartActiveSessionBody,
+} from "@/lib/api/time-tracker-active-session";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { CreateGoalModal } from "@/components/time-tracker/CreateGoalModal";
 import { CreateProjectModal } from "@/components/time-tracker/CreateProjectModal";
@@ -53,156 +61,6 @@ function IconPlay({ className }: { className?: string }) {
   );
 }
 
-function resolveTimerSession(
-  kind: TimeTrackerKind,
-  subjectId: string,
-  subjectSearch: string,
-  goals: TimeTrackerGoal[],
-  projects: TimeTrackerProject[],
-  description: string
-): TimeTrackerSession | null {
-  const q = subjectSearch.trim();
-  const qLower = q.toLowerCase();
-  let sid = "";
-  let sname = "";
-  let pgId: string | null = null;
-  let pgName: string | null = null;
-
-  if (subjectId) {
-    if (kind === "goal") {
-      const g = goals.find((x) => x.id === subjectId);
-      if (!g) return null;
-      sid = g.id;
-      sname = g.name;
-    } else {
-      const p = projects.find((x) => x.id === subjectId);
-      if (!p) return null;
-      sid = p.id;
-      sname = p.name;
-      if (p.goalId) {
-        const g = goals.find((x) => x.id === p.goalId);
-        pgId = p.goalId;
-        pgName = g?.name ?? null;
-      }
-    }
-  } else {
-    if (!qLower) return null;
-    if (kind === "goal") {
-      const existing = goals.find((g) => g.name.toLowerCase() === qLower);
-      if (!existing) return null;
-      sid = existing.id;
-      sname = existing.name;
-    } else {
-      const existing = projects.find((p) => p.name.toLowerCase() === qLower);
-      if (!existing) return null;
-      sid = existing.id;
-      sname = existing.name;
-      if (existing.goalId) {
-        const g = goals.find((x) => x.id === existing.goalId);
-        pgId = existing.goalId;
-        pgName = g?.name ?? null;
-      }
-    }
-  }
-
-  return {
-    kind,
-    subjectId: sid,
-    subjectName: sname,
-    parentGoalId: kind === "project" ? pgId : null,
-    parentGoalName: kind === "project" ? pgName : null,
-    description: description.trim(),
-    startedAt: new Date().toISOString(),
-    accumulatedPauseMs: 0,
-    pauseStartedAt: null,
-  };
-}
-
-/** When the subject id/name no longer matches goals/projects (deleted or legacy rows), still start from preset + entry metadata. */
-function presetDescription(d: TimeTrackerPresetProjectDetail): string {
-  return typeof d.description === "string" ? d.description : "";
-}
-
-function autoStartSessionFromPreset(
-  kind: TimeTrackerKind,
-  d: TimeTrackerPresetProjectDetail,
-  goals: TimeTrackerGoal[],
-  projects: TimeTrackerProject[]
-): TimeTrackerSession | null {
-  const desc = presetDescription(d);
-  const next = resolveTimerSession(
-    kind,
-    d.subjectId,
-    d.subjectName,
-    goals,
-    projects,
-    desc
-  );
-  if (next) return next;
-
-  const name = d.subjectName.trim();
-  if (!name) return null;
-  const sidRaw = d.subjectId.trim();
-  const stableId =
-    sidRaw ||
-    (kind === "goal" ? `legacy-goal:${name}` : `legacy-project:${name}`);
-
-  if (kind === "goal") {
-    return {
-      kind: "goal",
-      subjectId: stableId,
-      subjectName: name,
-      parentGoalId: null,
-      parentGoalName: null,
-      description: desc,
-      startedAt: new Date().toISOString(),
-      accumulatedPauseMs: 0,
-      pauseStartedAt: null,
-    };
-  }
-
-  let pgId: string | null =
-    d.parentGoalId !== undefined ? d.parentGoalId : null;
-  let pgName: string | null =
-    d.parentGoalName !== undefined ? d.parentGoalName : null;
-  if (pgId && (pgName == null || pgName === "")) {
-    const g = goals.find((x) => x.id === pgId);
-    pgName = g?.name ?? pgName;
-  }
-
-  return {
-    kind: "project",
-    subjectId: stableId,
-    subjectName: name,
-    parentGoalId: pgId,
-    parentGoalName: pgName,
-    description: desc,
-    startedAt: new Date().toISOString(),
-    accumulatedPauseMs: 0,
-    pauseStartedAt: null,
-  };
-}
-
-async function persistStoppedSession(
-  session: TimeTrackerSession
-): Promise<void> {
-  const endedAt = new Date().toISOString();
-  const durationMs = elapsedMs(session);
-  await appendTimeEntry({
-    id: newId(),
-    kind: session.kind,
-    subjectId: session.subjectId,
-    subjectName: session.subjectName,
-    parentGoalId: session.parentGoalId,
-    parentGoalName: session.parentGoalName,
-    description: session.description,
-    startedAt: session.startedAt,
-    endedAt,
-    durationMs,
-  });
-  saveSession(null);
-}
-
 function IconPause({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -219,13 +77,169 @@ function IconStop({ className }: { className?: string }) {
   );
 }
 
+/** Resolves the Start Timer form's current subject selection into an
+ * active-session start request. Returns null if nothing resolvable is
+ * selected/typed yet. */
+function resolveStartBody(
+  kind: TimeTrackerKind,
+  subjectId: string,
+  subjectSearch: string,
+  goals: TimeTrackerGoal[],
+  projects: TimeTrackerProject[],
+  description: string
+): StartActiveSessionBody | null {
+  const q = subjectSearch.trim();
+  const qLower = q.toLowerCase();
+  let name = "";
+  let goalIdNum: number | null = null;
+  let projectIdNum: number | null = null;
+  let pgId: string | null = null;
+  let pgName: string | null = null;
+
+  if (subjectId) {
+    if (kind === "goal") {
+      // A stale/legacy subjectId (e.g. a pre-DB-migration local id) won't
+      // match any current goal by id - fall back to matching by name so
+      // continuing an old group still resolves to the real, live row (and
+      // therefore its real category) instead of giving up entirely.
+      const g =
+        goals.find((x) => x.id === subjectId) ??
+        goals.find((x) => x.name.toLowerCase() === qLower);
+      if (!g) return null;
+      name = g.name;
+      goalIdNum = Number(g.id);
+    } else {
+      const p =
+        projects.find((x) => x.id === subjectId) ??
+        projects.find((x) => x.name.toLowerCase() === qLower);
+      if (!p) return null;
+      name = p.name;
+      projectIdNum = Number(p.id);
+      if (p.goalId) {
+        const g = goals.find((x) => x.id === p.goalId);
+        pgId = p.goalId;
+        pgName = g?.name ?? null;
+      }
+    }
+  } else {
+    if (!qLower) return null;
+    if (kind === "goal") {
+      const existing = goals.find((g) => g.name.toLowerCase() === qLower);
+      if (!existing) return null;
+      name = existing.name;
+      goalIdNum = Number(existing.id);
+    } else {
+      const existing = projects.find((p) => p.name.toLowerCase() === qLower);
+      if (!existing) return null;
+      name = existing.name;
+      projectIdNum = Number(existing.id);
+      if (existing.goalId) {
+        const g = goals.find((x) => x.id === existing.goalId);
+        pgId = existing.goalId;
+        pgName = g?.name ?? null;
+      }
+    }
+  }
+
+  return {
+    kind,
+    goal_id: goalIdNum,
+    project_id: projectIdNum,
+    subject_name: name,
+    parent_goal_id: kind === "project" ? pgId : null,
+    parent_goal_name: kind === "project" ? pgName : null,
+    description: description.trim(),
+  };
+}
+
+/** When the subject id/name no longer matches goals/projects (deleted or legacy rows), still start from preset + entry metadata. */
+function presetDescription(d: TimeTrackerPresetProjectDetail): string {
+  return typeof d.description === "string" ? d.description : "";
+}
+
+function buildStartBodyFromPreset(
+  kind: TimeTrackerKind,
+  d: TimeTrackerPresetProjectDetail,
+  goals: TimeTrackerGoal[],
+  projects: TimeTrackerProject[]
+): StartActiveSessionBody | null {
+  const desc = presetDescription(d);
+
+  // Prefer the entry's own already-resolved FK over re-deriving it from the
+  // frozen subjectId/name - this is always correct (and lets the backend
+  // resolve the project's *current* category for the new entry), even for
+  // legacy entries whose subjectId predates the DB-backed project/goal ids.
+  if (kind === "goal" && typeof d.goalId === "number") {
+    const g = goals.find((x) => x.id === String(d.goalId));
+    const name = g?.name ?? d.subjectName.trim();
+    if (!name) return null;
+    return {
+      kind: "goal",
+      goal_id: d.goalId,
+      project_id: null,
+      subject_name: name,
+      description: desc,
+    };
+  }
+  if (kind === "project" && typeof d.projectId === "number") {
+    const p = projects.find((x) => x.id === String(d.projectId));
+    const name = p?.name ?? d.subjectName.trim();
+    if (!name) return null;
+    const pgId: string | null = p?.goalId ?? d.parentGoalId ?? null;
+    const pgName: string | null = pgId
+      ? goals.find((x) => x.id === pgId)?.name ?? d.parentGoalName ?? null
+      : null;
+    return {
+      kind: "project",
+      goal_id: null,
+      project_id: d.projectId,
+      subject_name: name,
+      parent_goal_id: pgId,
+      parent_goal_name: pgName,
+      description: desc,
+    };
+  }
+
+  const resolved = resolveStartBody(kind, d.subjectId, d.subjectName, goals, projects, desc);
+  if (resolved) return resolved;
+
+  const name = d.subjectName.trim();
+  if (!name) return null;
+
+  if (kind === "goal") {
+    return { kind: "goal", goal_id: null, project_id: null, subject_name: name, description: desc };
+  }
+
+  let pgId: string | null = d.parentGoalId !== undefined ? d.parentGoalId : null;
+  let pgName: string | null = d.parentGoalName !== undefined ? d.parentGoalName : null;
+  if (pgId && (pgName == null || pgName === "")) {
+    const g = goals.find((x) => x.id === pgId);
+    pgName = g?.name ?? pgName;
+  }
+
+  return {
+    kind: "project",
+    goal_id: null,
+    project_id: null,
+    subject_name: name,
+    parent_goal_id: pgId,
+    parent_goal_name: pgName,
+    description: desc,
+  };
+}
+
 export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const { token } = useAuth();
   const [hydrated, setHydrated] = useState(false);
   const [session, setSession] = useState<TimeTrackerSession | null>(null);
-  const [goals, setGoals] = useState<TimeTrackerGoal[]>([]);
-  const [projects, setProjects] = useState<TimeTrackerProject[]>([]);
   const [tick, setTick] = useState(0);
+
+  const goalsQuery = useTimeTrackerGoals();
+  const projectsQuery = useTimeTrackerProjects();
+  const categoriesQuery = useTimeTrackerCategories();
+  const goals = goalsQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
+  const categories = categoriesQuery.data ?? [];
 
   const [kind, setKind] = useState<TimeTrackerKind>("goal");
   const [subjectId, setSubjectId] = useState("");
@@ -235,35 +249,58 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   const [goalModalInitial, setGoalModalInitial] = useState("");
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectModalInitial, setProjectModalInitial] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const tabTitleBeforeTimerRef = useRef<string | null>(null);
-  /** Same-tab session snapshot for play/preset when storage read lags React state. */
-  const sessionRef = useRef<TimeTrackerSession | null>(null);
 
-  const reloadFromStorage = useCallback(() => {
+  // Flicker-avoidance cache: show the last-known session instantly on mount,
+  // then overwrite with the authoritative server value once it resolves.
+  useEffect(() => {
     setSession(loadSession());
-    setGoals(loadGoals());
-    setProjects(loadProjects());
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    reloadFromStorage();
-    setHydrated(true);
-  }, [reloadFromStorage]);
-
-  useEffect(() => {
-    registerAppendTimeEntryServerHook(async (entry) => {
-      if (!token) {
-        throw new Error("Sign in to save time entries");
-      }
-      await createTimeEntry(token, entry);
-    });
-    return () => registerAppendTimeEntryServerHook(null);
+    if (!token) {
+      setSession(null);
+      saveSession(null);
+      return;
+    }
+    let cancelled = false;
+    getActiveSession(token)
+      .then((s) => {
+        if (cancelled) return;
+        setSession(s);
+        saveSession(s);
+      })
+      .catch(() => {
+        /* keep cached value on transient errors */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
+  // One-shot "something changed elsewhere" push — on any message, just
+  // re-fetch the authoritative state rather than trying to apply partial
+  // state from the event payload.
   useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
+    if (!token) return;
+    const es = new EventSource(activeSessionStreamUrl(token));
+    es.onmessage = () => {
+      void getActiveSession(token)
+        .then((s) => {
+          setSession(s);
+          saveSession(s);
+        })
+        .catch(() => {
+          /* ignore transient errors; next message or reload will recover */
+        });
+      window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
+    };
+    return () => es.close();
+  }, [token]);
 
   const applyPreset = useCallback(
     async (
@@ -280,37 +317,26 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       const autoStart = d.autoStart === true;
       if (!autoStart && d.subjectId === "") return;
 
-      const goalsFresh = loadGoals();
-      const projectsFresh = loadProjects();
-      setGoals(goalsFresh);
-      setProjects(projectsFresh);
-
       const desc = presetDescription(d);
 
       if (autoStart) {
-        const existing = sessionRef.current ?? loadSession();
-        if (existing) {
-          try {
-            await persistStoppedSession(existing);
-          } catch {
-            return;
+        if (!token) return;
+        const body = buildStartBodyFromPreset(kindArg, d, goals, projects);
+        if (!body) return;
+        try {
+          const result = await startActiveSession(token, body);
+          setSession(result.session);
+          saveSession(result.session);
+          if (result.autoClosedEntry) {
+            window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
           }
-          sessionRef.current = null;
-          setSession(null);
+        } catch {
+          return;
         }
-        const next = autoStartSessionFromPreset(
-          kindArg,
-          d,
-          goalsFresh,
-          projectsFresh
-        );
-        if (!next) return;
         setKind(kindArg);
         setSubjectId("");
         setSubjectSearch("");
         setDescription(desc);
-        saveSession(next);
-        setSession(next);
         return;
       }
 
@@ -321,7 +347,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       );
       setDescription(desc);
     },
-    []
+    [token, goals, projects]
   );
 
   useEffect(() => {
@@ -356,20 +382,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
       void applyPreset(kind, detail);
     });
   }, [applyPreset]);
-
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (
-        e.key === "life-plan-time-tracker-session" ||
-        e.key === "life-plan-time-tracker-goals" ||
-        e.key === "life-plan-time-tracker-projects"
-      ) {
-        reloadFromStorage();
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [reloadFromStorage]);
 
   useEffect(() => {
     if (!session) return;
@@ -459,77 +471,73 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
   }, []);
 
   const handleStop = useCallback(async () => {
-    if (session) {
-      try {
-        await persistStoppedSession(session);
-        setDescription(session.description);
-        setSession(null);
-      } catch {
-        /* keep session if server save failed */
-      }
-    } else {
-      saveSession(null);
+    if (!token) return;
+    try {
+      await stopActiveSession(token);
       setSession(null);
+      saveSession(null);
+      window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
+    } catch {
+      /* keep session if server stop failed */
     }
-  }, [session]);
+  }, [token]);
 
-  const handlePause = useCallback(() => {
-    if (!session || session.pauseStartedAt) return;
-    const next: TimeTrackerSession = {
+  const handlePause = useCallback(async () => {
+    if (!session || session.pauseStartedAt || !token) return;
+    const optimistic: TimeTrackerSession = {
       ...session,
       pauseStartedAt: new Date().toISOString(),
     };
-    saveSession(next);
-    setSession(next);
-  }, [session]);
-
-  const handleResume = useCallback(() => {
-    if (!session || !session.pauseStartedAt) return;
-    const pauseAt = new Date(session.pauseStartedAt).getTime();
-    if (Number.isNaN(pauseAt)) {
-      const next: TimeTrackerSession = {
-        ...session,
-        pauseStartedAt: null,
-      };
-      saveSession(next);
-      setSession(next);
-      return;
+    setSession(optimistic);
+    saveSession(optimistic);
+    try {
+      const updated = await patchActiveSession(token, { action: "pause" });
+      setSession(updated);
+      saveSession(updated);
+    } catch {
+      setSession(session);
+      saveSession(session);
     }
-    const next: TimeTrackerSession = {
-      ...session,
-      accumulatedPauseMs: session.accumulatedPauseMs + (Date.now() - pauseAt),
-      pauseStartedAt: null,
-    };
-    saveSession(next);
-    setSession(next);
-  }, [session]);
+  }, [session, token]);
+
+  const handleResume = useCallback(async () => {
+    if (!session || !session.pauseStartedAt || !token) return;
+    try {
+      const updated = await patchActiveSession(token, { action: "resume" });
+      setSession(updated);
+      saveSession(updated);
+    } catch {
+      /* keep paused state on failure */
+    }
+  }, [session, token]);
 
   const subjectItems: SearchablePickerItem[] =
     kind === "goal"
       ? goals.map((g) => ({ id: g.id, name: g.name })).sort((a, b) => a.name.localeCompare(b.name))
       : projects.map((p) => ({ id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name));
 
-  const refreshGoals = useCallback(() => {
-    setGoals(loadGoals());
-  }, []);
-
-  const handleStart = useCallback(() => {
-    const next = resolveTimerSession(
-      kind,
-      subjectId,
-      subjectSearch,
-      goals,
-      projects,
-      description
-    );
-    if (!next) return;
-
-    saveSession(next);
-    setSession(next);
-    setSubjectId("");
-    setSubjectSearch("");
-    setDescription("");
-  }, [description, goals, kind, projects, subjectId, subjectSearch]);
+  const handleStart = useCallback(async () => {
+    if (!token) return;
+    const body = resolveStartBody(kind, subjectId, subjectSearch, goals, projects, description);
+    if (!body) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const result = await startActiveSession(token, body);
+      setSession(result.session);
+      saveSession(result.session);
+      setSubjectId("");
+      setSubjectSearch("");
+      setDescription("");
+      if (result.autoClosedEntry) {
+        window.dispatchEvent(new CustomEvent(TIME_TRACKER_ENTRIES_UPDATED_EVENT));
+      }
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : "Failed to start timer");
+    } finally {
+      setStarting(false);
+    }
+  }, [token, kind, subjectId, subjectSearch, goals, projects, description]);
 
   const onSubjectPickExisting = useCallback((id: string, name: string) => {
     setSubjectId(id);
@@ -556,8 +564,9 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           (p) => p.name.toLowerCase() === subjectSearch.trim().toLowerCase()
         );
   const canStart =
-    (subjectId !== "" && subjectSearch.trim().length > 0) ||
-    (subjectSearch.trim().length > 0 && nameMatchesExisting);
+    !starting &&
+    ((subjectId !== "" && subjectSearch.trim().length > 0) ||
+      (subjectSearch.trim().length > 0 && nameMatchesExisting));
 
   const labelClass = inline
     ? "sr-only"
@@ -632,7 +641,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           {isPaused ? (
             <button
               type="button"
-              onClick={handleResume}
+              onClick={() => void handleResume()}
               aria-label="Resume timer"
               title="Resume"
               className={`inline-flex items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 ${
@@ -644,7 +653,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           ) : (
             <button
               type="button"
-              onClick={handlePause}
+              onClick={() => void handlePause()}
               aria-label="Pause timer"
               title="Pause"
               className={`inline-flex items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 ${
@@ -722,7 +731,7 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
           <button
             type="button"
             disabled={!canStart}
-            onClick={handleStart}
+            onClick={() => void handleStart()}
             aria-label="Start timer"
             title="Start"
             className={`inline-flex items-center justify-center rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500 ${
@@ -732,6 +741,9 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
             <IconPlay className={inline ? "h-3.5 w-3.5" : "h-4 w-4"} />
           </button>
         </div>
+        {startError ? (
+          <p className="w-full text-xs text-red-600 dark:text-red-400">{startError}</p>
+        ) : null}
       </div>
 
       <CreateGoalModal
@@ -740,7 +752,6 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
         goals={goals}
         onClose={() => setGoalModalOpen(false)}
         onCreated={(id, name) => {
-          setGoals(loadGoals());
           setSubjectId(id);
           setSubjectSearch(name);
         }}
@@ -750,11 +761,10 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
         initialName={projectModalInitial}
         goals={goals}
         projects={projects}
-        refreshGoals={refreshGoals}
+        categories={categories}
+        refreshGoals={() => {}}
         onClose={() => setProjectModalOpen(false)}
         onCreated={(id, name) => {
-          setProjects(loadProjects());
-          setGoals(loadGoals());
           setSubjectId(id);
           setSubjectSearch(name);
         }}

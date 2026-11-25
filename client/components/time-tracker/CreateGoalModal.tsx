@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { type TimeTrackerGoal, newId } from "@/lib/time-tracker-storage";
+import { type TimeTrackerGoal } from "@/lib/time-tracker-storage";
 import {
-  useAddTimeTrackerGoalToCache,
-  useUpdateTimeTrackerGoalInCache,
+  useCreateTimeTrackerGoal,
+  useUpdateTimeTrackerGoal,
 } from "@/lib/hooks/use-time-tracker-subjects";
 import { RightDrawer } from "@/components/RightDrawer";
 
@@ -46,14 +46,17 @@ export function CreateGoalModal({
 }: Props) {
   const [name, setName] = useState("");
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const addGoalToCache = useAddTimeTrackerGoalToCache();
-  const updateGoalInCache = useUpdateTimeTrackerGoalInCache();
+  const [error, setError] = useState<string | null>(null);
+  const createGoal = useCreateTimeTrackerGoal();
+  const updateGoal = useUpdateTimeTrackerGoal();
+  const saving = createGoal.isPending || updateGoal.isPending;
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setName(editTarget ? editTarget.name : initialName);
       setEndDate(editTarget?.endDate ? parseLocalYmd(editTarget.endDate) : null);
+      setError(null);
     }
   }, [open, initialName, editTarget]);
 
@@ -64,7 +67,7 @@ export function CreateGoalModal({
     if (open) nameInputRef.current?.focus();
   }, [open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = name.trim();
     if (!n) return;
@@ -74,20 +77,25 @@ export function CreateGoalModal({
           g.id !== editTarget?.id && g.name.toLowerCase() === n.toLowerCase()
       )
     ) {
+      setError("A goal with this name already exists");
       return;
     }
     const end: string | null = endDate ? toLocalYmd(endDate) : null;
-    if (editTarget) {
-      const goal: TimeTrackerGoal = { ...editTarget, name: n, endDate: end };
-      updateGoalInCache(goal);
-      onCreated(goal.id, n);
-    } else {
-      const id = newId();
-      const goal: TimeTrackerGoal = { id, name: n, endDate: end };
-      addGoalToCache(goal);
-      onCreated(id, n);
+    try {
+      if (editTarget) {
+        const goal = await updateGoal.mutateAsync({
+          id: editTarget.id,
+          body: { name: n, end_date: end },
+        });
+        onCreated(goal.id, n);
+      } else {
+        const goal = await createGoal.mutateAsync({ name: n, end_date: end });
+        onCreated(goal.id, n);
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save goal");
     }
-    onClose();
   };
 
   return (
@@ -136,6 +144,9 @@ export function CreateGoalModal({
             wrapperClassName="w-full"
           />
         </div>
+        {error ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        ) : null}
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
@@ -146,7 +157,8 @@ export function CreateGoalModal({
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            disabled={saving}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             {editTarget ? "Save changes" : "Save goal"}
           </button>

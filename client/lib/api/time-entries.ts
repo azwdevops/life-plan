@@ -11,6 +11,10 @@ export interface TimeEntryApiRow {
   kind: "goal" | "project";
   subject_id: string;
   subject_name: string;
+  goal_id: number | null;
+  project_id: number | null;
+  category_id: number | null;
+  category_name: string | null;
   parent_goal_id: string | null;
   parent_goal_name: string | null;
   description: string;
@@ -25,6 +29,10 @@ export function apiRowToClientEntry(row: TimeEntryApiRow): TimeTrackerEntry {
     kind: row.kind,
     subjectId: row.subject_id,
     subjectName: row.subject_name,
+    goalId: row.goal_id ?? null,
+    projectId: row.project_id ?? null,
+    categoryId: row.category_id ?? null,
+    categoryName: row.category_name ?? null,
     parentGoalId: row.parent_goal_id,
     parentGoalName: row.parent_goal_name,
     description: row.description ?? "",
@@ -117,39 +125,6 @@ export async function listRecentTimeEntries(
   return getTimeEntriesQuery(token, params.toString());
 }
 
-export async function createTimeEntry(
-  token: string,
-  entry: TimeTrackerEntry
-): Promise<TimeTrackerEntry> {
-  const body = {
-    id: entry.id,
-    kind: entry.kind,
-    subject_id: entry.subjectId,
-    subject_name: entry.subjectName,
-    parent_goal_id: entry.parentGoalId,
-    parent_goal_name: entry.parentGoalName,
-    description: entry.description,
-    started_at: entry.startedAt,
-    ended_at: entry.endedAt,
-    duration_ms: entry.durationMs,
-  };
-  const response = await fetch(`${API_BASE_URL}/api/v1/time-entries/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (handleApiResponse(response)) {
-    throw new Error("Unauthorized");
-  }
-  if (!response.ok) {
-    throw new Error("Failed to save time entry");
-  }
-  const row = (await response.json()) as TimeEntryApiRow;
-  return apiRowToClientEntry(row);
-}
 
 export type TimeEntryUpdateBody = Partial<{
   kind: "goal" | "project";
@@ -227,4 +202,39 @@ export async function duplicateTimeEntry(
   }
   const row = (await response.json()) as TimeEntryApiRow;
   return apiRowToClientEntry(row);
+}
+
+export interface BackfillCategoriesResult {
+  updatedEntries: number;
+  updatedActiveSessions: number;
+  projectsChecked: number;
+}
+
+/** One-time, idempotent catch-up: stamps each categorized project's category onto its
+ * own entries/active sessions that predate it having any category - safe to re-run or
+ * run again after categorizing more projects, since it only ever updates rows still
+ * NULL and never inserts anything. */
+export async function backfillTimeEntryCategories(
+  token: string
+): Promise<BackfillCategoriesResult> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/time-entries/backfill-categories`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) {
+    throw new Error("Failed to backfill categories");
+  }
+  const data = (await response.json()) as {
+    updated_entries: number;
+    updated_active_sessions: number;
+    projects_checked: number;
+  };
+  return {
+    updatedEntries: data.updated_entries,
+    updatedActiveSessions: data.updated_active_sessions,
+    projectsChecked: data.projects_checked,
+  };
 }

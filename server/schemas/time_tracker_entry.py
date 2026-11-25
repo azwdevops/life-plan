@@ -22,6 +22,10 @@ class TimeTrackerEntryResponse(BaseModel):
     kind: Literal["goal", "project"]
     subject_id: str
     subject_name: str
+    goal_id: Optional[int] = None
+    project_id: Optional[int] = None
+    category_id: Optional[int] = None
+    category_name: Optional[str] = None
     parent_goal_id: Optional[str] = None
     parent_goal_name: Optional[str] = None
     description: str
@@ -51,3 +55,9 @@ class TimeTrackerEntryDurationSummary(BaseModel):
 
 class TimeTrackerEntryEarliest(BaseModel):
     started_at: Optional[datetime] = None
+
+
+class TimeTrackerBackfillCategoriesResponse(BaseModel):
+    updated_entries: int
+    updated_active_sessions: int
+    projects_checked: int

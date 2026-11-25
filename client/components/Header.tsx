@@ -12,6 +12,7 @@ import { HeaderDailyProductiveList } from "@/components/HeaderDailyProductiveLis
 import { ChannelsDrawer } from "@/components/music-business/ChannelsDrawer";
 import { LinkedInPagesDrawer } from "@/components/music-business/LinkedInPagesDrawer";
 import { BookIdeasDrawer } from "@/components/azw-books/BookIdeasDrawer";
+import { PostExpenseDrawer } from "@/components/money-flow/PostExpenseDrawer";
 import { usePageHeaderActionsValue, usePageHeaderExtraValue, usePageHeaderMenuExtraValue, type PageHeaderAction } from "@/contexts/PageHeaderActionsContext";
 
 export interface CashAnalysisSummary {
@@ -170,11 +171,12 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
   const [channelsDrawerOpen, setChannelsDrawerOpen] = useState(false);
   const [linkedInDrawerOpen, setLinkedInDrawerOpen] = useState(false);
   const [bookIdeasDrawerOpen, setBookIdeasDrawerOpen] = useState(false);
-  // "Install App", "View channels", "View LinkedIn pages" and "View Book Ideas"
-  // live in the same global "more actions" menu rather than a fixed sidebar
-  // footer button - they're always-available utility actions, not page
-  // content, so they're appended to whatever the current page has registered
-  // instead of permanently occupying sidebar space.
+  const [postExpenseDrawerOpen, setPostExpenseDrawerOpen] = useState(false);
+  // "Install App", "View channels", "View LinkedIn pages", "View Book Ideas"
+  // and "Post Expense" live in the same global "more actions" menu rather
+  // than a fixed sidebar footer button - they're always-available utility
+  // actions, not page content, so they're appended to whatever the current
+  // page has registered instead of permanently occupying sidebar space.
   const moreActions = [
     ...pageHeaderActions,
     ...(canInstall
@@ -183,7 +185,8 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
     { label: "View channels", onClick: () => setChannelsDrawerOpen(true), icon: <span aria-hidden>📺</span> },
     { label: "View LinkedIn pages", onClick: () => setLinkedInDrawerOpen(true), icon: <span aria-hidden>💼</span> },
     { label: "View Book Ideas", onClick: () => setBookIdeasDrawerOpen(true), icon: <span aria-hidden>💡</span> },
-  ];
+    { label: "Post Expense", onClick: () => setPostExpenseDrawerOpen(true), icon: <span aria-hidden>🧾</span> },
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <>
@@ -369,6 +372,7 @@ export function Header({ onMenuClick, isSidebarOpen, centerContent, subHeaderCon
     <ChannelsDrawer open={channelsDrawerOpen} onClose={() => setChannelsDrawerOpen(false)} />
     <LinkedInPagesDrawer open={linkedInDrawerOpen} onClose={() => setLinkedInDrawerOpen(false)} />
     <BookIdeasDrawer open={bookIdeasDrawerOpen} onClose={() => setBookIdeasDrawerOpen(false)} />
+    <PostExpenseDrawer open={postExpenseDrawerOpen} onClose={() => setPostExpenseDrawerOpen(false)} />
     </>
   );
 }

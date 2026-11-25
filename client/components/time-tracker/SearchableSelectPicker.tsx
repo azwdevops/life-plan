@@ -22,7 +22,7 @@ type Props = {
   disabled?: boolean;
   allowCreate: boolean;
   className?: string;
-  /** Merged onto the trigger button (e.g. py-2 text-sm in modals). */
+  /** Merged onto the trigger input (e.g. py-2 text-sm in modals). */
   triggerClassName?: string;
   /** Panel stacks above modals when set (e.g. z-[10050]). Default z-[9999]. */
   panelZClass?: string;
@@ -33,7 +33,8 @@ type Props = {
   formatCreateLabel?: (suggested: string) => string;
 };
 
-/** Closed state looks like a select; open shows search + scrollable list (+ optional create row). */
+/** Closed state looks like a select; focusing the field itself opens the list and lets
+ * you type directly into it to filter - no separate search box inside the panel. */
 export function SearchableSelectPicker({
   instanceId,
   items,
@@ -54,7 +55,7 @@ export function SearchableSelectPicker({
   const [panelFilter, setPanelFilter] = useState("");
   const [panelBox, setPanelBox] = useState({ top: 0, left: 0, width: 160 });
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const trimmed = panelFilter.trim();
@@ -103,14 +104,32 @@ export function SearchableSelectPicker({
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    setPanelFilter("");
-  }, [open]);
-
-  const toggleOpen = () => {
+  const openWithCurrentValue = () => {
     if (disabled) return;
-    setOpen((o) => !o);
+    setPanelFilter(valueLabel);
+    setOpen(true);
+  };
+
+  const selectExisting = (id: string, name: string) => {
+    onSelectExisting(id, name);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (exact) {
+        selectExisting(exact.id, exact.name);
+      } else if (showCreate) {
+        onRequestCreate(trimmed);
+        setOpen(false);
+      }
+    }
   };
 
   const panel =
@@ -125,17 +144,6 @@ export function SearchableSelectPicker({
         }}
         className={`${panelZClass} rounded-md border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-black/40`}
       >
-        <div className="border-b border-zinc-200 p-1.5 dark:border-zinc-700">
-          <input
-            type="search"
-            placeholder="Search list…"
-            value={panelFilter}
-            onChange={(e) => setPanelFilter(e.target.value)}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="w-full rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-blue-500"
-            autoComplete="off"
-          />
-        </div>
         <ul
           id={`${instanceId}-listbox`}
           role="listbox"
@@ -158,7 +166,7 @@ export function SearchableSelectPicker({
           ) : null}
           {items.length === 0 && !showCreate ? (
             <li className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
-              No items yet. Type below to create one.
+              No items yet. Type to create one.
             </li>
           ) : null}
           {filtered.map((i) => (
@@ -167,10 +175,7 @@ export function SearchableSelectPicker({
                 type="button"
                 className="w-full px-3 py-2 text-left text-xs text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onSelectExisting(i.id, i.name);
-                  setOpen(false);
-                }}
+                onClick={() => selectExisting(i.id, i.name)}
               >
                 {i.name}
               </button>
@@ -204,42 +209,31 @@ export function SearchableSelectPicker({
 
   return (
     <div className={`relative ${className ?? ""}`} ref={wrapperRef}>
-      <button
+      <input
         ref={triggerRef}
-        type="button"
+        type="text"
         id={instanceId}
         disabled={disabled}
-        onMouseDown={(e) => {
-          e.preventDefault();
+        value={open ? panelFilter : valueLabel}
+        onChange={(e) => {
+          if (!open) setOpen(true);
+          setPanelFilter(e.target.value);
         }}
-        onClick={toggleOpen}
+        onFocus={(e) => {
+          openWithCurrentValue();
+          e.target.select();
+        }}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setOpen(false)}
+        placeholder={triggerPlaceholder}
+        autoComplete="off"
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${instanceId}-listbox`}
-        className={`flex w-full min-w-0 items-center justify-between gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-left text-xs shadow-sm disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:shadow-none ${triggerClassName ?? ""}`}
-      >
-        <span
-          className={
-            valueLabel
-              ? "truncate text-zinc-900 dark:text-zinc-100"
-              : "truncate text-zinc-400 dark:text-zinc-500"
-          }
-        >
-          {valueLabel || triggerPlaceholder}
-        </span>
-        <svg
-          className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform dark:text-zinc-400 ${
-            open ? "rotate-180" : ""
-          }`}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-          aria-hidden
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+        aria-autocomplete="list"
+        className={`w-full min-w-0 rounded-md border border-zinc-300 bg-white px-2 py-1 text-left text-xs text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-none dark:placeholder:text-zinc-500 dark:focus:border-blue-500 ${triggerClassName ?? ""}`}
+      />
       {panel && typeof document !== "undefined"
         ? createPortal(panel, document.body)
         : null}
