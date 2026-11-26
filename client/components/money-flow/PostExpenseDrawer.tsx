@@ -10,8 +10,6 @@ import {
   useLedgers,
   useLedgerGroups,
   useCreateLedger,
-  useSpendingTypes,
-  useCreateSpendingType,
   useCreateLedgerGroup,
   useParentLedgerGroups,
   useLedgerItems,
@@ -39,7 +37,7 @@ interface PurchaseLine {
  * "more actions" menu, not just the Expenses page. Encapsulates the whole
  * cluster: the expense form itself plus every nested "create X while
  * picking" drawer it can open (item, expense ledger, asset account, charge
- * ledger, spending category, ledger group).
+ * ledger, ledger group).
  */
 export function PostExpenseDrawer({
   open,
@@ -51,11 +49,9 @@ export function PostExpenseDrawer({
   const { data: ledgers = [], isLoading: ledgersLoading } = useLedgers();
   const { data: groups = [] } = useLedgerGroups();
   const { data: parentGroups = [] } = useParentLedgerGroups();
-  const { data: spendingTypes = [] } = useSpendingTypes();
   const { data: ledgerItems = [] } = useLedgerItems();
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
-  const createSpendingTypeMutation = useCreateSpendingType();
   const createLedgerGroupMutation = useCreateLedgerGroup();
   const createLedgerItemMutation = useCreateLedgerItem();
 
@@ -99,7 +95,6 @@ export function PostExpenseDrawer({
   const [showCreateAssetLedgerDialog, setShowCreateAssetLedgerDialog] = useState(false);
   const [showCreateChargeLedgerDialog, setShowCreateChargeLedgerDialog] = useState(false);
   const [showCreateItemDialog, setShowCreateItemDialog] = useState(false);
-  const [showSpendingTypeForm, setShowSpendingTypeForm] = useState(false);
   const [showLedgerGroupForm, setShowLedgerGroupForm] = useState(false);
   const [pendingLedgerName, setPendingLedgerName] = useState("");
   const [pendingAssetLedgerName, setPendingAssetLedgerName] = useState("");
@@ -108,9 +103,6 @@ export function PostExpenseDrawer({
   const [creatingItemForLineIndex, setCreatingItemForLineIndex] = useState<number | null>(null);
   const [pendingLedgerGroupName, setPendingLedgerGroupName] = useState("");
   const [creatingLedgerGroupFromForm, setCreatingLedgerGroupFromForm] = useState<"expense" | "asset" | "charge" | null>(null);
-  const [spendingTypeFormData, setSpendingTypeFormData] = useState({
-    name: "",
-  });
   const [ledgerGroupFormData, setLedgerGroupFormData] = useState<LedgerGroupCreate>({
     name: "",
     parent_ledger_group_id: 0,
@@ -133,17 +125,14 @@ export function PostExpenseDrawer({
   const [ledgerFormData, setLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: expenseGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [assetLedgerFormData, setAssetLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: assetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [chargeLedgerFormData, setChargeLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: chargeGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -298,7 +287,6 @@ export function PostExpenseDrawer({
       setLedgerFormData({
         name: "",
         ledger_group_id: expenseGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateLedgerDialog(false);
       setPendingLedgerName("");
@@ -344,40 +332,11 @@ export function PostExpenseDrawer({
     }
   };
 
-  const handleSpendingTypeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!spendingTypeFormData.name.trim()) {
-      setError("Spending category name is required");
-      return;
-    }
-
-    try {
-      const newSpendingType = await createSpendingTypeMutation.mutateAsync({
-        name: spendingTypeFormData.name,
-      });
-
-      setLedgerFormData({
-        ...ledgerFormData,
-        spending_type_id: newSpendingType.id,
-      });
-
-      setShowSpendingTypeForm(false);
-      setSpendingTypeFormData({
-        name: "",
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create spending category");
-    }
-  };
-
   const handleCreateNewLedger = (searchTerm: string) => {
     setPendingLedgerName(searchTerm);
     setLedgerFormData({
       name: searchTerm,
       ledger_group_id: expenseGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateLedgerDialog(true);
   };
@@ -387,7 +346,6 @@ export function PostExpenseDrawer({
     setAssetLedgerFormData({
       name: searchTerm,
       ledger_group_id: assetGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateAssetLedgerDialog(true);
   };
@@ -397,7 +355,6 @@ export function PostExpenseDrawer({
     setChargeLedgerFormData({
       name: searchTerm,
       ledger_group_id: chargeGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateChargeLedgerDialog(true);
   };
@@ -427,7 +384,6 @@ export function PostExpenseDrawer({
       setAssetLedgerFormData({
         name: "",
         ledger_group_id: assetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateAssetLedgerDialog(false);
       setPendingAssetLedgerName("");
@@ -461,7 +417,6 @@ export function PostExpenseDrawer({
       setChargeLedgerFormData({
         name: "",
         ledger_group_id: chargeGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateChargeLedgerDialog(false);
       setPendingChargeLedgerName("");
@@ -936,40 +891,6 @@ export function PostExpenseDrawer({
             />
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Spending Category *
-            </label>
-            <SearchableSelect
-              options={spendingTypes.map((type) => ({
-                value: type.id,
-                label: type.name,
-                searchText: type.name,
-              }))}
-              value={ledgerFormData.spending_type_id || 0}
-              onChange={(value) =>
-                setLedgerFormData({
-                  ...ledgerFormData,
-                  spending_type_id:
-                    typeof value === "number" && value !== 0
-                      ? value
-                      : typeof value === "string" && value !== "0"
-                      ? parseInt(value)
-                      : null,
-                })
-              }
-              placeholder="Select spending category"
-              searchPlaceholder="Type to search spending categories..."
-              required
-              className="w-full"
-              onCreateNew={(searchTerm) => {
-                setSpendingTypeFormData({ name: searchTerm });
-                setShowSpendingTypeForm(true);
-              }}
-              createNewLabel={(searchTerm) => `Create "${searchTerm}" spending category`}
-            />
-          </div>
-
           {error && (
             <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
               {error}
@@ -1090,61 +1011,6 @@ export function PostExpenseDrawer({
               className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
               {createLedgerMutation.isPending ? "Creating..." : "Create Account"}
-            </button>
-          </div>
-        </form>
-      </RightDrawer>
-
-      {/* Create Spending Category Drawer */}
-      <RightDrawer
-        open={showSpendingTypeForm}
-        onClose={() => setShowSpendingTypeForm(false)}
-        title="Create Spending Category"
-        width="sm"
-        stackLevel={3}
-      >
-        <form onSubmit={handleSpendingTypeSubmit} className="space-y-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Name *
-            </label>
-            <input
-              type="text"
-              value={spendingTypeFormData.name}
-              onChange={(e) =>
-                setSpendingTypeFormData({
-                  ...spendingTypeFormData,
-                  name: e.target.value,
-                })
-              }
-              required
-              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="e.g., Food, Transport"
-            />
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-              {error}
-            </div>
-          )}
-
-          <div className="flex gap-4">
-            <button
-              type="submit"
-              disabled={createSpendingTypeMutation.isPending}
-              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              {createSpendingTypeMutation.isPending
-                ? "Creating..."
-                : "Create Spending Category"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowSpendingTypeForm(false)}
-              className="rounded-lg border border-zinc-300 px-6 py-2 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              Cancel
             </button>
           </div>
         </form>

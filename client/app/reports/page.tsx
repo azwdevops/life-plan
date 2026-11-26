@@ -9,42 +9,20 @@ import { Sidebar } from "@/components/Sidebar";
 import { Dialog } from "@/components/Dialog";
 import { RightDrawer } from "@/components/RightDrawer";
 import { SearchableSelect } from "@/components/SearchableSelect";
-import {
-  SearchableSelectPicker,
-  type SearchablePickerItem,
-} from "@/components/time-tracker/SearchableSelectPicker";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useTrialBalance, useLedgerReport } from "@/lib/hooks/use-reports";
-import {
-  useParentLedgerGroups,
-  useLedgers,
-  useLedgerGroups,
-  useLedgerItems,
-  useCreateLedgerItem,
-} from "@/lib/hooks/use-accounts";
+import { useParentLedgerGroups, useLedgers, useLedgerGroups } from "@/lib/hooks/use-accounts";
 import {
   useUpdateTransaction,
   useDeleteTransaction,
   useTransaction,
-  useTransactions,
-  useAssignTransactionItem,
 } from "@/lib/hooks/use-transactions";
 import { useCreateLedger, useCreateLedgerGroup } from "@/lib/hooks/use-accounts";
 import { getTransaction } from "@/lib/api/transactions";
 import type { TransactionWithItems, TransactionUpdate, TransactionItem } from "@/lib/api/transactions";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 import Link from "next/link";
-
-type GapRow = {
-  key: string;
-  transactionItemId: number;
-  ledgerId: number;
-  date: string;
-  ledgerName: string;
-  amount: number;
-  reference: string | null;
-};
 
 function formatAmount(value: number): string {
   return value.toLocaleString("en-US", {
@@ -96,131 +74,11 @@ export default function ReportsPage() {
   const [ledgerFormData, setLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: 0,
-    spending_type_id: null,
   });
   const { data: groups = [] } = useLedgerGroups();
   const { data: parentGroups = [] } = useParentLedgerGroups();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
-
-  // --- Spending Category -> Item gaps report ---
-  const [showSpendingGapsDrawer, setShowSpendingGapsDrawer] = useState(false);
-  // No transaction_type filter: Spending Category can be set on Expenditure,
-  // Fixed Assets, or Current Assets ledgers, so a DEBIT hitting one of those
-  // can come from a MONEY_PAID expense or a JOURNAL transfer (e.g. money
-  // moved into an investment ledger) - either way it counts.
-  const { data: allTransactionsForGaps = [] } = useTransactions(undefined, 3000);
-  // Includes inactive/archived ledgers - old spending-category entries are
-  // often posted against a ledger that's since been deactivated, and this
-  // report needs to find every one of them, not just currently-active ones.
-  const { data: allLedgersForGaps = [] } = useLedgers(true);
-
-  // Flat, no Spending Category grouping - each row already shows its own
-  // ledger, which is enough context to decide its item without a category
-  // layer on top.
-  const spendingGapRows = useMemo(() => {
-    const rows: GapRow[] = [];
-
-    for (const transaction of allTransactionsForGaps) {
-      for (const item of transaction.items ?? []) {
-        if (item.entry_type !== "DEBIT" || item.item_id != null) continue;
-        const ledger = allLedgersForGaps.find((l) => l.id === item.ledger_id);
-        if (!ledger?.spending_type_id) continue;
-        const amount =
-          typeof item.amount === "string" ? parseFloat(item.amount) : Number(item.amount) || 0;
-        if (amount <= 0) continue;
-
-        rows.push({
-          key: `${transaction.id}-${item.id}`,
-          transactionItemId: item.id,
-          ledgerId: ledger.id,
-          date: transaction.transaction_date,
-          ledgerName: ledger.name,
-          amount,
-          reference: transaction.reference,
-        });
-      }
-    }
-
-    rows.sort((a, b) => {
-      if (a.ledgerName !== b.ledgerName) return a.ledgerName.localeCompare(b.ledgerName);
-      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
-    });
-    return rows;
-  }, [allTransactionsForGaps, allLedgersForGaps]);
-
-  const { data: ledgerItemsForGaps = [] } = useLedgerItems();
-  const allGapItemOptions: SearchablePickerItem[] = useMemo(
-    () =>
-      ledgerItemsForGaps.map((li) => {
-        const ledgerName = allLedgersForGaps.find((l) => l.id === li.ledger_id)?.name;
-        return {
-          id: String(li.id),
-          name: ledgerName ? `${li.name} (${ledgerName})` : li.name,
-          matchKey: li.name,
-        };
-      }),
-    [ledgerItemsForGaps, allLedgersForGaps]
-  );
-  const createLedgerItemMutation = useCreateLedgerItem();
-  const assignTransactionItemMutation = useAssignTransactionItem();
-  const [gapAssignError, setGapAssignError] = useState<string | null>(null);
-  const [gapSaving, setGapSaving] = useState(false);
-  // Picking an item only stages it here - nothing is persisted until Save,
-  // so a pick can still be changed before it's committed.
-  const [gapItemDrafts, setGapItemDrafts] = useState<Record<string, number>>({});
-
-  const handleDraftGapItem = (row: GapRow, itemId: number) => {
-    setGapItemDrafts((prev) => ({ ...prev, [row.key]: itemId }));
-  };
-
-  const handleCreateGapItem = async (row: GapRow, suggestedName: string) => {
-    setGapAssignError(null);
-    try {
-      const newItem = await createLedgerItemMutation.mutateAsync({
-        name: suggestedName,
-        ledger_id: row.ledgerId,
-      });
-      handleDraftGapItem(row, newItem.id);
-    } catch (err) {
-      setGapAssignError(err instanceof Error ? err.message : "Failed to create item");
-    }
-  };
-
-  const draftedGapCount = Object.keys(gapItemDrafts).length;
-
-  const handleSaveGapDrafts = async () => {
-    const rowsByKey = new Map(spendingGapRows.map((r) => [r.key, r]));
-    const entries = Object.entries(gapItemDrafts);
-    if (entries.length === 0) return;
-    setGapSaving(true);
-    setGapAssignError(null);
-    try {
-      await Promise.all(
-        entries.map(([key, itemId]) => {
-          const row = rowsByKey.get(key);
-          if (!row) return Promise.resolve();
-          return assignTransactionItemMutation.mutateAsync({
-            transactionItemId: row.transactionItemId,
-            itemId,
-          });
-        })
-      );
-      setGapItemDrafts({});
-    } catch (err) {
-      setGapAssignError(err instanceof Error ? err.message : "Failed to save items");
-    } finally {
-      setGapSaving(false);
-    }
-  };
-
-  const handleCancelGapDrafts = () => {
-    setGapItemDrafts({});
-    setGapAssignError(null);
-  };
-
-  const spendingGapGrandTotal = spendingGapRows.reduce((sum, r) => sum + r.amount, 0);
-
   const updateTransactionMutation = useUpdateTransaction();
   const deleteTransactionMutation = useDeleteTransaction();
   const { token } = useAuth();
@@ -490,7 +348,6 @@ export default function ReportsPage() {
     setLedgerFormData({
       name: searchTerm,
       ledger_group_id: groups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateLedgerDialog(true);
   };
@@ -516,7 +373,6 @@ export default function ReportsPage() {
       setLedgerFormData({
         name: "",
         ledger_group_id: groups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateLedgerDialog(false);
       setPendingLedgerName("");
@@ -688,26 +544,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Spending Category Gaps Card */}
-            <div
-              onClick={() => setShowSpendingGapsDrawer(true)}
-              className="cursor-pointer rounded-xl border border-zinc-200 bg-white p-6 transition-all hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                  <span className="text-2xl">🔍</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                    Spending Category Gaps
-                  </h3>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    Entries with a category but no item yet
-                  </p>
-                </div>
-              </div>
-            </div>
-
             {/* Placeholder for future reports */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 opacity-50 dark:border-zinc-800 dark:bg-zinc-900">
               <div className="flex items-center gap-4">
@@ -744,123 +580,6 @@ export default function ReportsPage() {
 
         </div>
       </main>
-
-      {/* Spending Category Gaps Drawer */}
-      <RightDrawer
-        open={showSpendingGapsDrawer}
-        onClose={() => setShowSpendingGapsDrawer(false)}
-        title="Spending Category Gaps"
-        width="4xl"
-        actions={
-          draftedGapCount > 0 ? (
-            <>
-              <button
-                type="button"
-                onClick={handleCancelGapDrafts}
-                disabled={gapSaving}
-                className="inline-flex h-8 shrink-0 items-center rounded-lg border border-zinc-300 px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveGapDrafts()}
-                disabled={gapSaving}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-              >
-                {gapSaving ? "Saving…" : `Save (${draftedGapCount})`}
-              </button>
-            </>
-          ) : null
-        }
-      >
-        <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-          Expense entries tagged with a Spending Category but with no Item
-          assigned yet. Pick (or type to create) an item for one - picks are
-          staged, not saved immediately, so you can change your mind before
-          hitting Save. A row drops off this list once its pick is saved -
-          this is what you'd lose track of at the item level if Spending
-          Category were dropped.
-        </p>
-        {gapAssignError ? (
-          <p className="mb-2 rounded-lg bg-red-50 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-            {gapAssignError}
-          </p>
-        ) : null}
-        {spendingGapRows.length === 0 ? (
-          <p className="p-2 text-sm text-zinc-500 dark:text-zinc-400">
-            No gaps found - every Spending Category entry already has an item.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                Total without an item
-              </p>
-              <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                {formatAmount(spendingGapGrandTotal)}
-              </p>
-            </div>
-            <ul className="flex flex-col divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-              {spendingGapRows.map((row) => {
-                const draftedItemId = gapItemDrafts[row.key];
-                const draftedLabel =
-                  draftedItemId != null
-                    ? allGapItemOptions.find((o) => o.id === String(draftedItemId))?.name ?? ""
-                    : "";
-                return (
-                  <li
-                    key={row.key}
-                    className="flex flex-col gap-1.5 bg-white px-3 py-2.5 text-xs dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                  >
-                    <span className="min-w-0 text-zinc-700 dark:text-zinc-300">
-                      <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                        {row.ledgerName}
-                      </span>{" "}
-                      · {row.date}
-                      {row.reference ? (
-                        <span className="text-zinc-500 dark:text-zinc-400">
-                          {" "}
-                          · ref: {row.reference}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-400 dark:text-zinc-500">
-                          {" "}
-                          · no reference
-                        </span>
-                      )}
-                    </span>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="font-mono text-zinc-500 dark:text-zinc-400">
-                        {formatAmount(row.amount)}
-                      </span>
-                      <div className="w-48">
-                        <SearchableSelectPicker
-                          instanceId={`gap-item-${row.key}`}
-                          items={allGapItemOptions}
-                          valueLabel={draftedLabel}
-                          triggerPlaceholder="Assign item…"
-                          disabled={gapSaving}
-                          allowCreate
-                          onSelectExisting={(id) => handleDraftGapItem(row, Number(id))}
-                          onRequestCreate={(suggested) => void handleCreateGapItem(row, suggested)}
-                          formatCreateLabel={(t) => `Create item "${t}"`}
-                          triggerClassName={`py-1 ${
-                            draftedItemId != null
-                              ? "border-emerald-400 dark:border-emerald-600"
-                              : ""
-                          }`}
-                          panelZClass="z-[10050]"
-                        />
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-      </RightDrawer>
 
       {/* Trial Balance Results Dialog */}
       <Dialog

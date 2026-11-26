@@ -8,8 +8,6 @@ import {
   createLedgerGroup,
   updateLedgerGroup,
   deleteLedgerGroup,
-  getSpendingTypes,
-  createSpendingType,
   createLedger,
   updateLedger,
   deleteLedger,
@@ -21,7 +19,6 @@ import {
   LedgerCreate,
   ParentLedgerGroupCreate,
   LedgerGroupCreate,
-  SpendingTypeCreate,
   LedgerItemCreate,
 } from "@/lib/api/accounts";
 import { useAuth } from "./use-auth";
@@ -84,30 +81,6 @@ export function useLedgers(includeInactive: boolean = false) {
     enabled: !!token,
     staleTime: 10 * 60 * 1000, // 10 minutes
     refetchOnMount: false,
-  });
-}
-
-export function useSpendingTypes() {
-  const { token } = useAuth();
-
-  return useQuery({
-    queryKey: ["spendingTypes"],
-    queryFn: () => getSpendingTypes(token!),
-    enabled: !!token,
-    staleTime: 10 * 60 * 1000, // 10 minutes
-    refetchOnMount: false,
-  });
-}
-
-export function useCreateSpendingType() {
-  const { token } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: SpendingTypeCreate) => createSpendingType(token!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["spendingTypes"] });
-    },
   });
 }
 

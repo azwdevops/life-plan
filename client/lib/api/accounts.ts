@@ -31,25 +31,15 @@ export interface LedgerGroup {
   parent_ledger_group?: ParentLedgerGroup;
 }
 
-export interface SpendingType {
-  id: number;
-  user_id: number;
-  name: string;
-  is_active: boolean;
-  created_at: string;
-}
-
 export interface Ledger {
   id: number;
   user_id: number;
   name: string;
   code: string | null;
   ledger_group_id: number;
-  spending_type_id: number | null;
   is_active: boolean;
   created_at: string;
   ledger_group?: LedgerGroup;
-  spending_type?: SpendingType;
 }
 
 export interface LedgerItem {
@@ -78,14 +68,9 @@ export interface LedgerGroupCreate {
   category: LedgerGroupCategory;
 }
 
-export interface SpendingTypeCreate {
-  name: string;
-}
-
 export interface LedgerCreate {
   name: string;
   ledger_group_id: number;
-  spending_type_id?: number | null;
 }
 
 export async function getParentLedgerGroups(token: string): Promise<ParentLedgerGroup[]> {
@@ -203,51 +188,6 @@ export async function createLedger(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to create ledger");
-  }
-
-  return response.json();
-}
-
-export async function getSpendingTypes(token: string): Promise<SpendingType[]> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/spending-types`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (handleApiResponse(response)) {
-    throw new Error("Unauthorized");
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch spending types");
-  }
-
-  return response.json();
-}
-
-export async function createSpendingType(
-  token: string,
-  data: SpendingTypeCreate
-): Promise<SpendingType> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/spending-types`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (handleApiResponse(response)) {
-    throw new Error("Unauthorized");
-  }
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to create spending type");
   }
 
   return response.json();

@@ -64,7 +64,6 @@ function JournalContent() {
   const [ledgerFormData, setLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: groups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -237,7 +236,6 @@ function JournalContent() {
       setLedgerFormData({
         name: "",
         ledger_group_id: groups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateLedgerDialog(false);
       setPendingLedgerName("");
@@ -252,7 +250,6 @@ function JournalContent() {
     setLedgerFormData({
       name: searchTerm,
       ledger_group_id: groups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateLedgerDialog(true);
   };

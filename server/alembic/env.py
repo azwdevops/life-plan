@@ -17,7 +17,7 @@ from core.config import settings
 # Import all models here so Alembic can detect them
 from models.user import User
 from models.group import Group
-from models.finance import ParentLedgerGroup, LedgerGroup, Ledger, SpendingType, Transaction, TransactionItem
+from models.finance import ParentLedgerGroup, LedgerGroup, Ledger, Transaction, TransactionItem
 from models.feasibility import FeasibilityProject, FeasibilityLineItem
 from models.pending_work import PendingWorkCategory, PendingWorkItem
 from models.discipline_track import DisciplineTrack

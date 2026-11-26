@@ -56,19 +56,6 @@ class LedgerGroup(Base):
     ledgers = relationship("Ledger", back_populates="ledger_group", cascade="all, delete-orphan")
 
 
-class SpendingType(Base):
-    __tablename__ = "spending_types"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # Relationships
-    ledgers = relationship("Ledger", back_populates="spending_type")
-
-
 class Ledger(Base):
     __tablename__ = "ledgers"
 
@@ -76,15 +63,11 @@ class Ledger(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     ledger_group_id = Column(Integer, ForeignKey("ledger_groups.id"), nullable=False, index=True)
-    spending_type_id = Column(
-        Integer, ForeignKey("spending_types.id"), nullable=True, index=True
-    )  # Only applicable for expenses
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     ledger_group = relationship("LedgerGroup", back_populates="ledgers")
-    spending_type = relationship("SpendingType", back_populates="ledgers")
     transaction_items = relationship("TransactionItem", back_populates="ledger", cascade="all, delete-orphan")
 
 
@@ -92,8 +75,7 @@ class LedgerItem(Base):
     """What a transaction line actually represents to the user (e.g. "Tea
     Leaves"), resolving to a ledger. Reassigning `ledger_id` reclassifies
     every past TransactionItem tagged with this item (see
-    update_ledger_item in accounts.py) - distinct from SpendingType, which
-    tags a ledger itself rather than a transaction line."""
+    update_ledger_item in accounts.py)."""
 
     __tablename__ = "ledger_items"
 

@@ -9,8 +9,6 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import {
   useParentLedgerGroups,
   useLedgerGroups,
-  useSpendingTypes,
-  useCreateSpendingType,
   useLedgers,
   useCreateLedger,
   useUpdateLedger,
@@ -36,18 +34,15 @@ export default function AccountsPage() {
   const { isSidebarOpen, setIsSidebarOpen, toggleSidebar } = useSidebar();
   const { data: parentGroups = [] } = useParentLedgerGroups();
   const { data: groups = [] } = useLedgerGroups();
-  const { data: spendingTypes = [] } = useSpendingTypes();
   const { data: ledgers = [], isLoading: ledgersLoading } = useLedgers();
   const createLedgerMutation = useCreateLedger();
   const updateLedgerMutation = useUpdateLedger();
   const deleteLedgerMutation = useDeleteLedger();
-  const createSpendingTypeMutation = useCreateSpendingType();
   const createLedgerGroupMutation = useCreateLedgerGroup();
   const updateLedgerGroupMutation = useUpdateLedgerGroup();
   const deleteLedgerGroupMutation = useDeleteLedgerGroup();
 
   const [showForm, setShowForm] = useState(false);
-  const [showSpendingTypeForm, setShowSpendingTypeForm] = useState(false);
   const [showLedgerGroupForm, setShowLedgerGroupForm] = useState(false);
   const [editingLedger, setEditingLedger] = useState<Ledger | null>(null);
   const [editingLedgerGroup, setEditingLedgerGroup] = useState<LedgerGroup | null>(null);
@@ -58,10 +53,6 @@ export default function AccountsPage() {
   const [formData, setFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: 0,
-    spending_type_id: null,
-  });
-  const [spendingTypeFormData, setSpendingTypeFormData] = useState({
-    name: "",
   });
   const [ledgerGroupFormData, setLedgerGroupFormData] = useState<LedgerGroupCreate>({
     name: "",
@@ -128,32 +119,9 @@ export default function AccountsPage() {
       setFormData({
         name: "",
         ledger_group_id: 0,
-        spending_type_id: null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save account");
-    }
-  };
-
-  const handleSpendingTypeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!spendingTypeFormData.name.trim()) {
-      setError("Spending type name is required");
-      return;
-    }
-
-    try {
-      await createSpendingTypeMutation.mutateAsync({
-        name: spendingTypeFormData.name,
-      });
-      setShowSpendingTypeForm(false);
-      setSpendingTypeFormData({
-        name: "",
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create spending type");
     }
   };
 
@@ -204,7 +172,6 @@ export default function AccountsPage() {
     setFormData({
       name: ledger.name,
       ledger_group_id: ledger.ledger_group_id,
-      spending_type_id: ledger.spending_type_id,
     });
     setShowForm(true);
   };
@@ -239,21 +206,6 @@ export default function AccountsPage() {
     }
   };
 
-  // Get the selected ledger group to check if spending category should be shown
-  // Show spending category if parent ledger group is Expenditure, Fixed Assets, or Current Assets
-  const selectedGroup = groups.find((g) => g.id === formData.ledger_group_id);
-  const parentGroup = selectedGroup?.parent_ledger_group;
-  const shouldShowSpendingCategory = parentGroup
-    ? (() => {
-        const parentNameLower = parentGroup.name.toLowerCase();
-        return (
-          parentNameLower.includes("expenditure") ||
-          parentNameLower.includes("fixed assets") ||
-          parentNameLower.includes("current assets")
-        );
-      })()
-    : false;
-
   // Group ledgers by ledger group
   const ledgersByGroup = ledgers.reduce((acc, ledger) => {
     const groupId = ledger.ledger_group_id;
@@ -276,7 +228,7 @@ export default function AccountsPage() {
   const filteredLedgers = normalizedSearch
     ? ledgers.filter((ledger) => {
         const ledgerGroup = groups.find((g) => g.id === ledger.ledger_group_id);
-        return `${ledger.name} ${ledgerGroup?.name ?? ""} ${ledger.spending_type?.name ?? ""}`
+        return `${ledger.name} ${ledgerGroup?.name ?? ""}`
           .toLowerCase()
           .includes(normalizedSearch);
       })
@@ -357,41 +309,6 @@ export default function AccountsPage() {
                 />
               </div>
 
-              {shouldShowSpendingCategory && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Spending Category *
-                  </label>
-                  <SearchableSelect
-                    options={spendingTypes.map((type) => ({
-                      value: type.id,
-                      label: type.name,
-                      searchText: type.name,
-                    }))}
-                    value={formData.spending_type_id || 0}
-                    onChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        spending_type_id:
-                          typeof value === "number" && value !== 0
-                            ? value
-                            : typeof value === "string" && value !== "0"
-                            ? parseInt(value)
-                            : null,
-                      })
-                    }
-                    placeholder="Select spending category"
-                    searchPlaceholder="Type to search spending categories..."
-                    required
-                    className="w-full"
-                    onCreateNew={(searchTerm) => {
-                      setSpendingTypeFormData({ name: searchTerm });
-                      setShowSpendingTypeForm(true);
-                    }}
-                    createNewLabel={(searchTerm) => `Create "${searchTerm}" spending category`}
-                  />
-                </div>
-              )}
             </div>
 
             {error && (
@@ -539,60 +456,6 @@ export default function AccountsPage() {
         </form>
       </Dialog>
 
-      {/* Create Spending Type Dialog */}
-      <Dialog
-        isOpen={showSpendingTypeForm}
-        onClose={() => setShowSpendingTypeForm(false)}
-        title="Create Spending Type"
-        size="md"
-      >
-        <form onSubmit={handleSpendingTypeSubmit} className="space-y-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Name *
-            </label>
-            <input
-              type="text"
-              value={spendingTypeFormData.name}
-              onChange={(e) =>
-                setSpendingTypeFormData({
-                  ...spendingTypeFormData,
-                  name: e.target.value,
-                })
-              }
-              required
-              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="e.g., Food, Transport"
-            />
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-              {error}
-            </div>
-          )}
-
-          <div className="flex gap-4">
-            <button
-              type="submit"
-              disabled={createSpendingTypeMutation.isPending}
-              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
-            >
-              {createSpendingTypeMutation.isPending
-                ? "Creating..."
-                : "Create Spending Type"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowSpendingTypeForm(false)}
-              className="rounded-lg border border-zinc-300 px-6 py-2 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </Dialog>
-
       {/* Search */}
       <div className="mb-8 pt-1">
         <input
@@ -654,13 +517,6 @@ export default function AccountsPage() {
                         <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
                           {ledgerGroup.name}
                         </p>
-                      )}
-                      {ledger.spending_type && (
-                        <div className="mt-2">
-                          <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                            {ledger.spending_type.name}
-                          </span>
-                        </div>
                       )}
                     </div>
                   </div>

@@ -3,6 +3,7 @@ import {
   getTrialBalance,
   getLedgerReport,
   getLedgerBalances,
+  getLedgerItemBalances,
   getItemBalances,
   getItemReport,
 } from "@/lib/api/reports";
@@ -16,6 +17,20 @@ export function useLedgerBalances(parentGroupName?: string) {
     queryFn: () => {
       if (!token) throw new Error("Not authenticated");
       return getLedgerBalances(token, parentGroupName);
+    },
+    enabled: !!token,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useLedgerItemBalances(parentGroupName?: string) {
+  const { token } = useAuth();
+
+  return useQuery({
+    queryKey: ["ledger-item-balances", parentGroupName ?? "all"],
+    queryFn: () => {
+      if (!token) throw new Error("Not authenticated");
+      return getLedgerItemBalances(token, parentGroupName);
     },
     enabled: !!token,
     staleTime: 2 * 60 * 1000,

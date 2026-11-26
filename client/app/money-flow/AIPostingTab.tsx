@@ -119,7 +119,6 @@ export const AIPostingTab = memo(function AIPostingTab() {
   const [ledgerFormData, setLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: 0,
-    spending_type_id: null,
   });
   const [ledgerGroupFormData, setLedgerGroupFormData] = useState<LedgerGroupCreate>({
     name: "",
@@ -187,7 +186,6 @@ export const AIPostingTab = memo(function AIPostingTab() {
     setLedgerFormData({
       name: searchTerm,
       ledger_group_id: groups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateLedgerDialog(true);
   };
@@ -211,7 +209,6 @@ export const AIPostingTab = memo(function AIPostingTab() {
       setLedgerFormData({
         name: "",
         ledger_group_id: groups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateLedgerDialog(false);
       if (createLedgerRowIndex !== null) {

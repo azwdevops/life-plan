@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { Dialog } from "@/components/Dialog";
@@ -20,9 +19,9 @@ import {
   useCreateLedgerGroup,
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction } from "@/lib/hooks/use-transactions";
-import { useLedgerBalances } from "@/lib/hooks/use-reports";
+import { useLedgerBalances, useLedgerItemBalances } from "@/lib/hooks/use-reports";
 import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
-import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
+import { LedgerBreakdownList, type LedgerItemBreakdownRow } from "@/components/finance/LedgerBreakdownList";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
 function formatKsh(value: number): string {
@@ -45,10 +44,14 @@ function CurrentAssetsContent() {
   const { data: parentGroups = [], refetch: refetchParentGroups } = useParentLedgerGroups();
   const { token } = useAuth();
   const { data: ledgerBalancesData, refetch: refetchLedgerBalances } = useLedgerBalances("Current Assets");
+  const { data: ledgerItemBalancesData } = useLedgerItemBalances("Current Assets");
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedAssetLedgerIds, setExpandedAssetLedgerIds] = useState<Record<number, boolean>>({});
+  const toggleAssetLedger = (ledgerId: number) =>
+    setExpandedAssetLedgerIds((prev) => ({ ...prev, [ledgerId]: !prev[ledgerId] }));
 
   // Find "Current Assets" parent group
   const currentAssetsParent = parentGroups.find(
@@ -104,17 +107,14 @@ function CurrentAssetsContent() {
   const [assetAccountFormData, setAssetAccountFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: currentAssetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [payingAccountFormData, setPayingAccountFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: assetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [chargeLedgerFormData, setChargeLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: chargeGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -268,7 +268,6 @@ function CurrentAssetsContent() {
       setAssetAccountFormData({
         name: "",
         ledger_group_id: currentAssetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateAssetAccountDialog(false);
       setPendingAssetAccountName("");
@@ -304,7 +303,6 @@ function CurrentAssetsContent() {
       setPayingAccountFormData({
         name: "",
         ledger_group_id: assetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreatePayingAccountDialog(false);
       setPendingPayingAccountName("");
@@ -318,7 +316,6 @@ function CurrentAssetsContent() {
     setAssetAccountFormData({
       name: searchTerm,
       ledger_group_id: currentAssetGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateAssetAccountDialog(true);
   };
@@ -328,7 +325,6 @@ function CurrentAssetsContent() {
     setPayingAccountFormData({
       name: searchTerm,
       ledger_group_id: assetGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreatePayingAccountDialog(true);
   };
@@ -360,7 +356,6 @@ function CurrentAssetsContent() {
       setChargeLedgerFormData({
         name: "",
         ledger_group_id: chargeGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateChargeLedgerDialog(false);
       setPendingChargeLedgerName("");
@@ -374,7 +369,6 @@ function CurrentAssetsContent() {
     setChargeLedgerFormData({
       name: searchTerm,
       ledger_group_id: chargeGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateChargeLedgerDialog(true);
   };
@@ -490,7 +484,7 @@ function CurrentAssetsContent() {
       .map((item) => {
         const value = typeof item.balance === "number" ? item.balance : Number(item.balance);
         return {
-          ledger_id: item.ledger_id,
+          ledgerId: item.ledger_id,
           name: item.ledger_name,
           value,
           percentage: totalAssets > 0 ? (value / totalAssets) * 100 : 0,
@@ -499,26 +493,24 @@ function CurrentAssetsContent() {
       .sort((a, b) => b.value - a.value);
   }, [ledgerBalancesData?.items]);
 
-  // Guarantees every slice a visible minimum share of the pie's area; labels/
-  // tooltip/legend still read the real .value/.percentage, unaffected.
-  const assetsByLedgerDisplay = useMemo(
-    () => withMinDisplayShare(assetsByLedger, 4),
-    [assetsByLedger]
-  );
+  // Item breakdown within each ledger, for the expand-to-items UI.
+  const assetItemsByLedgerId = useMemo(() => {
+    const map = new Map<number, LedgerItemBreakdownRow[]>();
+    for (const row of ledgerItemBalancesData?.items ?? []) {
+      const balance = typeof row.balance === "number" ? row.balance : Number(row.balance);
+      if (balance <= 0) continue;
+      const list = map.get(row.ledger_id) ?? [];
+      list.push({
+        key: row.item_id != null ? String(row.item_id) : "none",
+        name: row.item_name,
+        value: balance,
+      });
+      map.set(row.ledger_id, list);
+    }
+    map.forEach((list) => list.sort((a, b) => b.value - a.value));
+    return map;
+  }, [ledgerItemBalancesData?.items]);
 
-  // Colors for pie chart
-  const COLORS = [
-    "#8884d8",
-    "#82ca9d",
-    "#ffc658",
-    "#ff7300",
-    "#00ff00",
-    "#0088fe",
-    "#00c49f",
-    "#ffbb28",
-    "#ff8042",
-    "#8884d8",
-  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
@@ -554,61 +546,20 @@ function CurrentAssetsContent() {
                 </h2>
               </div>
 
-              <div className="flex flex-col">
-                <div className="h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
-                      <Pie
-                        data={assetsByLedgerDisplay}
-                        cx="50%"
-                        cy="30%"
-                        outerRadius="60%"
-                        label={renderElbowPieLabel(assetsByLedgerDisplay, formatKsh)}
-                        labelLine={false}
-                        fill="#8884d8"
-                        dataKey="displayValue"
-                      >
-                        {assetsByLedgerDisplay.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(_value: any, _name: any, item: any) => [
-                          formatKsh(item?.payload?.value ?? 0),
-                          "Balance",
-                        ]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total</p>
+                  <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    {formatKsh(assetsByLedger.reduce((sum, entry) => sum + entry.value, 0))}
+                  </p>
                 </div>
-
-                {/* Legend */}
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                  {assetsByLedger.map((entry, index) => (
-                    <div
-                      key={entry.ledger_id}
-                      className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800"
-                    >
-                      <div
-                        className="h-4 w-4 rounded-full"
-                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                      />
-                      <div className="flex-1">
-                        <div className="text-base font-medium text-zinc-900 dark:text-zinc-100">
-                          {entry.name}
-                        </div>
-                        <div className="text-sm font-bold text-zinc-600 dark:text-zinc-400">
-                          {entry.percentage.toFixed(2)}% • KSh{" "}
-                          {entry.value.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                            useGrouping: true,
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <LedgerBreakdownList
+                  rows={assetsByLedger}
+                  itemsByLedgerId={assetItemsByLedgerId}
+                  expandedIds={expandedAssetLedgerIds}
+                  onToggle={toggleAssetLedger}
+                  formatValue={formatKsh}
+                />
               </div>
             </div>
           ) : (

@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { Dialog } from "@/components/Dialog";
@@ -20,9 +19,9 @@ import {
   useCreateLedgerGroup,
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction } from "@/lib/hooks/use-transactions";
-import { useLedgerBalances } from "@/lib/hooks/use-reports";
-import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
+import { useLedgerBalances, useLedgerItemBalances } from "@/lib/hooks/use-reports";
 import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
+import { LedgerBreakdownList, type LedgerItemBreakdownRow } from "@/components/finance/LedgerBreakdownList";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
 function formatKsh(value: number): string {
@@ -44,10 +43,14 @@ function LoansContent() {
   const { data: groups = [], refetch: refetchGroups } = useLedgerGroups();
   const { data: parentGroups = [], refetch: refetchParentGroups } = useParentLedgerGroups();
   const { data: ledgerBalancesData, refetch: refetchLedgerBalances } = useLedgerBalances("Long Term Liabilities");
+  const { data: ledgerItemBalancesData } = useLedgerItemBalances("Long Term Liabilities");
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedLiabilityLedgerIds, setExpandedLiabilityLedgerIds] = useState<Record<number, boolean>>({});
+  const toggleLiabilityLedger = (ledgerId: number) =>
+    setExpandedLiabilityLedgerIds((prev) => ({ ...prev, [ledgerId]: !prev[ledgerId] }));
 
   // Find "Long Term Liabilities" parent group
   const longTermLiabilitiesParent = parentGroups.find(
@@ -117,17 +120,14 @@ function LoansContent() {
   const [receivingAccountFormData, setReceivingAccountFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: assetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [liabilityFormData, setLiabilityFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: longTermLiabilityGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [interestExpenseFormData, setInterestExpenseFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: expenseGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -285,7 +285,6 @@ function LoansContent() {
       setReceivingAccountFormData({
         name: "",
         ledger_group_id: assetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateReceivingAccountDialog(false);
       setPendingReceivingAccountName("");
@@ -321,7 +320,6 @@ function LoansContent() {
       setLiabilityFormData({
         name: "",
         ledger_group_id: longTermLiabilityGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateLiabilityDialog(false);
       setPendingLiabilityName("");
@@ -357,7 +355,6 @@ function LoansContent() {
       setInterestExpenseFormData({
         name: "",
         ledger_group_id: expenseGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateInterestExpenseDialog(false);
       setPendingInterestExpenseName("");
@@ -371,7 +368,6 @@ function LoansContent() {
     setReceivingAccountFormData({
       name: searchTerm,
       ledger_group_id: assetGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateReceivingAccountDialog(true);
   };
@@ -381,7 +377,6 @@ function LoansContent() {
     setLiabilityFormData({
       name: searchTerm,
       ledger_group_id: longTermLiabilityGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateLiabilityDialog(true);
   };
@@ -399,7 +394,7 @@ function LoansContent() {
     const totalLiabilities = withOutstanding.reduce((sum, item) => sum + item.value, 0);
     return withOutstanding
       .map((item) => ({
-        ledger_id: item.ledger_id,
+        ledgerId: item.ledger_id,
         name: item.ledger_name,
         value: item.value,
         percentage: totalLiabilities > 0 ? (item.value / totalLiabilities) * 100 : 0,
@@ -407,31 +402,31 @@ function LoansContent() {
       .sort((a, b) => b.value - a.value);
   }, [ledgerBalancesData?.items]);
 
-  const liabilitiesByLedgerDisplay = useMemo(
-    () => withMinDisplayShare(liabilitiesByLedger, 4),
-    [liabilitiesByLedger]
-  );
-
-  // Colors for pie chart
-  const COLORS = [
-    "#8884d8",
-    "#82ca9d",
-    "#ffc658",
-    "#ff7300",
-    "#00ff00",
-    "#0088fe",
-    "#00c49f",
-    "#ffbb28",
-    "#ff8042",
-    "#8884d8",
-  ];
+  // Item breakdown within each ledger - same credit-minus-debit sign flip
+  // as the ledger-level totals above, for the expand-to-items UI.
+  const liabilityItemsByLedgerId = useMemo(() => {
+    const map = new Map<number, LedgerItemBreakdownRow[]>();
+    for (const row of ledgerItemBalancesData?.items ?? []) {
+      const raw = typeof row.balance === "number" ? row.balance : Number(row.balance);
+      const value = -raw;
+      if (value <= 0) continue;
+      const list = map.get(row.ledger_id) ?? [];
+      list.push({
+        key: row.item_id != null ? String(row.item_id) : "none",
+        name: row.item_name,
+        value,
+      });
+      map.set(row.ledger_id, list);
+    }
+    map.forEach((list) => list.sort((a, b) => b.value - a.value));
+    return map;
+  }, [ledgerItemBalancesData?.items]);
 
   const handleCreateNewInterestExpense = (searchTerm: string) => {
     setPendingInterestExpenseName(searchTerm);
     setInterestExpenseFormData({
       name: searchTerm,
       ledger_group_id: expenseGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateInterestExpenseDialog(true);
   };
@@ -670,61 +665,20 @@ function LoansContent() {
               </h2>
             </div>
 
-            <div className="flex flex-col">
-              <div className="h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
-                    <Pie
-                      data={liabilitiesByLedgerDisplay}
-                      cx="50%"
-                      cy="30%"
-                      outerRadius="60%"
-                      label={renderElbowPieLabel(liabilitiesByLedgerDisplay, formatKsh)}
-                      labelLine={false}
-                      fill="#8884d8"
-                      dataKey="displayValue"
-                    >
-                      {liabilitiesByLedgerDisplay.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(_value: any, _name: any, item: any) => [
-                        formatKsh(item?.payload?.value ?? 0),
-                        "Balance",
-                      ]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total</p>
+                <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  {formatKsh(liabilitiesByLedger.reduce((sum, entry) => sum + entry.value, 0))}
+                </p>
               </div>
-
-              {/* Legend */}
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                {liabilitiesByLedgerDisplay.map((entry, index) => (
-                  <div
-                    key={entry.ledger_id}
-                    className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800"
-                  >
-                    <div
-                      className="h-4 w-4 rounded-full"
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                    />
-                    <div className="flex-1">
-                      <div className="text-base font-medium text-zinc-900 dark:text-zinc-100">
-                        {entry.name}
-                      </div>
-                      <div className="text-sm font-bold text-zinc-600 dark:text-zinc-400">
-                        {entry.percentage.toFixed(2)}% • KSh{" "}
-                        {entry.value.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                          useGrouping: true,
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <LedgerBreakdownList
+                rows={liabilitiesByLedger}
+                itemsByLedgerId={liabilityItemsByLedgerId}
+                expandedIds={expandedLiabilityLedgerIds}
+                onToggle={toggleLiabilityLedger}
+                formatValue={formatKsh}
+              />
             </div>
             </div>
           )}

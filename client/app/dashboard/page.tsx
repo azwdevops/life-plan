@@ -6,6 +6,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
+import { RightDrawer } from "@/components/RightDrawer";
 import { UpcomingExpensesButton } from "@/components/UpcomingExpensesButton";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -14,8 +15,10 @@ import {
   useLedgers,
   useLedgerGroups,
   useParentLedgerGroups,
+  useLedgerItems,
 } from "@/lib/hooks/use-accounts";
 import { useUpcomingExpenses } from "@/lib/hooks/use-upcoming-expenses";
+import { buildLedgerBreakdown, LedgerBreakdownList } from "@/components/finance/LedgerBreakdownList";
 
 function formatAmount(value: number): string {
   return value.toLocaleString("en-US", {
@@ -37,12 +40,24 @@ export default function DashboardPage() {
   const { data: ledgers = [], refetch: refetchLedgers } = useLedgers();
   const { data: ledgerGroups = [] } = useLedgerGroups();
   const { data: parentLedgerGroups = [] } = useParentLedgerGroups();
+  const { data: ledgerItems = [] } = useLedgerItems();
   const { data: upcomingExpenses = [] } = useUpcomingExpenses();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [periodType, setPeriodType] = useState<PeriodType>("month");
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(new Date());
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
+  const [expandedExpenseLedgerIds, setExpandedExpenseLedgerIds] = useState<Record<number, boolean>>({});
+  const [expandedCashInLedgerIds, setExpandedCashInLedgerIds] = useState<Record<number, boolean>>({});
+  const [expandedCashOutLedgerIds, setExpandedCashOutLedgerIds] = useState<Record<number, boolean>>({});
+  const [showCurrentMonthBreakdown, setShowCurrentMonthBreakdown] = useState(false);
+
+  const toggleExpenseLedger = (ledgerId: number) =>
+    setExpandedExpenseLedgerIds((prev) => ({ ...prev, [ledgerId]: !prev[ledgerId] }));
+  const toggleCashInLedger = (ledgerId: number) =>
+    setExpandedCashInLedgerIds((prev) => ({ ...prev, [ledgerId]: !prev[ledgerId] }));
+  const toggleCashOutLedger = (ledgerId: number) =>
+    setExpandedCashOutLedgerIds((prev) => ({ ...prev, [ledgerId]: !prev[ledgerId] }));
 
   // Initialize custom dates when switching to custom mode
   useEffect(() => {
@@ -252,47 +267,60 @@ export default function DashboardPage() {
 
   // Group expenses by ledger - a ledger IS the spending category, so this
   // replaces the old spending-type breakdown without needing that field.
-  const expensesByLedger = useMemo(() => {
-    const ledgerTotals = new Map<number, number>();
+  const { rows: expensesByLedger, itemsByLedgerId: expenseItemsByLedgerId } = useMemo(
+    () => buildLedgerBreakdown(expenseTransactionsWithItems, expenseLedgerIds, ledgers, ledgerItems),
+    [expenseTransactionsWithItems, expenseLedgerIds, ledgers, ledgerItems]
+  );
 
-    expenseTransactionsWithItems.forEach((transaction) => {
-      (transaction.items ?? []).forEach((item) => {
-        if (item.entry_type !== "DEBIT" || !expenseLedgerIds.has(item.ledger_id)) return;
-        const amount =
-          typeof item.amount === "string" ? parseFloat(item.amount) : Number(item.amount) || 0;
-        if (amount <= 0) return;
-        const existing = ledgerTotals.get(item.ledger_id) || 0;
-        ledgerTotals.set(item.ledger_id, existing + amount);
-      });
-    });
+  // Income ledgers, for the Current Month Cash In breakdown.
+  const incomeLedgerIds = useMemo(
+    () =>
+      new Set(
+        ledgers
+          .filter((ledger) => {
+            const group = ledgerGroups.find((g) => g.id === ledger.ledger_group_id);
+            return group?.category === "incomes";
+          })
+          .map((ledger) => ledger.id)
+      ),
+    [ledgers, ledgerGroups]
+  );
 
-    const totalExpenses = Array.from(ledgerTotals.values()).reduce((sum, total) => sum + total, 0);
+  // True current calendar month, independent of the page's selected period -
+  // the "View breakdown" action on the Current Month card always reflects
+  // the actual current month.
+  const currentMonthRange = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { start, end };
+  }, []);
 
-    return Array.from(ledgerTotals.entries())
-      .map(([ledgerId, total]) => {
-        const ledger = ledgers.find((l) => l.id === ledgerId);
-        return {
-          name: ledger?.name || `Unknown (ID: ${ledgerId})`,
-          value: Number(total.toFixed(2)),
-          percentage: totalExpenses > 0 ? (total / totalExpenses) * 100 : 0,
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-  }, [expenseTransactionsWithItems, expenseLedgerIds, ledgers]);
+  const currentMonthIncomeTransactions = useMemo(
+    () =>
+      incomeTransactions.filter((t) => {
+        const d = new Date(t.transaction_date);
+        return d >= currentMonthRange.start && d <= currentMonthRange.end;
+      }),
+    [incomeTransactions, currentMonthRange]
+  );
+  const currentMonthExpenseTransactions = useMemo(
+    () =>
+      expenseTransactions.filter((t) => {
+        const d = new Date(t.transaction_date);
+        return d >= currentMonthRange.start && d <= currentMonthRange.end;
+      }),
+    [expenseTransactions, currentMonthRange]
+  );
 
-  // Colors for the pie chart
-  const COLORS = [
-    "#3b82f6", // blue
-    "#10b981", // green
-    "#f59e0b", // amber
-    "#ef4444", // red
-    "#8b5cf6", // purple
-    "#ec4899", // pink
-    "#06b6d4", // cyan
-    "#f97316", // orange
-    "#84cc16", // lime
-    "#6366f1", // indigo
-  ];
+  const { rows: currentMonthCashInRows, itemsByLedgerId: currentMonthCashInItemsByLedgerId } = useMemo(
+    () => buildLedgerBreakdown(currentMonthIncomeTransactions, incomeLedgerIds, ledgers, ledgerItems, "CREDIT"),
+    [currentMonthIncomeTransactions, incomeLedgerIds, ledgers, ledgerItems]
+  );
+  const { rows: currentMonthCashOutRows, itemsByLedgerId: currentMonthCashOutItemsByLedgerId } = useMemo(
+    () => buildLedgerBreakdown(currentMonthExpenseTransactions, expenseLedgerIds, ledgers, ledgerItems),
+    [currentMonthExpenseTransactions, expenseLedgerIds, ledgers, ledgerItems]
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950" suppressHydrationWarning>
@@ -493,6 +521,13 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentMonthBreakdown(true)}
+                    className="w-full rounded-md border border-blue-300 bg-white py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+                  >
+                    View breakdown
+                  </button>
                 </div>
               </div>
 
@@ -573,32 +608,13 @@ export default function DashboardPage() {
                     )}
                   </p>
                 </div>
-                <ul className="flex flex-col gap-1.5">
-                  {expensesByLedger.map((item, index) => {
-                    const pct = Math.max(Math.min(item.percentage, 100), 3);
-                    const color = COLORS[index % COLORS.length];
-                    return (
-                      <li
-                        key={item.name}
-                        className="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
-                      >
-                        <div
-                          className="absolute inset-y-0 left-0"
-                          style={{ width: `${pct}%`, backgroundColor: color }}
-                        />
-                        <div className="relative flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                          <span className="truncate font-bold text-zinc-900 dark:text-white">
-                            {item.name}
-                          </span>
-                          <span className="shrink-0 font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
-                            {formatAmount(item.value)} ·{" "}
-                            <span style={{ color }}>{item.percentage.toFixed(1)}%</span>
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <LedgerBreakdownList
+                  rows={expensesByLedger}
+                  itemsByLedgerId={expenseItemsByLedgerId}
+                  expandedIds={expandedExpenseLedgerIds}
+                  onToggle={toggleExpenseLedger}
+                  formatValue={formatAmount}
+                />
               </div>
             ) : (
               <div className="py-12 text-center">
@@ -614,6 +630,47 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      <RightDrawer
+        open={showCurrentMonthBreakdown}
+        onClose={() => setShowCurrentMonthBreakdown(false)}
+        title="Current Month Breakdown"
+        width="2xl"
+      >
+        <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+          {currentMonthRange.start.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+        </p>
+
+        <h3 className="mb-2 text-sm font-semibold text-green-700 dark:text-green-400">
+          Cash In: {formatAmount(currentMonthCashInRows.reduce((sum, r) => sum + r.value, 0))}
+        </h3>
+        {currentMonthCashInRows.length > 0 ? (
+          <LedgerBreakdownList
+            rows={currentMonthCashInRows}
+            itemsByLedgerId={currentMonthCashInItemsByLedgerId}
+            expandedIds={expandedCashInLedgerIds}
+            onToggle={toggleCashInLedger}
+            formatValue={formatAmount}
+          />
+        ) : (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No income recorded this month.</p>
+        )}
+
+        <h3 className="mb-2 mt-6 text-sm font-semibold text-red-700 dark:text-red-400">
+          Cash Out: {formatAmount(currentMonthCashOutRows.reduce((sum, r) => sum + r.value, 0))}
+        </h3>
+        {currentMonthCashOutRows.length > 0 ? (
+          <LedgerBreakdownList
+            rows={currentMonthCashOutRows}
+            itemsByLedgerId={currentMonthCashOutItemsByLedgerId}
+            expandedIds={expandedCashOutLedgerIds}
+            onToggle={toggleCashOutLedger}
+            formatValue={formatAmount}
+          />
+        ) : (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No expenses recorded this month.</p>
+        )}
+      </RightDrawer>
     </div>
   );
 }

@@ -78,17 +78,14 @@ function TransfersContent() {
   const [fromAccountFormData, setFromAccountFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: assetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [toAccountFormData, setToAccountFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: assetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [chargeLedgerFormData, setChargeLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: chargeGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -244,7 +241,6 @@ function TransfersContent() {
       setFromAccountFormData({
         name: "",
         ledger_group_id: assetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateFromAccountDialog(false);
       setPendingFromAccountName("");
@@ -280,7 +276,6 @@ function TransfersContent() {
       setToAccountFormData({
         name: "",
         ledger_group_id: assetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateToAccountDialog(false);
       setPendingToAccountName("");
@@ -316,7 +311,6 @@ function TransfersContent() {
       setChargeLedgerFormData({
         name: "",
         ledger_group_id: chargeGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateChargeLedgerDialog(false);
       setPendingChargeLedgerName("");
@@ -498,7 +492,6 @@ function TransfersContent() {
                   setFromAccountFormData({
                     name: searchTerm,
                     ledger_group_id: assetGroups[0]?.id || 0,
-                    spending_type_id: null,
                   });
                   setShowCreateFromAccountDialog(true);
                 }}
@@ -534,7 +527,6 @@ function TransfersContent() {
                   setToAccountFormData({
                     name: searchTerm,
                     ledger_group_id: assetGroups[0]?.id || 0,
-                    spending_type_id: null,
                   });
                   setShowCreateToAccountDialog(true);
                 }}
@@ -588,7 +580,6 @@ function TransfersContent() {
                   setChargeLedgerFormData({
                     name: searchTerm,
                     ledger_group_id: chargeGroups[0]?.id || 0,
-                    spending_type_id: null,
                   });
                   setShowCreateChargeLedgerDialog(true);
                 }}

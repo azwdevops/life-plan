@@ -5,7 +5,7 @@ from typing import List
 from core.database import get_db
 from api.v1.endpoints.auth import get_current_user
 from models.user import User
-from models.finance import Ledger, LedgerGroup, ParentLedgerGroup, SpendingType, LedgerItem, TransactionItem
+from models.finance import Ledger, LedgerGroup, ParentLedgerGroup, LedgerItem, TransactionItem
 from schemas.finance import (
     LedgerCreate,
     LedgerResponse,
@@ -15,8 +15,6 @@ from schemas.finance import (
     LedgerGroupWithParent,
     ParentLedgerGroupCreate,
     ParentLedgerGroupResponse,
-    SpendingTypeCreate,
-    SpendingTypeResponse,
     LedgerItemCreate,
     LedgerItemResponse,
     LedgerItemWithLedger,
@@ -139,62 +137,6 @@ async def create_ledger_group(
     db.refresh(new_group)
 
     return new_group
-
-
-@router.get("/spending-types", response_model=List[SpendingTypeResponse])
-async def get_spending_types(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Get all spending types for the current user."""
-    spending_types = (
-        db.query(SpendingType)
-        .filter(SpendingType.user_id == current_user.id)
-        .filter(SpendingType.is_active == True)
-        .order_by(SpendingType.name)
-        .all()
-    )
-    return spending_types
-
-
-@router.post(
-    "/spending-types",
-    response_model=SpendingTypeResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_spending_type(
-    spending_type_data: SpendingTypeCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Create a new spending type."""
-    # Check for duplicate name
-    existing = (
-        db.query(SpendingType)
-        .filter(
-            SpendingType.name == spending_type_data.name,
-            SpendingType.user_id == current_user.id,
-            SpendingType.is_active == True,
-        )
-        .first()
-    )
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Spending type with this name already exists",
-        )
-
-    new_spending_type = SpendingType(
-        user_id=current_user.id,
-        name=spending_type_data.name,
-    )
-
-    db.add(new_spending_type)
-    db.commit()
-    db.refresh(new_spending_type)
-
-    return new_spending_type
 
 
 def _get_active_ledger_for_user(db: Session, ledger_id: int, user_id: int) -> Ledger:
@@ -357,45 +299,6 @@ async def create_ledger(
             detail="Ledger group not found",
         )
 
-    # Get parent ledger group to check if it's an expense type
-    parent_group = (
-        db.query(ParentLedgerGroup).filter(ParentLedgerGroup.id == ledger_group.parent_ledger_group_id).first()
-    )
-
-    # Validate spending_type is only set for Expenditure, Fixed Assets, or Current Assets
-    # Check if parent group name suggests it's for expenses or assets
-    if ledger_data.spending_type_id:
-        if parent_group:
-            parent_name_lower = parent_group.name.lower()
-            allowed_parents = (
-                "expenditure" in parent_name_lower
-                or "expense" in parent_name_lower
-                or "fixed assets" in parent_name_lower
-                or "current assets" in parent_name_lower
-            )
-            if not allowed_parents:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Spending type can only be set for Expenditure, Fixed Assets, or Current Assets accounts",
-                )
-
-        # Verify spending type exists and belongs to user
-        spending_type = (
-            db.query(SpendingType)
-            .filter(
-                SpendingType.id == ledger_data.spending_type_id,
-                SpendingType.user_id == current_user.id,
-                SpendingType.is_active == True,
-            )
-            .first()
-        )
-
-        if not spending_type:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Spending type not found",
-            )
-
     # Check for duplicate name for this user
     existing_ledger = (
         db.query(Ledger)
@@ -418,7 +321,6 @@ async def create_ledger(
         user_id=current_user.id,
         name=ledger_data.name,
         ledger_group_id=ledger_data.ledger_group_id,
-        spending_type_id=ledger_data.spending_type_id,
     )
 
     db.add(new_ledger)
@@ -440,7 +342,6 @@ async def get_ledgers(
         db.query(Ledger)
         .options(
             joinedload(Ledger.ledger_group).joinedload(LedgerGroup.parent_ledger_group),
-            joinedload(Ledger.spending_type)
         )
         .filter(Ledger.user_id == current_user.id)
     )
@@ -466,7 +367,6 @@ async def get_ledger(
         db.query(Ledger)
         .options(
             joinedload(Ledger.ledger_group).joinedload(LedgerGroup.parent_ledger_group),
-            joinedload(Ledger.spending_type)
         )
         .filter(Ledger.id == ledger_id, Ledger.user_id == current_user.id)
         .first()
@@ -513,45 +413,6 @@ async def update_ledger(
             detail="Ledger group not found",
         )
 
-    # Get parent ledger group to check if spending type is allowed
-    parent_group = (
-        db.query(ParentLedgerGroup).filter(ParentLedgerGroup.id == ledger_group.parent_ledger_group_id).first()
-    )
-
-    # Validate spending_type is only set for Expenditure, Fixed Assets, or Current Assets
-    # Check if parent group name suggests it's for expenses or assets
-    if ledger_data.spending_type_id:
-        if parent_group:
-            parent_name_lower = parent_group.name.lower()
-            allowed_parents = (
-                "expenditure" in parent_name_lower
-                or "expense" in parent_name_lower
-                or "fixed assets" in parent_name_lower
-                or "current assets" in parent_name_lower
-            )
-            if not allowed_parents:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Spending type can only be set for Expenditure, Fixed Assets, or Current Assets accounts",
-                )
-
-        # Verify spending type exists and belongs to user
-        spending_type = (
-            db.query(SpendingType)
-            .filter(
-                SpendingType.id == ledger_data.spending_type_id,
-                SpendingType.user_id == current_user.id,
-                SpendingType.is_active == True,
-            )
-            .first()
-        )
-
-        if not spending_type:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Spending type not found",
-            )
-
     # Check for duplicate name (excluding current ledger)
     existing_ledger = (
         db.query(Ledger)
@@ -572,7 +433,6 @@ async def update_ledger(
     # Update ledger
     ledger.name = ledger_data.name
     ledger.ledger_group_id = ledger_data.ledger_group_id
-    ledger.spending_type_id = ledger_data.spending_type_id
 
     db.commit()
     db.refresh(ledger)

@@ -51,30 +51,10 @@ class LedgerGroupWithParent(LedgerGroupResponse):
         from_attributes = True
 
 
-# Spending Type Schemas
-class SpendingTypeBase(BaseModel):
-    name: str
-
-
-class SpendingTypeCreate(SpendingTypeBase):
-    pass
-
-
-class SpendingTypeResponse(SpendingTypeBase):
-    id: int
-    user_id: int
-    is_active: bool
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
 # Ledger Schemas
 class LedgerBase(BaseModel):
     name: str
     ledger_group_id: int
-    spending_type_id: Optional[int] = None
 
 
 class LedgerCreate(LedgerBase):
@@ -93,7 +73,6 @@ class LedgerResponse(LedgerBase):
 
 class LedgerWithGroup(LedgerResponse):
     ledger_group: LedgerGroupResponse
-    spending_type: Optional[SpendingTypeResponse] = None
 
     class Config:
         from_attributes = True

@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { Dialog } from "@/components/Dialog";
@@ -18,10 +17,11 @@ import {
   useCreateLedger,
   useCreateLedgerGroup,
   useParentLedgerGroups,
+  useLedgerItems,
 } from "@/lib/hooks/use-accounts";
 import { useCreateTransaction, useTransactions } from "@/lib/hooks/use-transactions";
-import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
 import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
+import { buildLedgerBreakdown, LedgerBreakdownList } from "@/components/finance/LedgerBreakdownList";
 import { usePersistedPeriodFilter } from "@/lib/hooks/use-persisted-period-filter";
 import type { LedgerCreate, LedgerGroupCreate } from "@/lib/api/accounts";
 
@@ -43,7 +43,11 @@ function IncomeContent() {
   const { data: ledgers = [], isLoading: ledgersLoading, refetch: refetchLedgers } = useLedgers();
   const { data: groups = [] } = useLedgerGroups();
   const { data: parentGroups = [] } = useParentLedgerGroups();
+  const { data: ledgerItems = [] } = useLedgerItems();
   const { data: incomeTransactions = [], refetch: refetchIncomes, isLoading: isLoadingTransactions } = useTransactions("MONEY_RECEIVED");
+  const [expandedIncomeLedgerIds, setExpandedIncomeLedgerIds] = useState<Record<number, boolean>>({});
+  const toggleIncomeLedger = (ledgerId: number) =>
+    setExpandedIncomeLedgerIds((prev) => ({ ...prev, [ledgerId]: !prev[ledgerId] }));
   const createTransactionMutation = useCreateTransaction();
   const createLedgerMutation = useCreateLedger();
   const createLedgerGroupMutation = useCreateLedgerGroup();
@@ -99,12 +103,10 @@ function IncomeContent() {
   const [ledgerFormData, setLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: incomeGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [assetLedgerFormData, setAssetLedgerFormData] = useState<LedgerCreate>({
     name: "",
     ledger_group_id: assetGroups[0]?.id || 0,
-    spending_type_id: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -158,90 +160,23 @@ function IncomeContent() {
     });
   }, [incomeTransactions, startDate, endDate]);
 
-  // Create a map of ledger_id to ledger name
-  const ledgerMap = useMemo(() => {
-    const map = new Map<number, string>();
-    ledgers.forEach((ledger) => {
-      map.set(ledger.id, ledger.name);
-    });
-    return map;
-  }, [ledgers]);
 
   // filteredIncomeTransactions already carries items (list endpoint eager-loads them).
   const incomeTransactionsWithItems = filteredIncomeTransactions;
 
-  // Group incomes by ledger
-  const incomesByLedger = useMemo(() => {
-    const ledgerTotals = new Map<number, number>();
-
-    // Process transactions with items
-    if (incomeTransactionsWithItems.length > 0) {
-      incomeTransactionsWithItems.forEach((transaction) => {
-        // Find all CREDIT items that are income ledgers
-        (transaction.items ?? []).forEach((item) => {
-          if (item.entry_type === "CREDIT") {
-            // Check if this ledger is an income ledger
-            const ledger = ledgers.find(l => l.id === item.ledger_id);
-            if (ledger && incomeLedgers.some(il => il.id === ledger.id)) {
-              const amount =
-                typeof item.amount === "string"
-                  ? parseFloat(item.amount)
-                  : Number(item.amount) || 0;
-
-              if (amount > 0) {
-                const existing = ledgerTotals.get(item.ledger_id) || 0;
-                ledgerTotals.set(item.ledger_id, existing + amount);
-              }
-            }
-          }
-        });
-      });
-    }
-
-    // Calculate total incomes (for percentage calculation)
-    const totalIncomes = Array.from(ledgerTotals.values()).reduce(
-      (sum, total) => sum + total,
-      0
-    );
-
-    // Build result array with ledger names
-    const result = Array.from(ledgerTotals.entries())
-      .map(([ledgerId, total]) => {
-        const ledgerName = ledgerMap.get(ledgerId) || `Unknown (ID: ${ledgerId})`;
-        return {
-          name: ledgerName,
-          value: Number(total.toFixed(2)),
-          percentage: totalIncomes > 0 ? (total / totalIncomes) * 100 : 0,
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-
-    return result;
-  }, [
-    incomeTransactionsWithItems,
-    ledgerMap,
-    ledgers,
-    incomeLedgers,
-  ]);
-
-  const incomesByLedgerDisplay = useMemo(
-    () => withMinDisplayShare(incomesByLedger, 4),
-    [incomesByLedger]
+  const incomeLedgerIds = useMemo(
+    () => new Set(incomeLedgers.map((l) => l.id)),
+    [incomeLedgers]
   );
 
-  // Colors for the pie chart
-  const COLORS = [
-    "#3b82f6", // blue
-    "#10b981", // green
-    "#f59e0b", // amber
-    "#ef4444", // red
-    "#8b5cf6", // purple
-    "#ec4899", // pink
-    "#06b6d4", // cyan
-    "#f97316", // orange
-    "#84cc16", // lime
-    "#6366f1", // indigo
-  ];
+  // Group incomes by ledger - a MONEY_RECEIVED transaction credits the
+  // income ledger (and debits the receiving account), so "this ledger's
+  // activity" is its CREDIT side.
+  const { rows: incomesByLedger, itemsByLedgerId: incomeItemsByLedgerId } = useMemo(
+    () => buildLedgerBreakdown(incomeTransactionsWithItems, incomeLedgerIds, ledgers, ledgerItems, "CREDIT"),
+    [incomeTransactionsWithItems, incomeLedgerIds, ledgers, ledgerItems]
+  );
+
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -395,7 +330,6 @@ function IncomeContent() {
       setLedgerFormData({
         name: "",
         ledger_group_id: incomeGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setShowCreateLedgerDialog(false);
       setPendingLedgerName("");
@@ -409,7 +343,6 @@ function IncomeContent() {
     setLedgerFormData({
       name: searchTerm,
       ledger_group_id: incomeGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateLedgerDialog(true);
   };
@@ -419,7 +352,6 @@ function IncomeContent() {
     setAssetLedgerFormData({
       name: searchTerm,
       ledger_group_id: assetGroups[0]?.id || 0,
-      spending_type_id: null,
     });
     setShowCreateAssetLedgerDialog(true);
   };
@@ -446,7 +378,6 @@ function IncomeContent() {
       setAssetLedgerFormData({
         name: "",
         ledger_group_id: assetGroups[0]?.id || 0,
-        spending_type_id: null,
       });
       setPendingAssetLedgerName("");
       
@@ -615,77 +546,20 @@ function IncomeContent() {
                 <p className="text-zinc-600 dark:text-zinc-400">Loading income breakdown...</p>
               </div>
             ) : incomesByLedger.length > 0 ? (
-              <div className="flex flex-col gap-8">
-                {/* Pie Chart */}
-                <div className="flex items-center justify-center min-h-0 p-0 sm:p-2 md:p-4">
-                  <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px] [&_svg]:outline-none [&_svg]:focus:outline-none">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
-                        <Pie
-                          data={incomesByLedgerDisplay}
-                          cx="50%"
-                          cy="30%"
-                          outerRadius="60%"
-                          label={renderElbowPieLabel(incomesByLedgerDisplay, formatKsh)}
-                          labelLine={false}
-                        fill="#8884d8"
-                        dataKey="displayValue"
-                      >
-                        {incomesByLedgerDisplay.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(_value: any, _name: any, item: any) => formatKsh(item?.payload?.value ?? 0)}
-                        contentStyle={{
-                          backgroundColor: "rgba(255, 255, 255, 0.95)",
-                          border: "1px solid #e4e4e7",
-                          borderRadius: "0.5rem",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  </div>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total</p>
+                  <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    {formatKsh(incomesByLedger.reduce((sum, item) => sum + item.value, 0))}
+                  </p>
                 </div>
-
-                {/* Legend with amounts */}
-                <div className="flex flex-col justify-center">
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                    {incomesByLedgerDisplay.map((item, index) => (
-                      <div
-                        key={item.name}
-                        className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="h-4 w-4 rounded-full"
-                            style={{
-                              backgroundColor: COLORS[index % COLORS.length],
-                            }}
-                          />
-                          <span className="text-base font-medium text-zinc-900 dark:text-zinc-100">
-                            {item.name}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-zinc-900 dark:text-zinc-100">
-                            KSh {item.value.toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                              useGrouping: true,
-                            })}
-                          </div>
-                          <div className="text-sm font-bold text-zinc-600 dark:text-zinc-400">
-                            {item.percentage.toFixed(2)}%
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <LedgerBreakdownList
+                  rows={incomesByLedger}
+                  itemsByLedgerId={incomeItemsByLedgerId}
+                  expandedIds={expandedIncomeLedgerIds}
+                  onToggle={toggleIncomeLedger}
+                  formatValue={formatKsh}
+                />
               </div>
             ) : (
               <div className="py-12 text-center">

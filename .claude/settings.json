@@ -1,13 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(sed -i '/^[[:space:]]*spending_type_id:[[:space:]]*null,[[:space:]]*$/d' client/components/money-flow/PostExpenseDrawer.tsx *)"
     ],
     "deny": [
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Edit(**/.env)",
       "Edit(**/.env.*)"
+    ],
+    "additionalDirectories": [
+      "/home/azwzach/github-mine/fastapi-nextjs/life-plan/client/components/money-flow"
     ]
   }
 }
