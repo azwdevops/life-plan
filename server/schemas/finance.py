@@ -138,6 +138,10 @@ class TransactionItemCreate(TransactionItemBase):
     pass
 
 
+class TransactionItemAssign(BaseModel):
+    item_id: Optional[int] = None
+
+
 class TransactionItemResponse(BaseModel):
     id: int
     transaction_id: int

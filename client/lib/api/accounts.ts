@@ -253,8 +253,12 @@ export async function createSpendingType(
   return response.json();
 }
 
-export async function getLedgers(token: string): Promise<Ledger[]> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/`, {
+export async function getLedgers(
+  token: string,
+  includeInactive: boolean = false
+): Promise<Ledger[]> {
+  const params = includeInactive ? "?include_inactive=true" : "";
+  const response = await fetch(`${API_BASE_URL}/api/v1/accounts/${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,

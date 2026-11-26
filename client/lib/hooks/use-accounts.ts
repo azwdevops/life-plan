@@ -75,12 +75,12 @@ export function useCreateLedgerGroup() {
   });
 }
 
-export function useLedgers() {
+export function useLedgers(includeInactive: boolean = false) {
   const { token } = useAuth();
 
   return useQuery({
-    queryKey: ["ledgers"],
-    queryFn: () => getLedgers(token!),
+    queryKey: ["ledgers", { includeInactive }],
+    queryFn: () => getLedgers(token!, includeInactive),
     enabled: !!token,
     staleTime: 10 * 60 * 1000, // 10 minutes
     refetchOnMount: false,

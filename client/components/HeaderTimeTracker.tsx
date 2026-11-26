@@ -37,6 +37,25 @@ import {
 } from "@/components/time-tracker/SearchableSelectPicker";
 import { registerTrackerPresetHandler } from "@/lib/time-tracker-preset-bridge";
 
+/** Dedicated worker so 1s ticks keep firing even when this tab is backgrounded -
+ * a plain main-thread setInterval (and even a 10s backup one) gets throttled or
+ * fully suspended by the browser after enough time hidden, which freezes the
+ * on-screen elapsed display even though the underlying duration (always
+ * recomputed from started_at) stays correct. */
+const TIMER_TICK_WORKER_SOURCE = `
+let id = null;
+self.onmessage = function (e) {
+  if (e.data === "start") {
+    if (id != null) clearInterval(id);
+    id = setInterval(function () { self.postMessage(0); }, 1000);
+  }
+  if (e.data === "stop") {
+    if (id != null) clearInterval(id);
+    id = null;
+  }
+};
+`;
+
 function IconPlay({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -437,16 +456,34 @@ export function HeaderTimeTracker({ inline = false }: { inline?: boolean }) {
 
     // Ticking is purely local: elapsedMs(session) is always recomputed from
     // the server's started_at against the current time, never accumulated
-    // tick-by-tick, so this interval only drives how often the display
-    // re-renders - a missed or delayed tick can never cause drift, it just
-    // catches up to the correct value on the next one.
-    const tickId = window.setInterval(bump, 1000);
+    // tick-by-tick, so a missed or delayed tick can never cause drift - it
+    // just catches up to the correct value on the next one. The worker
+    // below only exists to make sure *some* tick keeps arriving while this
+    // tab is backgrounded, which a main-thread interval can't guarantee.
+    let stopWorker: () => void;
+    try {
+      const blob = new Blob([TIMER_TICK_WORKER_SOURCE], {
+        type: "application/javascript",
+      });
+      const url = URL.createObjectURL(blob);
+      const worker = new Worker(url);
+      worker.onmessage = () => bump();
+      worker.postMessage("start");
+      stopWorker = () => {
+        worker.postMessage("stop");
+        worker.terminate();
+        URL.revokeObjectURL(url);
+      };
+    } catch {
+      const mainId = window.setInterval(bump, 1000);
+      stopWorker = () => window.clearInterval(mainId);
+    }
 
     return () => {
       document.removeEventListener("visibilitychange", syncHiddenBackup);
       window.removeEventListener("focus", onFocus);
       if (backupId != null) clearInterval(backupId);
-      window.clearInterval(tickId);
+      stopWorker();
     };
   }, [session]);
 

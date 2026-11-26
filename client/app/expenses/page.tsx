@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect, useMemo, memo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/hooks/use-auth";
@@ -17,7 +16,6 @@ import {
 } from "@/lib/hooks/use-accounts";
 import { useTransactions } from "@/lib/hooks/use-transactions";
 import { useQueryClient } from "@tanstack/react-query";
-import { renderElbowPieLabel, withMinDisplayShare } from "@/lib/charts/pie-label";
 import { usePageHeaderActions } from "@/contexts/PageHeaderActionsContext";
 import { usePersistedPeriodFilter, type PeriodType } from "@/lib/hooks/use-persisted-period-filter";
 
@@ -43,7 +41,6 @@ function ExpensesContent() {
   const { data: expenseTransactions = [], refetch: refetchExpenses, isLoading: isLoadingTransactions } = useTransactions("MONEY_PAID");
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [breakdownView, setBreakdownView] = useState<"chart" | "table">("chart");
   const {
     periodType,
     selectedMonthDate,
@@ -252,30 +249,24 @@ function ExpensesContent() {
 
   const [breakdownGroupBy, setBreakdownGroupBy] = useState<"ledger" | "item">("ledger");
   const activeBreakdown = breakdownGroupBy === "item" ? expensesByItem : expensesByLedger;
-  const activeBreakdownLabel = breakdownGroupBy === "item" ? "item" : "ledger";
-
-  const activeBreakdownDisplay = useMemo(
-    () => withMinDisplayShare(activeBreakdown, 4),
-    [activeBreakdown]
-  );
 
   const breakdownTotal = useMemo(
     () => activeBreakdown.reduce((sum, entry) => sum + entry.value, 0),
     [activeBreakdown]
   );
 
-  // Colors for the pie chart
+  // Colors for the breakdown bars, cycled by index
   const COLORS = [
-    "#3b82f6", // blue
-    "#10b981", // green
-    "#f59e0b", // amber
-    "#ef4444", // red
-    "#8b5cf6", // purple
-    "#ec4899", // pink
-    "#06b6d4", // cyan
-    "#f97316", // orange
-    "#84cc16", // lime
-    "#6366f1", // indigo
+    "#1d4ed8", // blue
+    "#15803d", // green
+    "#b45309", // amber
+    "#b91c1c", // red
+    "#6d28d9", // violet
+    "#be185d", // pink
+    "#0e7490", // cyan
+    "#c2410c", // orange
+    "#4d7c0f", // lime
+    "#4338ca", // indigo
   ];
 
   const handleRefresh = async () => {
@@ -362,15 +353,6 @@ function ExpensesContent() {
                 </h2>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={breakdownView}
-                    onChange={(e) => setBreakdownView(e.target.value as "chart" | "table")}
-                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 focus:outline-none dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                  >
-                    <option value="chart">Chart</option>
-                    <option value="table">Table</option>
-                  </select>
-
                   <select
                     value={breakdownGroupBy}
                     onChange={(e) => setBreakdownGroupBy(e.target.value as "ledger" | "item")}
@@ -482,155 +464,40 @@ function ExpensesContent() {
                 <p className="text-zinc-600 dark:text-zinc-400">Loading expense breakdown...</p>
               </div>
             ) : activeBreakdown.length > 0 ? (
-              breakdownView === "table" ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total</p>
-                    <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatKsh(breakdownTotal)}
-                    </p>
-                  </div>
-
-                  {/* Mobile: stacked cards */}
-                  <div className="space-y-2 md:hidden">
-                    {activeBreakdown.map((item, index) => (
-                      <div
-                        key={item.name}
-                        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                            />
-                            <span className="truncate font-medium text-zinc-900 dark:text-zinc-100">
-                              {item.name}
-                            </span>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <div className="font-bold text-zinc-900 dark:text-zinc-100">
-                              {formatKsh(item.value)}
-                            </div>
-                            <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                              {item.percentage.toFixed(1)}%
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.min(item.percentage, 100)}%`,
-                              backgroundColor: COLORS[index % COLORS.length],
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Desktop: table */}
-                  <div className="hidden overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 md:block">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
-                          <th className="px-4 py-3 capitalize">{activeBreakdownLabel}</th>
-                          <th className="px-4 py-3 text-right">Amount</th>
-                          <th className="px-4 py-3 text-right">Share</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                        {activeBreakdown.map((item, index) => (
-                          <tr
-                            key={item.name}
-                            className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <span
-                                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                                />
-                                <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                                  {item.name}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-zinc-100">
-                              {formatKsh(item.value)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text-zinc-500 dark:text-zinc-400">
-                                  {item.percentage.toFixed(1)}%
-                                </span>
-                                <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      width: `${Math.min(item.percentage, 100)}%`,
-                                      backgroundColor: COLORS[index % COLORS.length],
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-zinc-200 bg-zinc-50 font-bold text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-100">
-                          <td className="px-4 py-3">Total</td>
-                          <td className="px-4 py-3 text-right">{formatKsh(breakdownTotal)}</td>
-                          <td className="px-4 py-3 text-right">100%</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
-              ) : (
               <div className="flex flex-col gap-4">
-                <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                  Total: {formatKsh(breakdownTotal)}
-                </p>
-                {/* Pie Chart */}
-                <div className="flex items-center justify-center min-h-0 p-0 sm:p-2 md:p-2">
-                  <div className="w-full h-[360px] max-h-[65vh] sm:h-[440px] md:h-[500px] lg:h-[560px] [&_svg]:outline-none [&_svg]:focus:outline-none [&_svg]:overflow-visible">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 20, right: 110, bottom: 20, left: 110 }}>
-                        <Pie
-                          data={activeBreakdownDisplay}
-                          cx="50%"
-                          cy="30%"
-                          outerRadius="60%"
-                          label={renderElbowPieLabel(activeBreakdownDisplay, formatKsh)}
-                          labelLine={false}
-                          isAnimationActive={false}
-                        fill="#8884d8"
-                        dataKey="displayValue"
-                      >
-                        {activeBreakdownDisplay.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(_value: any, _name: any, item: any) => formatKsh(item?.payload?.value ?? 0)}
-                        contentStyle={{
-                          backgroundColor: "rgba(255, 255, 255, 0.95)",
-                          border: "1px solid #e4e4e7",
-                          borderRadius: "0.5rem",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total</p>
+                  <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    {formatKsh(breakdownTotal)}
+                  </p>
                 </div>
+                <ul className="flex flex-col gap-1.5">
+                  {activeBreakdown.map((item, index) => {
+                    const pct = Math.max(Math.min(item.percentage, 100), 3);
+                    const color = COLORS[index % COLORS.length];
+                    return (
+                      <li
+                        key={item.name}
+                        className="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                      >
+                        <div
+                          className="absolute inset-y-0 left-0"
+                          style={{ width: `${pct}%`, backgroundColor: color }}
+                        />
+                        <div className="relative flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                          <span className="truncate font-bold text-zinc-900 dark:text-white">
+                            {item.name}
+                          </span>
+                          <span className="shrink-0 font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                            {formatKsh(item.value)} ·{" "}
+                            <span style={{ color }}>{item.percentage.toFixed(1)}%</span>
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              )
             ) : (
               <div className="py-12 text-center">
                 <p className="text-zinc-600 dark:text-zinc-400">

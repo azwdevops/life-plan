@@ -123,7 +123,10 @@ export function SearchableSelectPicker({
 
   const openWithCurrentValue = () => {
     if (disabled) return;
-    setPanelFilter(valueLabel);
+    // Start from the full list, not the current value as a search term -
+    // like a plain <select>, reopening should let you pick something else,
+    // not re-narrow down to the one thing already chosen.
+    setPanelFilter("");
     setOpen(true);
   };
 
@@ -241,6 +244,12 @@ export function SearchableSelectPicker({
         onFocus={(e) => {
           openWithCurrentValue();
           e.target.select();
+        }}
+        onClick={() => {
+          // A click when the trigger is already focused (e.g. re-clicking
+          // right after picking a value) doesn't fire onFocus again, so the
+          // panel would otherwise stay closed - reopen it explicitly here.
+          if (!open) openWithCurrentValue();
         }}
         onKeyDown={handleKeyDown}
         onBlur={() => setOpen(false)}

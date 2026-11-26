@@ -168,6 +168,35 @@ export async function updateTransaction(
   return response.json();
 }
 
+export async function assignTransactionItem(
+  token: string,
+  transactionItemId: number,
+  itemId: number | null
+): Promise<TransactionItemResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/transactions/items/${transactionItemId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ item_id: itemId }),
+    }
+  );
+
+  if (handleApiResponse(response)) {
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to assign item");
+  }
+
+  return response.json();
+}
+
 export async function deleteTransaction(
   token: string,
   transactionId: number

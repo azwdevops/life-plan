@@ -433,6 +433,7 @@ async def get_ledgers(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     group_id: int = None,
+    include_inactive: bool = False,
 ):
     """Get all ledgers (accounts) for the current user."""
     query = (
@@ -442,8 +443,9 @@ async def get_ledgers(
             joinedload(Ledger.spending_type)
         )
         .filter(Ledger.user_id == current_user.id)
-        .filter(Ledger.is_active == True)
     )
+    if not include_inactive:
+        query = query.filter(Ledger.is_active == True)
 
     if group_id:
         query = query.filter(Ledger.ledger_group_id == group_id)

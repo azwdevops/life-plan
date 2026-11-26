@@ -13,6 +13,8 @@ from schemas.finance import (
     TransactionWithItems,
     TransactionUpdate,
     TransactionItemCreate,
+    TransactionItemAssign,
+    TransactionItemResponse,
 )
 
 router = APIRouter()
@@ -282,6 +284,51 @@ async def update_transaction(
     db.refresh(transaction)
 
     return transaction
+
+
+@router.patch("/items/{item_id}", response_model=TransactionItemResponse)
+async def assign_transaction_item(
+    item_id: int,
+    body: TransactionItemAssign,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sets (or clears) just the Item on one existing transaction line, without
+    touching the rest of its transaction - lets old entries be reclassified
+    into an Item after the fact (e.g. from the Spending Category Gaps report)."""
+    row = (
+        db.query(TransactionItem)
+        .join(Transaction, Transaction.id == TransactionItem.transaction_id)
+        .filter(TransactionItem.id == item_id, Transaction.user_id == current_user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction item not found")
+
+    if body.item_id is not None:
+        # Items aren't locked to one ledger (PostExpenseDrawer lets an item
+        # determine which ledger a new line posts to, not the other way
+        # around) - only check it belongs to this user, not that it matches
+        # this line's existing ledger.
+        ledger_item = (
+            db.query(LedgerItem)
+            .filter(
+                LedgerItem.id == body.item_id,
+                LedgerItem.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not ledger_item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Item not found",
+            )
+
+    row.item_id = body.item_id
+    db.commit()
+    db.refresh(row)
+
+    return row
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)

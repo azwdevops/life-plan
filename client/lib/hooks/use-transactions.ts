@@ -5,6 +5,7 @@ import {
   getTransaction,
   updateTransaction,
   deleteTransaction,
+  assignTransactionItem,
   TransactionCreate,
   TransactionUpdate,
   TransactionType,
@@ -74,6 +75,29 @@ export function useUpdateTransaction() {
       queryClient.invalidateQueries({ queryKey: ["ledger-balances"] });
       queryClient.invalidateQueries({ queryKey: ["ledger-report"] });
       queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
+    },
+  });
+}
+
+export function useAssignTransactionItem() {
+  const queryClient = useQueryClient();
+  const { token } = useAuth();
+
+  return useMutation({
+    mutationFn: ({
+      transactionItemId,
+      itemId,
+    }: {
+      transactionItemId: number;
+      itemId: number | null;
+    }) => {
+      if (!token) throw new Error("Not authenticated");
+      return assignTransactionItem(token, transactionItemId, itemId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["item-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["item-report"] });
     },
   });
 }

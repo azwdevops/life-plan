@@ -4,16 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
 import { UpcomingExpensesButton } from "@/components/UpcomingExpensesButton";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useTransactions } from "@/lib/hooks/use-transactions";
-import { useLedgers, useSpendingTypes, useLedgerGroups } from "@/lib/hooks/use-accounts";
+import {
+  useLedgers,
+  useLedgerGroups,
+  useParentLedgerGroups,
+} from "@/lib/hooks/use-accounts";
 import { useUpcomingExpenses } from "@/lib/hooks/use-upcoming-expenses";
-import { renderElbowPieLabel } from "@/lib/charts/pie-label";
 
 function formatAmount(value: number): string {
   return value.toLocaleString("en-US", {
@@ -33,8 +35,8 @@ export default function DashboardPage() {
   const { data: expenseTransactions = [], refetch: refetchExpenses, isLoading: isLoadingExpenseTransactions } = useTransactions("MONEY_PAID");
   const { data: transferTransactions = [], refetch: refetchTransfers } = useTransactions("JOURNAL");
   const { data: ledgers = [], refetch: refetchLedgers } = useLedgers();
-  const { data: spendingTypes = [], refetch: refetchSpendingTypes } = useSpendingTypes();
   const { data: ledgerGroups = [] } = useLedgerGroups();
+  const { data: parentLedgerGroups = [] } = useParentLedgerGroups();
   const { data: upcomingExpenses = [] } = useUpcomingExpenses();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [periodType, setPeriodType] = useState<PeriodType>("month");
@@ -209,26 +211,6 @@ export default function DashboardPage() {
   // Expected Net = Actual Cash/Bank - Upcoming Expenses
   const expectedNet = actualCashBankTotal - totalUpcomingExpenses;
 
-  // Create a map of spending_type_id to spending_type name
-  const spendingTypeMap = useMemo(() => {
-    const map = new Map<number, string>();
-    spendingTypes.forEach((spendingType) => {
-      map.set(spendingType.id, spendingType.name);
-    });
-    return map;
-  }, [spendingTypes]);
-
-  // Create a map of ledger_id to spending_type_id for quick lookup
-  const ledgerSpendingTypeIdMap = useMemo(() => {
-    const map = new Map<number, number>();
-    ledgers.forEach((ledger) => {
-      if (ledger.spending_type_id) {
-        map.set(ledger.id, ledger.spending_type_id);
-      }
-    });
-    return map;
-  }, [ledgers]);
-
   // Fetch transaction details for filtered expense transactions to get items
   // filteredExpenseTransactions already carries items (list endpoint eager-loads them).
   const expenseTransactionsWithItems = filteredExpenseTransactions;
@@ -242,7 +224,6 @@ export default function DashboardPage() {
         refetchExpenses(),
         refetchTransfers(),
         refetchLedgers(),
-        refetchSpendingTypes(),
       ]);
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -251,63 +232,53 @@ export default function DashboardPage() {
     }
   };
 
-  // Group expenses by spending type
-  // Approach: For each spending type, sum all transaction items from ledgers with that spending_type_id
-  const expensesBySpendingType = useMemo(() => {
-    const spendingTypeTotals = new Map<number, number>();
+  // Expense ledgers only (under the Expenditure parent group), excluding bank
+  // charge ledgers - same filter the Expenses page uses.
+  const expenditureParentGroup = parentLedgerGroups.find(
+    (parent) => parent.name.toLowerCase() === "expenditure"
+  );
+  const expenseGroups = expenditureParentGroup
+    ? ledgerGroups.filter(
+        (group) => group.parent_ledger_group_id === expenditureParentGroup.id
+      )
+    : ledgerGroups.filter((group) => group.category === "expenses");
+  const expenseLedgerIds = new Set(
+    ledgers
+      .filter((ledger) =>
+        expenseGroups.some((group) => group.id === ledger.ledger_group_id)
+      )
+      .map((ledger) => ledger.id)
+  );
 
-    // Process transactions with items
-    if (expenseTransactionsWithItems.length > 0) {
-      expenseTransactionsWithItems.forEach((transaction) => {
-        // Find all DEBIT items that have spending types (expense ledgers)
-        // Transaction charges don't have spending types, so they're excluded
-        (transaction.items ?? []).forEach((item) => {
-          if (item.entry_type === "DEBIT") {
-            const spendingTypeId = ledgerSpendingTypeIdMap.get(item.ledger_id);
-            if (spendingTypeId) {
-              const amount =
-                typeof item.amount === "string"
-                  ? parseFloat(item.amount)
-                  : Number(item.amount) || 0;
+  // Group expenses by ledger - a ledger IS the spending category, so this
+  // replaces the old spending-type breakdown without needing that field.
+  const expensesByLedger = useMemo(() => {
+    const ledgerTotals = new Map<number, number>();
 
-              if (amount > 0) {
-                const existing = spendingTypeTotals.get(spendingTypeId) || 0;
-                spendingTypeTotals.set(spendingTypeId, existing + amount);
-              }
-            }
-          }
-        });
+    expenseTransactionsWithItems.forEach((transaction) => {
+      (transaction.items ?? []).forEach((item) => {
+        if (item.entry_type !== "DEBIT" || !expenseLedgerIds.has(item.ledger_id)) return;
+        const amount =
+          typeof item.amount === "string" ? parseFloat(item.amount) : Number(item.amount) || 0;
+        if (amount <= 0) return;
+        const existing = ledgerTotals.get(item.ledger_id) || 0;
+        ledgerTotals.set(item.ledger_id, existing + amount);
       });
-    }
+    });
 
-    // Calculate total expenses from spending types (for percentage calculation)
-    // This ensures percentages add up to 100% based on actual categorized expenses
-    const totalExpensesFromSpendingTypes = Array.from(spendingTypeTotals.values()).reduce(
-      (sum, total) => sum + total,
-      0
-    );
+    const totalExpenses = Array.from(ledgerTotals.values()).reduce((sum, total) => sum + total, 0);
 
-    // Build result array with spending type names
-    const result = Array.from(spendingTypeTotals.entries())
-      .map(([spendingTypeId, total]) => {
-        const spendingTypeName = spendingTypeMap.get(spendingTypeId) || `Unknown (ID: ${spendingTypeId})`;
+    return Array.from(ledgerTotals.entries())
+      .map(([ledgerId, total]) => {
+        const ledger = ledgers.find((l) => l.id === ledgerId);
         return {
-          name: spendingTypeName,
+          name: ledger?.name || `Unknown (ID: ${ledgerId})`,
           value: Number(total.toFixed(2)),
-          percentage:
-            totalExpensesFromSpendingTypes > 0
-              ? Number(((total / totalExpensesFromSpendingTypes) * 100).toFixed(1))
-              : 0,
+          percentage: totalExpenses > 0 ? (total / totalExpenses) * 100 : 0,
         };
       })
       .sort((a, b) => b.value - a.value);
-
-    return result;
-  }, [
-    expenseTransactionsWithItems,
-    ledgerSpendingTypeIdMap,
-    spendingTypeMap,
-  ]);
+  }, [expenseTransactionsWithItems, expenseLedgerIds, ledgers]);
 
   // Colors for the pie chart
   const COLORS = [
@@ -583,105 +554,60 @@ export default function DashboardPage() {
           </div>
 
 
-          {/* Expenses by Spending Type Chart */}
+          {/* Expenses by Ledger */}
           <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 md:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="mb-3 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Expenses by Spending Type
+              Expenses by Ledger
             </h2>
             {isLoadingTransactions ? (
               <div className="py-12 text-center">
                 <p className="text-zinc-600 dark:text-zinc-400">Loading spending breakdown...</p>
               </div>
-            ) : expensesBySpendingType.length > 0 ? (
-              <div className="flex flex-col gap-8">
-                {/* Pie Chart */}
-                <div className="flex items-center justify-center min-h-0 p-0 sm:p-2 md:p-4">
-                  <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] lg:h-[700px] xl:h-[750px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 20, right: 100, bottom: 20, left: 100 }}>
-                      <Pie
-                        data={expensesBySpendingType}
-                        cx="50%"
-                          cy="40%"
-                          outerRadius="60%"
-                          label={renderElbowPieLabel(expensesBySpendingType, formatAmount)}
-                          labelLine={false}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {expensesBySpendingType.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value: number | undefined) => {
-                          if (value === undefined) return "";
-                          return `${value.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                            useGrouping: true,
-                          })}`;
-                        }}
-                        contentStyle={{
-                          backgroundColor: "rgba(255, 255, 255, 0.95)",
-                          border: "1px solid #e4e4e7",
-                          borderRadius: "0.5rem",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  </div>
+            ) : expensesByLedger.length > 0 ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total</p>
+                  <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    {formatAmount(
+                      expensesByLedger.reduce((sum, item) => sum + item.value, 0)
+                    )}
+                  </p>
                 </div>
-
-                {/* Legend with amounts */}
-                <div className="flex flex-col justify-center">
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                    {expensesBySpendingType.map((item, index) => (
-                      <div
+                <ul className="flex flex-col gap-1.5">
+                  {expensesByLedger.map((item, index) => {
+                    const pct = Math.max(Math.min(item.percentage, 100), 3);
+                    const color = COLORS[index % COLORS.length];
+                    return (
+                      <li
                         key={item.name}
-                        className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
+                        className="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
                       >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="h-4 w-4 rounded-full"
-                            style={{
-                              backgroundColor: COLORS[index % COLORS.length],
-                            }}
-                          />
-                          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                        <div
+                          className="absolute inset-y-0 left-0"
+                          style={{ width: `${pct}%`, backgroundColor: color }}
+                        />
+                        <div className="relative flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                          <span className="truncate font-bold text-zinc-900 dark:text-white">
                             {item.name}
                           </span>
+                          <span className="shrink-0 font-mono text-xs font-bold text-zinc-800 dark:text-zinc-100">
+                            {formatAmount(item.value)} ·{" "}
+                            <span style={{ color }}>{item.percentage.toFixed(1)}%</span>
+                          </span>
                         </div>
-                        <div className="text-right">
-                          <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                            {item.value.toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                              useGrouping: true,
-                            })}
-                          </div>
-                          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                            {item.percentage}%
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             ) : (
               <div className="py-12 text-center">
                 <p className="text-zinc-600 dark:text-zinc-400">
                   {filteredExpenseTransactions.length === 0
                     ? "No expense transactions yet. Start recording expenses to see spending breakdown."
-                    : spendingTypes.length === 0
-                    ? "No spending categories found. Create spending categories in the Accounts page."
-                    : ledgerSpendingTypeIdMap.size === 0
-                    ? "No expense ledgers with spending categories found. Make sure your expense ledgers have spending categories assigned in the Accounts page."
-                    : "No expenses with spending categories found in the selected transactions. Make sure your expense ledgers have spending categories assigned."}
+                    : expenseLedgerIds.size === 0
+                    ? "No expense ledgers found. Create expense ledgers in the Accounts page."
+                    : "No expenses found in the selected transactions."}
                 </p>
               </div>
             )}
